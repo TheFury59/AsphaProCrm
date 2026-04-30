@@ -1,0 +1,21 @@
+{
+  "name": "aspha-crm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CRM métier Aspha — backend Laravel 11 + frontend React/Vite — monorepo",
+  "scripts": {
+    "install:all": "npm --prefix frontend install && composer --working-dir=backend install",
+    "dev": "concurrently --names \"BACK,FRONT\" --prefix-colors \"magenta.bold,cyan.bold\" \"npm:dev:back\" \"npm:dev:front\"",
+    "dev:back": "php backend/artisan serve --host=127.0.0.1 --port=8000",
+    "dev:front": "npm --prefix frontend run dev -- --host 127.0.0.1",
+    "build:front": "npm --prefix frontend run build",
+    "fresh": "php backend/artisan migrate:fresh --seed",
+    "test:back": "php backend/artisan test",
+    "lint:front": "npm --prefix frontend run lint",
+    "docx:cartography": "node scripts/generate-cartography-docx.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "docx": "^9.5.1"
+  }
+}
