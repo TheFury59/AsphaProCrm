@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, FileDown } from "lucide-react";
 import { useInvoices, useCreateInvoice } from "@/hooks/use-phase3";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
@@ -56,17 +56,18 @@ export function InvoicesListPage() {
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Paiement</TableHead>
+                <TableHead className="w-32">Factur-X</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && [...Array(5)].map((_, i) => (
                 <TableRow key={i}>
-                  {[...Array(7)].map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
+                  {[...Array(8)].map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                 </TableRow>
               ))}
               {(data as any)?.data?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
                     Aucune facture. Crée la première avec « Nouvelle facture ».
                   </TableCell>
                 </TableRow>
@@ -85,6 +86,13 @@ export function InvoicesListPage() {
                     <Badge variant={inv.payment_status === "paid" ? "default" : inv.payment_status === "loss" ? "destructive" : "secondary"}>
                       {PAY_STATUS_LABEL[inv.payment_status] ?? inv.payment_status}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <a href={`/api/v1/invoices/${inv.id}/facturx`} target="_blank" rel="noreferrer">
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5">
+                        <FileDown className="h-3.5 w-3.5" /> PDF
+                      </Button>
+                    </a>
                   </TableCell>
                 </TableRow>
               ))}

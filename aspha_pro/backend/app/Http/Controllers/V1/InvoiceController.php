@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Services\FacturXGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -112,5 +113,24 @@ class InvoiceController extends Controller
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);
         $invoice->delete();
         return response()->noContent();
+    }
+
+    /**
+     * GET /api/v1/invoices/{invoice}/facturx
+     *
+     * Génère et retourne le PDF/A-3 Factur-X (PDF visible + XML CII embarqué)
+     * conforme à la norme EN 16931, requis par l'obligation française de
+     * facturation électronique à partir du 1er septembre 2026.
+     */
+    public function facturX(Request $request, Invoice $invoice, FacturXGenerator $generator)
+    {
+        abort_unless($request->user()?->can('sales.invoices.view'), 403);
+
+        $pdf = $generator->generate($invoice);
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $invoice->reference . '.pdf"',
+        ]);
     }
 }

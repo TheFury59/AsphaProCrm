@@ -96,4 +96,5 @@ Route::middleware('auth:sanctum')->group(function () {
     // Phase 3 — Ventes
     Route::apiResource('quotes', QuoteController::class);
     Route::apiResource('invoices', InvoiceController::class);
+    Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
 });
