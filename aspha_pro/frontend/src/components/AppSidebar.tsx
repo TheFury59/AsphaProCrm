@@ -9,6 +9,7 @@ import {
   Receipt,
   Settings,
   Building2,
+  Wallet,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,6 +45,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/devis", label: "Devis", icon: FileText },
       { to: "/factures", label: "Factures", icon: Receipt },
+      { to: "/reglements", label: "Règlements", icon: Wallet },
     ],
   },
   {

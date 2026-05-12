@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
-import { useClient } from "@/hooks/use-clients";
+import { useClient, useUpdateClient } from "@/hooks/use-clients";
+import { EditableField } from "@/components/EditableField";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,12 @@ export function ClientFichePage() {
   const { id } = useParams();
   const clientId = id ? parseInt(id, 10) : null;
   const { data: c, isLoading } = useClient(clientId);
+  const updateClient = useUpdateClient();
+
+  const updateCompany = async (field: string, value: string | null) => {
+    if (!clientId) return;
+    await updateClient.mutateAsync({ id: clientId, patch: { company: { [field]: value } as any } });
+  };
 
   if (isLoading || !c || !clientId) {
     return (
@@ -62,13 +69,13 @@ export function ClientFichePage() {
                 <CardDescription>Identité juridique et coordonnées principales</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Field label="Raison sociale" value={c.company?.company_name} />
-                <Field label="Forme juridique" value={c.company?.legal_form} />
-                <Field label="SIRET" value={c.company?.siret} mono />
-                <Field label="N° TVA" value={c.company?.vat_number} mono />
-                <Field label="Téléphone fixe" value={c.company?.phone_landline} />
-                <Field label="Téléphone mobile" value={c.company?.phone_mobile} />
-                <Field label="Email prioritaire" value={c.company?.primary_email} />
+                <EditableRow label="Raison sociale" value={c.company?.company_name} onSave={(v) => updateCompany("company_name", v)} />
+                <EditableRow label="Forme juridique" value={c.company?.legal_form} onSave={(v) => updateCompany("legal_form", v)} />
+                <EditableRow label="SIRET" value={c.company?.siret} mono onSave={(v) => updateCompany("siret", v)} />
+                <EditableRow label="N° TVA" value={c.company?.vat_number} mono onSave={(v) => updateCompany("vat_number", v)} />
+                <EditableRow label="Téléphone fixe" value={c.company?.phone_landline} type="tel" onSave={(v) => updateCompany("phone_landline", v)} />
+                <EditableRow label="Téléphone mobile" value={c.company?.phone_mobile} type="tel" onSave={(v) => updateCompany("phone_mobile", v)} />
+                <EditableRow label="Email prioritaire" value={c.company?.primary_email} type="email" onSave={(v) => updateCompany("primary_email", v)} />
               </CardContent>
             </Card>
 
@@ -78,10 +85,10 @@ export function ClientFichePage() {
                 <CardDescription>Contact principal côté direction</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Field label="Civilité" value={c.company?.manager_civility} />
-                <Field label="Prénom" value={c.company?.manager_first_name} />
-                <Field label="Nom" value={c.company?.manager_last_name} />
-                <Field label="Rôle" value={c.company?.manager_role} />
+                <EditableRow label="Civilité" value={c.company?.manager_civility} onSave={(v) => updateCompany("manager_civility", v)} />
+                <EditableRow label="Prénom" value={c.company?.manager_first_name} onSave={(v) => updateCompany("manager_first_name", v)} />
+                <EditableRow label="Nom" value={c.company?.manager_last_name} onSave={(v) => updateCompany("manager_last_name", v)} />
+                <EditableRow label="Rôle" value={c.company?.manager_role} onSave={(v) => updateCompany("manager_role", v)} />
               </CardContent>
             </Card>
 
@@ -92,9 +99,9 @@ export function ClientFichePage() {
                   <CardDescription>Destinataire des factures et relances</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <Field label="Nom" value={`${c.billing_contact.civility ?? ""} ${c.billing_contact.first_name ?? ""} ${c.billing_contact.last_name ?? ""}`.trim()} />
-                  <Field label="Email" value={c.billing_contact.email} />
-                  <Field label="Téléphone" value={c.billing_contact.phone} />
+                  <ReadOnlyRow label="Nom" value={`${c.billing_contact.civility ?? ""} ${c.billing_contact.first_name ?? ""} ${c.billing_contact.last_name ?? ""}`.trim()} />
+                  <ReadOnlyRow label="Email" value={c.billing_contact.email} />
+                  <ReadOnlyRow label="Téléphone" value={c.billing_contact.phone} />
                 </CardContent>
               </Card>
             )}
@@ -135,13 +142,26 @@ export function ClientFichePage() {
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+function ReadOnlyRow({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
   return (
     <div className="grid grid-cols-[140px_1fr] items-baseline gap-3 py-1 border-b last:border-0">
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={mono ? "font-mono text-xs" : ""}>
-        {value || <span className="text-muted-foreground/50">—</span>}
-      </span>
+      <span className={mono ? "font-mono text-xs" : ""}>{value || <span className="text-muted-foreground/50">—</span>}</span>
+    </div>
+  );
+}
+
+function EditableRow({ label, value, mono, type, onSave }: {
+  label: string;
+  value: string | null | undefined;
+  mono?: boolean;
+  type?: "text" | "email" | "tel" | "number";
+  onSave: (v: string | null) => Promise<void>;
+}) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] items-center gap-3 py-1 border-b last:border-0 min-h-[32px]">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <EditableField value={value} onSave={onSave} label={label} mono={mono} type={type} />
     </div>
   );
 }

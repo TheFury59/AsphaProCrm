@@ -31,4 +31,9 @@ return [
         ],
     ],
 
+    'pennylane' => [
+        'api_key' => env('PENNYLANE_API_KEY'),
+        'url' => env('PENNYLANE_API_URL', 'https://app.pennylane.com/api/external/v1'),
+    ],
+
 ];

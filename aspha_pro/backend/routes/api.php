@@ -12,6 +12,7 @@ use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\ProductController;
 use App\Http\Controllers\V1\QuoteController;
 use App\Http\Controllers\V1\ReferentialsController;
+use App\Http\Controllers\V1\ReglementController;
 use App\Http\Controllers\V1\SalaryDeductionController;
 use Illuminate\Support\Facades\Route;
 
@@ -91,10 +92,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Phase 3 — Planning
     Route::get('interventions/calendar', [InterventionController::class, 'calendar']);
+    Route::post('interventions/{intervention}/exceptions', [InterventionController::class, 'createException']);
     Route::apiResource('interventions', InterventionController::class);
 
     // Phase 3 — Ventes
     Route::apiResource('quotes', QuoteController::class);
+    Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);
     Route::apiResource('invoices', InvoiceController::class);
     Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
+    Route::post('invoices/{invoice}/sync-pennylane', [InvoiceController::class, 'syncPennylane']);
+
+    // Règlements (paiements reçus + ventilations sur factures)
+    Route::apiResource('reglements', ReglementController::class)->except(['update']);
+    Route::post('reglements/{reglement}/allocate', [ReglementController::class, 'allocate']);
 });

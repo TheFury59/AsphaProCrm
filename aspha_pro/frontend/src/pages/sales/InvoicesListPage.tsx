@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Plus, Trash2, FileDown } from "lucide-react";
+import { Plus, Trash2, FileDown, Cloud, CloudCheck } from "lucide-react";
 import { useInvoices, useCreateInvoice } from "@/hooks/use-phase3";
+import { useSyncInvoicePennylane } from "@/hooks/use-payments";
+import { toast } from "sonner";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,20 @@ export function InvoicesListPage() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useInvoices({ page, per_page: 25 });
+  const syncPennylane = useSyncInvoicePennylane();
+
+  const handleSync = async (invoiceId: number) => {
+    try {
+      const res = await syncPennylane.mutateAsync(invoiceId);
+      toast.success(
+        res.mock
+          ? `Facture synchronisée (mock — clé Pennylane absente). ID: ${res.pennylane_id}`
+          : `Facture synchronisée sur Pennylane (ID: ${res.pennylane_id})`
+      );
+    } catch (e: any) {
+      toast.error("Échec de synchronisation Pennylane");
+    }
+  };
 
   return (
     <div>
@@ -88,11 +104,23 @@ export function InvoicesListPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <a href={`/api/v1/invoices/${inv.id}/facturx`} target="_blank" rel="noreferrer">
-                      <Button size="sm" variant="outline" className="h-7 gap-1.5">
-                        <FileDown className="h-3.5 w-3.5" /> PDF
+                    <div className="flex gap-1">
+                      <a href={`/api/v1/invoices/${inv.id}/facturx`} target="_blank" rel="noreferrer">
+                        <Button size="sm" variant="outline" className="h-7 gap-1.5" title="Télécharger Factur-X">
+                          <FileDown className="h-3.5 w-3.5" /> PDF
+                        </Button>
+                      </a>
+                      <Button
+                        size="sm"
+                        variant={inv.pennylane_synced_at ? "default" : "outline"}
+                        className="h-7 gap-1.5"
+                        onClick={() => handleSync(inv.id)}
+                        disabled={syncPennylane.isPending}
+                        title={inv.pennylane_synced_at ? "Re-synchroniser Pennylane" : "Synchroniser Pennylane"}
+                      >
+                        {inv.pennylane_synced_at ? <CloudCheck className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
                       </Button>
-                    </a>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

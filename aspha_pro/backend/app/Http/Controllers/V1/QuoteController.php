@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Quote;
+use App\Services\PennylaneSyncService;
 use Illuminate\Http\Request;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -19,12 +20,12 @@ class QuoteController extends Controller
             ->allowedFilters([
                 'status', 'client_id', 'entity_id',
                 AllowedFilter::callback('search', fn ($q, $v) =>
-                    $q->whereHas('client.clientCompanies', fn ($c) => $c->where('company_name', 'like', "%$v%"))
+                    $q->whereHas('client.company', fn ($c) => $c->where('company_name', 'like', "%$v%"))
                 ),
             ])
             ->allowedSorts(['quote_date', 'created_at', 'status'])
             ->defaultSort('-quote_date')
-            ->with(['client.clientCompanies:id,client_id,company_name']);
+            ->with(['client.company:id,client_id,company_name']);
 
         return ['data' => $query->paginate($perPage)];
     }
@@ -32,7 +33,7 @@ class QuoteController extends Controller
     public function show(Request $request, Quote $quote)
     {
         abort_unless($request->user()?->can('sales.quotes.view'), 403);
-        $quote->load(['client.clientCompanies', 'quoteType', 'address', 'ownerUser:id,name']);
+        $quote->load(['client.company', 'quoteType', 'address', 'ownerUser:id,name']);
         return ['data' => $quote];
     }
 
@@ -73,5 +74,17 @@ class QuoteController extends Controller
         abort_unless($request->user()?->can('sales.quotes.edit'), 403);
         $quote->delete();
         return response()->noContent();
+    }
+
+    public function syncPennylane(Request $request, Quote $quote, PennylaneSyncService $sync)
+    {
+        abort_unless($request->user()?->can('sales.quotes.edit'), 403);
+        $quote = $sync->syncQuote($quote);
+        return ['data' => [
+            'id' => $quote->id,
+            'pennylane_id' => $quote->pennylane_id,
+            'pennylane_synced_at' => $quote->pennylane_synced_at?->toIso8601String(),
+            'mock' => ! $sync->isConfigured(),
+        ]];
     }
 }

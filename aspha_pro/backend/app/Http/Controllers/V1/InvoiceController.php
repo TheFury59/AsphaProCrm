@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Services\FacturXGenerator;
+use App\Services\PennylaneSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -27,7 +28,7 @@ class InvoiceController extends Controller
             ])
             ->allowedSorts(['invoice_date', 'reference', 'total', 'status'])
             ->defaultSort('-invoice_date')
-            ->with(['client.clientCompanies:id,client_id,company_name']);
+            ->with(['client.company:id,client_id,company_name']);
 
         return ['data' => $query->paginate($perPage)];
     }
@@ -35,7 +36,7 @@ class InvoiceController extends Controller
     public function show(Request $request, Invoice $invoice)
     {
         abort_unless($request->user()?->can('sales.invoices.view'), 403);
-        $invoice->load(['client.clientCompanies', 'invoiceItems']);
+        $invoice->load(['client.company', 'invoiceItems']);
         return ['data' => $invoice];
     }
 
@@ -132,5 +133,21 @@ class InvoiceController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="' . $invoice->reference . '.pdf"',
         ]);
+    }
+
+    /**
+     * POST /api/v1/invoices/{invoice}/sync-pennylane
+     */
+    public function syncPennylane(Request $request, Invoice $invoice, PennylaneSyncService $sync)
+    {
+        abort_unless($request->user()?->can('sales.invoices.edit'), 403);
+        $invoice = $sync->syncInvoice($invoice);
+        return ['data' => [
+            'id' => $invoice->id,
+            'reference' => $invoice->reference,
+            'pennylane_id' => $invoice->pennylane_id,
+            'pennylane_synced_at' => $invoice->pennylane_synced_at?->toIso8601String(),
+            'mock' => ! $sync->isConfigured(),
+        ]];
     }
 }

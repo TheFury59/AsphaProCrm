@@ -127,6 +127,58 @@ class InterventionController extends Controller
         return ['data' => $intervention];
     }
 
+    /**
+     * POST /api/v1/interventions/{intervention}/exceptions
+     *
+     * Crée une exception sur une récurrence : remplace une occurrence virtuelle
+     * par une nouvelle intervention liée (parent_id + is_exception + exception_date).
+     * Permet ensuite de la déplacer, modifier le statut, etc. sans toucher à la série.
+     */
+    public function createException(Request $request, Intervention $intervention)
+    {
+        abort_unless($request->user()?->can('planning.edit'), 403);
+        abort_unless($intervention->is_recurring, 422, "Seules les récurrences peuvent avoir des exceptions");
+
+        $data = $request->validate([
+            'exception_date' => ['required', 'date'],
+            'start_datetime' => ['required', 'date'],
+            'end_datetime' => ['required', 'date', 'after:start_datetime'],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'status' => ['nullable', 'in:a_pourvoir,planifiee,realisee,annulee,draft,terminated'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        // Empêcher les doublons d'exception sur la même date
+        $existing = Intervention::where('parent_id', $intervention->id)
+            ->where('is_exception', true)
+            ->whereDate('exception_date', $data['exception_date'])
+            ->first();
+        if ($existing) {
+            return response()->json([
+                'message' => 'Une exception existe déjà pour cette date',
+                'data' => $existing,
+            ], 409);
+        }
+
+        $exception = Intervention::create([
+            'client_id' => $intervention->client_id,
+            'mission_id' => $intervention->mission_id,
+            'client_prestation_id' => $intervention->client_prestation_id,
+            'employee_id' => $data['employee_id'] ?? $intervention->employee_id,
+            'is_recurring' => false,
+            'is_exception' => true,
+            'parent_id' => $intervention->id,
+            'exception_date' => $data['exception_date'],
+            'start_datetime' => $data['start_datetime'],
+            'end_datetime' => $data['end_datetime'],
+            'status' => $data['status'] ?? 'planifiee',
+            'comment' => $data['comment'] ?? null,
+        ]);
+
+        $exception->load(['employee:id,name', 'client:id,code']);
+        return response()->json(['data' => $exception], 201);
+    }
+
     public function destroy(Request $request, Intervention $intervention)
     {
         abort_unless($request->user()?->can('planning.edit'), 403);

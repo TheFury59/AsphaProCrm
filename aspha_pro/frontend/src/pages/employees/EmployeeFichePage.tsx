@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
-import { useEmployee } from "@/hooks/use-employees";
+import { useEmployee, useUpdateEmployee } from "@/hooks/use-employees";
+import { EditableField } from "@/components/EditableField";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,13 @@ export function EmployeeFichePage() {
   const { id } = useParams();
   const employeeId = id ? parseInt(id, 10) : null;
   const { data: e, isLoading } = useEmployee(employeeId);
+  const updateEmp = useUpdateEmployee();
   const [contractOpen, setContractOpen] = useState(false);
+
+  const updateField = async (field: string, value: string | null) => {
+    if (!employeeId) return;
+    await updateEmp.mutateAsync({ id: employeeId, patch: { [field]: value } as any });
+  };
 
   if (isLoading || !e || !employeeId) {
     return (
@@ -64,10 +71,10 @@ export function EmployeeFichePage() {
                 <CardTitle>Identité</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Field label="Nom complet" value={e.full_name} />
-                <Field label="Téléphone" value={e.phone} />
+                <EditableRow label="Nom complet" value={e.name} onSave={(v) => updateField("name", v)} />
+                <EditableRow label="Téléphone" value={e.phone} type="tel" onSave={(v) => updateField("phone", v)} />
                 <Field label="Classification" value={e.classification === "cadre" ? "Cadre" : "Non-cadre"} />
-                <Field label="Mode déplacement" value={e.transport_mode} />
+                <EditableRow label="Mode déplacement" value={e.transport_mode} onSave={(v) => updateField("transport_mode", v)} />
                 <Field label="Véhicule service" value={e.has_company_vehicle ? "Oui (jamais véhicule perso)" : "Non"} />
               </CardContent>
             </Card>
@@ -98,11 +105,15 @@ export function EmployeeFichePage() {
               <CardContent className="space-y-3 text-sm">
                 <div>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Diplômes</span>
-                  <p className="mt-1 whitespace-pre-wrap">{e.diploma || <span className="text-muted-foreground/50">— Non renseigné</span>}</p>
+                  <div className="mt-1">
+                    <EditableField value={e.diploma} onSave={(v) => updateField("diploma", v)} label="Diplômes" multiline />
+                  </div>
                 </div>
                 <div>
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Emploi repère</span>
-                  <p className="mt-1 whitespace-pre-wrap">{e.job_reference_free || <span className="text-muted-foreground/50">— Non renseigné</span>}</p>
+                  <div className="mt-1">
+                    <EditableField value={e.job_reference_free} onSave={(v) => updateField("job_reference_free", v)} label="Emploi repère" multiline />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -184,6 +195,20 @@ function Field({ label, value }: { label: string; value: string | number | null 
     <div className="grid grid-cols-[160px_1fr] items-baseline gap-3 py-1 border-b last:border-0">
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
       <span>{value ?? <span className="text-muted-foreground/50">—</span>}</span>
+    </div>
+  );
+}
+
+function EditableRow({ label, value, type, onSave }: {
+  label: string;
+  value: string | null | undefined;
+  type?: "text" | "email" | "tel" | "number";
+  onSave: (v: string | null) => Promise<void>;
+}) {
+  return (
+    <div className="grid grid-cols-[160px_1fr] items-center gap-3 py-1 border-b last:border-0 min-h-[32px]">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <EditableField value={value} onSave={onSave} label={label} type={type} />
     </div>
   );
 }

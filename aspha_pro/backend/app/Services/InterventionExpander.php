@@ -64,11 +64,12 @@ class InterventionExpander
             $interventions = Intervention::query()
                 ->with(['employee:id,name', 'client:id,code'])
                 ->where(function ($q) use ($from, $to) {
-                    // Ponctuelles dans la fenêtre
+                    // Ponctuelles ET exceptions dans la fenêtre
                     $q->whereBetween('start_datetime', [$from, $to]);
                     // OU récurrentes dont la période chevauche
                     $q->orWhere(function ($q2) use ($from, $to) {
                         $q2->where('is_recurring', true)
+                           ->where('is_exception', false)
                            ->where(function ($q3) use ($to) {
                                $q3->whereNull('recurrence_start_date')
                                   ->orWhere('recurrence_start_date', '<=', $to);
@@ -82,19 +83,36 @@ class InterventionExpander
                 ->get();
         }
 
+        // Indexer les exceptions par (parent_id, exception_date) pour skip rapide.
+        // exception_date est cast en Carbon → toDateString() pour avoir YYYY-MM-DD propre.
+        $exceptions = $interventions
+            ->where('is_exception', true)
+            ->keyBy(fn ($e) => "{$e->parent_id}|" . Carbon::parse($e->exception_date)->toDateString());
+
         $events = collect();
 
         foreach ($interventions as $iv) {
+            // Les exceptions sont affichées comme événements ponctuels (start_datetime/end_datetime)
+            if ($iv->is_exception) {
+                if ($iv->start_datetime && $iv->end_datetime) {
+                    $events->push($this->serializeOccurrence($iv, $iv->start_datetime, $iv->end_datetime, false, true));
+                }
+                continue;
+            }
+
             if (! $iv->is_recurring) {
-                // Ponctuelle : un seul événement
                 if ($iv->start_datetime && $iv->end_datetime) {
                     $events->push($this->serializeOccurrence($iv, $iv->start_datetime, $iv->end_datetime, false));
                 }
                 continue;
             }
 
-            // Récurrente : générer les occurrences dans la fenêtre
+            // Récurrente : générer les occurrences en skippant celles qui ont une exception
             foreach ($this->generateOccurrences($iv, $from, $to) as $occ) {
+                $key = "{$iv->id}|{$occ['occurrence_date']}";
+                if ($exceptions->has($key)) {
+                    continue;  // l'exception remplace cette occurrence
+                }
                 $events->push($occ);
             }
         }
@@ -224,7 +242,7 @@ class InterventionExpander
         return $days;
     }
 
-    private function serializeOccurrence(Intervention $iv, $start, $end, bool $isOccurrence): array
+    private function serializeOccurrence(Intervention $iv, $start, $end, bool $isOccurrence, bool $isException = false): array
     {
         $startC = $start instanceof CarbonImmutable ? $start : Carbon::parse($start);
         $endC = $end instanceof CarbonImmutable ? $end : Carbon::parse($end);
@@ -233,7 +251,9 @@ class InterventionExpander
         return [
             'id' => $isOccurrence ? "{$iv->id}-{$dateKey}" : (string) $iv->id,
             'intervention_id' => $iv->id,
+            'parent_id' => $iv->parent_id,
             'is_occurrence' => $isOccurrence,
+            'is_exception' => $isException,
             'is_recurring' => (bool) $iv->is_recurring,
             'occurrence_date' => $startC->toDateString(),
             'start_datetime' => $startC->toIso8601String(),
