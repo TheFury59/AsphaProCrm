@@ -7,6 +7,11 @@ import { AppLayout } from "@/components/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
+import { ClientsListPage } from "@/pages/clients/ClientsListPage";
+import { ClientFichePage } from "@/pages/clients/ClientFichePage";
+import { EmployeesListPage } from "@/pages/employees/EmployeesListPage";
+import { EmployeeFichePage } from "@/pages/employees/EmployeeFichePage";
+import { ProductsListPage } from "@/pages/products/ProductsListPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,9 +34,11 @@ export default function App() {
               }
             >
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/clients" element={<PlaceholderPage title="Clients" phase="Phase 2" />} />
-              <Route path="/intervenants" element={<PlaceholderPage title="Intervenants" phase="Phase 2" />} />
-              <Route path="/prestations" element={<PlaceholderPage title="Prestations" phase="Phase 2" />} />
+              <Route path="/clients" element={<ClientsListPage />} />
+              <Route path="/clients/:id" element={<ClientFichePage />} />
+              <Route path="/intervenants" element={<EmployeesListPage />} />
+              <Route path="/intervenants/:id" element={<EmployeeFichePage />} />
+              <Route path="/prestations" element={<ProductsListPage />} />
               <Route path="/planning" element={<PlaceholderPage title="Planning" phase="Phase 3" />} />
               <Route path="/devis" element={<PlaceholderPage title="Devis" phase="Phase 3" />} />
               <Route path="/factures" element={<PlaceholderPage title="Factures" phase="Phase 3" />} />

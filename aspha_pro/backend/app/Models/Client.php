@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
@@ -12,6 +14,10 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Client extends Model
 {
     use SoftDeletes, LogsActivity;
+
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_INACTIVE = 'inactive';
+    public const STATUS_SUSPENDED = 'suspended';
 
     protected $fillable = [
         'code',
@@ -30,15 +36,24 @@ class Client extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()
-            ->logFillable()
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+        return LogOptions::defaults()->logFillable()->logOnlyDirty()->dontSubmitEmptyLogs();
     }
 
+    // === Relations 1-1 ===
+    public function company(): HasOne
+    {
+        return $this->hasOne(ClientCompany::class, 'client_id');
+    }
+
+    public function billingContact(): HasOne
+    {
+        return $this->hasOne(BillingContact::class, 'client_id');
+    }
+
+    // === Relations N ===
     public function entity(): BelongsTo
     {
-        return $this->belongsTo(Entity::class, 'entity_id');
+        return $this->belongsTo(Entity::class);
     }
 
     public function ownerUser(): BelongsTo
@@ -46,17 +61,7 @@ class Client extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
-    public function clientCompanies(): HasMany
-    {
-        return $this->hasMany(ClientCompany::class, 'client_id');
-    }
-
-    public function billingContacts(): HasMany
-    {
-        return $this->hasMany(BillingContact::class, 'client_id');
-    }
-
-    public function clientContacts(): HasMany
+    public function contacts(): HasMany
     {
         return $this->hasMany(ClientContact::class, 'client_id');
     }
@@ -66,19 +71,9 @@ class Client extends Model
         return $this->hasMany(RelatedContact::class, 'client_id');
     }
 
-    public function clientAbsences(): HasMany
+    public function absences(): HasMany
     {
         return $this->hasMany(ClientAbsence::class, 'client_id');
-    }
-
-    public function clientEmployeeHistory(): HasMany
-    {
-        return $this->hasMany(ClientEmployeeHistory::class, 'client_id');
-    }
-
-    public function quotes(): HasMany
-    {
-        return $this->hasMany(Quote::class, 'client_id');
     }
 
     public function missions(): HasMany
@@ -86,34 +81,14 @@ class Client extends Model
         return $this->hasMany(Mission::class, 'client_id');
     }
 
-    public function clientPrestations(): HasMany
+    public function prestations(): HasMany
     {
         return $this->hasMany(ClientPrestation::class, 'client_id');
     }
 
-    public function interventions(): HasMany
+    public function quotes(): HasMany
     {
-        return $this->hasMany(Intervention::class, 'client_id');
-    }
-
-    public function clientEvents(): HasMany
-    {
-        return $this->hasMany(ClientEvent::class, 'client_id');
-    }
-
-    public function clientEventRecurrences(): HasMany
-    {
-        return $this->hasMany(ClientEventRecurrence::class, 'client_id');
-    }
-
-    public function telemanagementLogs(): HasMany
-    {
-        return $this->hasMany(TelemanagementLog::class, 'client_id');
-    }
-
-    public function sepaMandates(): HasMany
-    {
-        return $this->hasMany(SepaMandate::class, 'client_id');
+        return $this->hasMany(Quote::class, 'client_id');
     }
 
     public function invoices(): HasMany
@@ -131,19 +106,15 @@ class Client extends Model
         return $this->hasMany(Key::class, 'client_id');
     }
 
-    public function clientRequests(): HasMany
+    // === Adresses polymorphiques ===
+    public function addresses(): MorphMany
     {
-        return $this->hasMany(ClientRequest::class, 'client_id');
+        return $this->morphMany(Address::class, 'owner');
     }
 
-    public function consumableReorders(): HasMany
+    // === Helpers ===
+    public function displayName(): string
     {
-        return $this->hasMany(ConsumableReorder::class, 'client_id');
+        return $this->company?->company_name ?? "Client #{$this->id}";
     }
-
-    public function qualityControls(): HasMany
-    {
-        return $this->hasMany(QualityControl::class, 'client_id');
-    }
-
 }

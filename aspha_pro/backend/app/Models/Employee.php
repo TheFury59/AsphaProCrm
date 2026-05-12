@@ -4,7 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
@@ -12,6 +15,9 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Employee extends Model
 {
     use SoftDeletes, LogsActivity;
+
+    public const CLASSIFICATION_NON_CADRE = 'non_cadre';
+    public const CLASSIFICATION_CADRE = 'cadre';
 
     protected $fillable = [
         'user_id',
@@ -36,38 +42,44 @@ class Employee extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
-        return LogOptions::defaults()
-            ->logFillable()
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+        return LogOptions::defaults()->logFillable()->logOnlyDirty()->dontSubmitEmptyLogs();
     }
 
+    // === Relations directes ===
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 
     public function entity(): BelongsTo
     {
-        return $this->belongsTo(Entity::class, 'entity_id');
+        return $this->belongsTo(Entity::class);
     }
 
+    public function ownerUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    // === Contrat actuel (1 actif via is_current) ===
     public function contracts(): HasMany
     {
         return $this->hasMany(Contract::class, 'employee_id');
     }
 
-    public function employeeSkills(): HasMany
+    public function currentContract(): HasOne
     {
-        return $this->hasMany(EmployeeSkill::class, 'employee_id');
+        return $this->hasOne(Contract::class, 'employee_id')->where('is_current', true);
     }
 
-    public function clientEmployeeHistory(): HasMany
+    // === Compétences (N-N) ===
+    public function skills(): BelongsToMany
     {
-        return $this->hasMany(ClientEmployeeHistory::class, 'employee_id');
+        return $this->belongsToMany(Skill::class, 'employee_skills', 'employee_id', 'skill_id');
     }
 
-    public function employeeAbsences(): HasMany
+    // === RH ===
+    public function absences(): HasMany
     {
         return $this->hasMany(EmployeeAbsence::class, 'employee_id');
     }
@@ -82,32 +94,18 @@ class Employee extends Model
         return $this->hasMany(SalaryDeduction::class, 'employee_id');
     }
 
+    // === Planning ===
     public function interventions(): HasMany
     {
         return $this->hasMany(Intervention::class, 'employee_id');
     }
 
-    public function recurrenceAssignments(): HasMany
-    {
-        return $this->hasMany(RecurrenceAssignment::class, 'employee_id');
-    }
-
-    public function matchingRequests(): HasMany
-    {
-        return $this->hasMany(MatchingRequest::class, 'selected_employee_id');
-    }
-
-    public function telemanagementLogs(): HasMany
-    {
-        return $this->hasMany(TelemanagementLog::class, 'employee_id');
-    }
-
-    public function employeeEvents(): HasMany
+    public function events(): HasMany
     {
         return $this->hasMany(EmployeeEvent::class, 'employee_id');
     }
 
-    public function employeeEventRecurrences(): HasMany
+    public function eventRecurrences(): HasMany
     {
         return $this->hasMany(EmployeeEventRecurrence::class, 'employee_id');
     }
@@ -117,9 +115,15 @@ class Employee extends Model
         return $this->hasMany(Checkin::class, 'employee_id');
     }
 
-    public function reglements(): HasMany
+    // === Adresses polymorphiques ===
+    public function addresses(): MorphMany
     {
-        return $this->hasMany(Reglement::class, 'employee_id');
+        return $this->morphMany(Address::class, 'owner');
     }
 
+    // === Helpers ===
+    public function fullName(): string
+    {
+        return $this->name ?: ($this->user?->name ?? "Intervenant #{$this->id}");
+    }
 }

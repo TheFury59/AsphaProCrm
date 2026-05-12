@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\V1\AuthController;
+use App\Http\Controllers\V1\ClientController;
+use App\Http\Controllers\V1\EmployeeController;
+use App\Http\Controllers\V1\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -10,7 +13,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | Préfixe global appliqué via bootstrap/app.php : /api/v1
-| Toutes les routes ici sont donc accessibles sous /api/v1/...
 |
 */
 
@@ -26,6 +28,16 @@ Route::get('/ping', fn () => [
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    // Auth
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Clients
+    Route::apiResource('clients', ClientController::class);
+
+    // Intervenants (employees)
+    Route::apiResource('employees', EmployeeController::class);
+
+    // Catalogue prestations (products)
+    Route::apiResource('products', ProductController::class);
 });

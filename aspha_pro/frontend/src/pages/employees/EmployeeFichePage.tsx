@@ -1,0 +1,192 @@
+import { useParams } from "react-router-dom";
+import { useEmployee } from "@/hooks/use-employees";
+import { PageHeader } from "@/components/PageHeader";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { User, FileText, Award, Calendar, GraduationCap, Receipt, Wallet } from "lucide-react";
+
+export function EmployeeFichePage() {
+  const { id } = useParams();
+  const employeeId = id ? parseInt(id, 10) : null;
+  const { data: e, isLoading } = useEmployee(employeeId);
+
+  if (isLoading || !e) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title={e.full_name}
+        description={`${e.classification === "cadre" ? "Cadre" : "Non-cadre"}${e.current_contract?.position ? ` · ${e.current_contract.position}` : ""}`}
+        backTo="/intervenants"
+        actions={
+          <>
+            {e.has_company_vehicle && <Badge>Véhicule service</Badge>}
+            {e.entity && <Badge variant="outline">{e.entity.name}</Badge>}
+          </>
+        }
+      />
+
+      <Tabs defaultValue="general">
+        <TabsList>
+          <TabsTrigger value="general"><User className="h-3.5 w-3.5 mr-1.5" /> Général</TabsTrigger>
+          <TabsTrigger value="contract"><FileText className="h-3.5 w-3.5 mr-1.5" /> Contrat</TabsTrigger>
+          <TabsTrigger value="skills"><Award className="h-3.5 w-3.5 mr-1.5" /> Compétences ({e.skills?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="absences"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Absences ({e.counts?.absences ?? 0})</TabsTrigger>
+          <TabsTrigger value="trainings"><GraduationCap className="h-3.5 w-3.5 mr-1.5" /> Formations ({e.counts?.trainings ?? 0})</TabsTrigger>
+          <TabsTrigger value="planning"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Planning ({e.counts?.interventions ?? 0})</TabsTrigger>
+          <TabsTrigger value="payroll"><Wallet className="h-3.5 w-3.5 mr-1.5" /> Saisies salaire ({e.counts?.salary_deductions ?? 0})</TabsTrigger>
+          <TabsTrigger value="documents"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Documents</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="mt-4 space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Identité</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <Field label="Nom complet" value={e.full_name} />
+                <Field label="Téléphone" value={e.phone} />
+                <Field label="Classification" value={e.classification === "cadre" ? "Cadre" : "Non-cadre"} />
+                <Field label="Mode déplacement" value={e.transport_mode} />
+                <Field label="Véhicule service" value={e.has_company_vehicle ? "Oui (jamais véhicule perso)" : "Non"} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Compte utilisateur</CardTitle>
+                <CardDescription>Accès à l'application (mobile, extranet)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {e.user ? (
+                  <>
+                    <Field label="Nom" value={e.user.name} />
+                    <Field label="Email" value={e.user.email} />
+                    <Field label="Statut" value={e.user.status} />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Pas de compte utilisateur associé.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Diplômes & emploi repère</CardTitle>
+                <CardDescription>Champs libres</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Diplômes</span>
+                  <p className="mt-1 whitespace-pre-wrap">{e.diploma || <span className="text-muted-foreground/50">— Non renseigné</span>}</p>
+                </div>
+                <div>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Emploi repère</span>
+                  <p className="mt-1 whitespace-pre-wrap">{e.job_reference_free || <span className="text-muted-foreground/50">— Non renseigné</span>}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="contract" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Contrat actuel</CardTitle>
+              <CardDescription>Détails du contrat en cours</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {e.current_contract ? (
+                <>
+                  <Field label="Poste" value={e.current_contract.position} />
+                  <Field label="Zone d'intervention" value={e.current_contract.intervention_zone} />
+                  <Field label="Type" value={e.current_contract.contract_type} />
+                  <Field label="Temps" value={e.current_contract.work_time_type} />
+                  <Field label="Durée mensuelle" value={e.current_contract.monthly_duration ? `${e.current_contract.monthly_duration} h/mois` : null} />
+                  <Field label="Durée hebdo" value={e.current_contract.weekly_duration ? `${e.current_contract.weekly_duration} h/sem` : null} />
+                  <Field label="Mode paie" value={e.current_contract.pay_mode} />
+                  <Field label="Salaire mensuel" value={e.current_contract.monthly_salary ? `${e.current_contract.monthly_salary} €` : null} />
+                  <Field label="Taux horaire" value={e.current_contract.hourly_rate ? `${e.current_contract.hourly_rate} €/h` : null} />
+                  <Field label="Indemnité km inter-vacation" value={e.current_contract.km_rate_inter_vacation ? `${e.current_contract.km_rate_inter_vacation} €/km` : null} />
+                  <Field label="Indemnité km intervention" value={e.current_contract.km_rate_intervention ? `${e.current_contract.km_rate_intervention} €/km` : null} />
+                  <Field label="Date d'entrée" value={e.current_contract.start_date} />
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucun contrat actif. Crée-en un depuis cette fiche (à venir).</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="skills" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Compétences</CardTitle>
+              <CardDescription>Liste à enrichir par Pauline ultérieurement</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {e.skills?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {e.skills.map((s) => (
+                    <Badge key={s.id} variant="outline">{s.label}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune compétence sélectionnée.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="absences" className="mt-4">
+          <PlaceholderTab title="Absences (ponctuelles + périodiques fusionnées)" phase="Phase 2.5" />
+        </TabsContent>
+        <TabsContent value="trainings" className="mt-4">
+          <PlaceholderTab title="Formations (onboarding + ongoing)" phase="Phase 2.5" />
+        </TabsContent>
+        <TabsContent value="planning" className="mt-4">
+          <PlaceholderTab title="Planning (interventions assignées)" phase="Phase 3" />
+        </TabsContent>
+        <TabsContent value="payroll" className="mt-4">
+          <PlaceholderTab title="Saisies sur salaire (créanciers, dettes, paiements)" phase="Phase 2.5" />
+        </TabsContent>
+        <TabsContent value="documents" className="mt-4">
+          <PlaceholderTab title="Documents (upload libre)" phase="Phase 2.5" />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="grid grid-cols-[160px_1fr] items-baseline gap-3 py-1 border-b last:border-0">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span>{value ?? <span className="text-muted-foreground/50">—</span>}</span>
+    </div>
+  );
+}
+
+function PlaceholderTab({ title, phase }: { title: string; phase: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>Module à venir.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Badge variant="secondary">{phase}</Badge>
+      </CardContent>
+    </Card>
+  );
+}
