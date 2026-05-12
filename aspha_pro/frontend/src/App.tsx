@@ -12,6 +12,9 @@ import { ClientFichePage } from "@/pages/clients/ClientFichePage";
 import { EmployeesListPage } from "@/pages/employees/EmployeesListPage";
 import { EmployeeFichePage } from "@/pages/employees/EmployeeFichePage";
 import { ProductsListPage } from "@/pages/products/ProductsListPage";
+import { PlanningPage } from "@/pages/planning/PlanningPage";
+import { QuotesListPage } from "@/pages/sales/QuotesListPage";
+import { InvoicesListPage } from "@/pages/sales/InvoicesListPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,9 +42,9 @@ export default function App() {
               <Route path="/intervenants" element={<EmployeesListPage />} />
               <Route path="/intervenants/:id" element={<EmployeeFichePage />} />
               <Route path="/prestations" element={<ProductsListPage />} />
-              <Route path="/planning" element={<PlaceholderPage title="Planning" phase="Phase 3" />} />
-              <Route path="/devis" element={<PlaceholderPage title="Devis" phase="Phase 3" />} />
-              <Route path="/factures" element={<PlaceholderPage title="Factures" phase="Phase 3" />} />
+              <Route path="/planning" element={<PlanningPage />} />
+              <Route path="/devis" element={<QuotesListPage />} />
+              <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/parametres" element={<PlaceholderPage title="Paramètres" phase="Phase ultérieure" />} />
             </Route>
           </Routes>

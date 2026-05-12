@@ -9,12 +9,18 @@ import { User, FileText, Award, Calendar, GraduationCap, Receipt, Wallet } from 
 import { EmployeeSkillsTab } from "./tabs/EmployeeSkillsTab";
 import { EmployeeAbsencesTab } from "./tabs/EmployeeAbsencesTab";
 import { EmployeeTrainingsTab } from "./tabs/EmployeeTrainingsTab";
+import { SalaryDeductionsTab } from "./tabs/SalaryDeductionsTab";
+import { ContractFormDialog } from "./tabs/ContractFormDialog";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
   const employeeId = id ? parseInt(id, 10) : null;
   const { data: e, isLoading } = useEmployee(employeeId);
+  const [contractOpen, setContractOpen] = useState(false);
 
   if (isLoading || !e || !employeeId) {
     return (
@@ -128,7 +134,9 @@ export function EmployeeFichePage() {
               ) : (
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Aucun contrat actif.</p>
-                  <Badge variant="secondary">CRUD contrat à venir — Sprint B</Badge>
+                  <Button size="sm" onClick={() => setContractOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Créer un contrat
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -152,12 +160,21 @@ export function EmployeeFichePage() {
         </TabsContent>
 
         <TabsContent value="planning" className="mt-4">
-          <PlaceholderTab title="Planning (interventions assignées)" phase="Phase 3" />
+          <PlaceholderTab title="Planning (interventions assignées)" phase="Voir module Planning" />
         </TabsContent>
         <TabsContent value="payroll" className="mt-4">
-          <PlaceholderTab title="Saisies sur salaire" phase="Sprint B" />
+          <SalaryDeductionsTab employeeId={employeeId} />
         </TabsContent>
       </Tabs>
+
+      {contractOpen && e.entity && (
+        <ContractFormDialog
+          employeeId={employeeId}
+          entityId={e.entity.id}
+          open={contractOpen}
+          onClose={() => setContractOpen(false)}
+        />
+      )}
     </div>
   );
 }
