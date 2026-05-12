@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 function initials(name: string) {
   return name
@@ -49,6 +50,8 @@ export function AppTopbar() {
           </kbd>
         </button>
       </div>
+
+      <NotificationsBell />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

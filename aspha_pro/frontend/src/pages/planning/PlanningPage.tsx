@@ -9,6 +9,8 @@ import type { DatesSetArg, EventClickArg, EventDropArg, EventInput } from "@full
 import type { DateSelectArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { useInterventions, useUpdateIntervention, useCreateIntervention, useDeleteIntervention } from "@/hooks/use-phase3";
+import { useCreateInterventionException } from "@/hooks/use-payments";
+import { toast } from "sonner";
 import { useEmployees } from "@/hooks/use-employees";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
@@ -54,6 +56,7 @@ export function PlanningPage() {
   });
   const update = useUpdateIntervention();
   const del = useDeleteIntervention();
+  const createException = useCreateInterventionException();
 
   // Events sont des occurrences expansées (1 event = 1 RDV concret, même pour les récurrentes)
   const events: EventInput[] = useMemo(() => (interventions.data ?? []).map((ev) => {
@@ -72,8 +75,10 @@ export function PlanningPage() {
             ? "#8b5cf6"
             : "#3b82f6",
       borderColor: "transparent",
-      // Drag-drop seulement sur les ponctuelles (pas sur les occurrences virtuelles)
-      editable: !ev.is_occurrence,
+      // Drag-drop ET resize disponibles partout :
+      //   - Ponctuel/exception → update direct
+      //   - Occurrence virtuelle → crée une exception auto sur la nouvelle date
+      editable: true,
       extendedProps: { intervention: ev },
     };
   }), [interventions.data]);
@@ -84,12 +89,29 @@ export function PlanningPage() {
 
   const handleEventDrop = (arg: EventDropArg | EventResizeDoneArg) => {
     const ev = arg.event.extendedProps.intervention;
-    if (!ev || ev.is_occurrence) {
-      // Drag d'une occurrence virtuelle non supporté (créerait une exception)
-      arg.revert();
+    if (!ev || !arg.event.start || !arg.event.end) return;
+
+    // Cas 1 : occurrence virtuelle d'une récurrence → on crée une exception
+    if (ev.is_occurrence) {
+      createException.mutate({
+        parentId: ev.intervention_id,
+        payload: {
+          exception_date: ev.occurrence_date,
+          start_datetime: arg.event.start.toISOString(),
+          end_datetime: arg.event.end.toISOString(),
+          status: ev.status ?? "planifiee",
+        },
+      }, {
+        onSuccess: () => toast.success("Occurrence déplacée (exception créée sur la série)"),
+        onError: (e: any) => {
+          toast.error(e?.response?.data?.message ?? "Impossible de déplacer cette occurrence");
+          arg.revert();
+        },
+      });
       return;
     }
-    if (!arg.event.start || !arg.event.end) return;
+
+    // Cas 2 : intervention ponctuelle ou exception → update direct
     update.mutate({
       id: ev.intervention_id,
       patch: {
@@ -97,6 +119,7 @@ export function PlanningPage() {
         end_datetime: arg.event.end.toISOString(),
       },
     }, {
+      onSuccess: () => toast.success(ev.is_exception ? "Exception déplacée" : "Intervention déplacée"),
       onError: () => arg.revert(),
     });
   };

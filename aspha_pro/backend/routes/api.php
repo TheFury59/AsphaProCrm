@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\V1\AuthController;
 use App\Http\Controllers\V1\ClientController;
+use App\Http\Controllers\V1\ClientPortalController;
 use App\Http\Controllers\V1\ClientSubResourceController;
 use App\Http\Controllers\V1\ContractController;
 use App\Http\Controllers\V1\DocumentController;
@@ -9,11 +10,14 @@ use App\Http\Controllers\V1\EmployeeController;
 use App\Http\Controllers\V1\EmployeeSubResourceController;
 use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
+use App\Http\Controllers\V1\NotificationController;
 use App\Http\Controllers\V1\ProductController;
 use App\Http\Controllers\V1\QuoteController;
 use App\Http\Controllers\V1\ReferentialsController;
 use App\Http\Controllers\V1\ReglementController;
 use App\Http\Controllers\V1\SalaryDeductionController;
+use App\Http\Controllers\V1\StockController;
+use App\Http\Controllers\V1\TelemanagementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/ping', fn () => [
@@ -105,4 +109,47 @@ Route::middleware('auth:sanctum')->group(function () {
     // Règlements (paiements reçus + ventilations sur factures)
     Route::apiResource('reglements', ReglementController::class)->except(['update']);
     Route::post('reglements/{reglement}/allocate', [ReglementController::class, 'allocate']);
+
+    // === Phase 4 — Télégestion ===
+    Route::prefix('telemanagement')->controller(TelemanagementController::class)->group(function () {
+        Route::get('qr-codes', 'listQrCodes');
+        Route::post('qr-codes', 'generateQrCode');
+        Route::post('badge', 'badge');
+        Route::post('manual-entry', 'manualEntry');
+        Route::get('logs', 'logs');
+    });
+    Route::get('interventions/{intervention}/checkins', [TelemanagementController::class, 'listCheckins']);
+
+    // === Phase 5 — Portail client ===
+    Route::prefix('clients/{client}/portal')->controller(ClientPortalController::class)->group(function () {
+        Route::get('requests', 'listRequests');
+        Route::post('requests', 'storeRequest');
+        Route::patch('requests/{requestId}', 'updateRequest');
+        Route::get('reorders', 'listReorders');
+        Route::post('reorders', 'storeReorder');
+        Route::patch('reorders/{reorderId}', 'updateReorder');
+        Route::get('quality-controls', 'listQualityControls');
+        Route::post('quality-controls', 'storeQualityControl');
+    });
+    Route::get('documents/{documentId}/signatures', [ClientPortalController::class, 'listSignatures']);
+    Route::post('signatures/request', [ClientPortalController::class, 'requestSignature']);
+    // Endpoint public pour signer (token uniquement)
+    Route::post('portal/signatures/{token}/sign', [ClientPortalController::class, 'sign'])->withoutMiddleware('auth:sanctum');
+
+    // === Phase 6 — Stock par entité ===
+    Route::prefix('stock')->controller(StockController::class)->group(function () {
+        Route::get('products', 'index');
+        Route::post('products', 'store');
+        Route::patch('products/{stockProduct}', 'update');
+        Route::delete('products/{stockProduct}', 'destroy');
+        Route::get('products/{stockProduct}/movements', 'listMovements');
+        Route::post('products/{stockProduct}/movements', 'createMovement');
+        Route::get('alerts', 'alerts');
+    });
+
+    // === Notifications ===
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
 });

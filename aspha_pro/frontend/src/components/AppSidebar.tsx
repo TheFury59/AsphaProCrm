@@ -10,6 +10,10 @@ import {
   Settings,
   Building2,
   Wallet,
+  Map,
+  QrCode,
+  Boxes,
+  LifeBuoy,
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,6 +42,15 @@ const NAV_GROUPS = [
       { to: "/intervenants", label: "Intervenants", icon: UserCog },
       { to: "/prestations", label: "Prestations", icon: Package },
       { to: "/planning", label: "Planning", icon: Calendar },
+      { to: "/carte", label: "Carte", icon: Map },
+    ],
+  },
+  {
+    label: "Opérations",
+    items: [
+      { to: "/telegestion", label: "Télégestion", icon: QrCode },
+      { to: "/stock", label: "Stock", icon: Boxes },
+      { to: "/portail-client", label: "Portail client", icon: LifeBuoy },
     ],
   },
   {

@@ -2,7 +2,7 @@
 
 CRM métier services à la personne — Aspha Pro. Construit sur la base du schéma DBML `crm_ximi_schema_final.dbml` et des modifications fonctionnelles validées avec la cliente.
 
-> **Statut** : **MVP fonctionnel** — Phases 0 / 1 / 2 / 2.5 (A+B) / 3 livrées. Utilisable en démo cliente. Voir [plan-rebuild-aspha-pro.docx](../plan-rebuild-aspha-pro.docx) pour le détail.
+> **Statut** : **MVP étendu** — Phases 0 → 6 livrées + Carte + Notifications. Utilisable en démo cliente. Voir [plan-rebuild-aspha-pro.docx](../plan-rebuild-aspha-pro.docx) pour le détail.
 
 ## Stack
 
@@ -130,28 +130,44 @@ aspha_pro/
 
 ### Phase 3 — Planning + Ventes ✅
 - **Planning** : FullCalendar v6 (jour/semaine/mois/liste, locale FR, drag-and-drop wired, filtres intervenant + client)
-- **Interventions** : table unifiée ponctuel/récurrent via `is_recurring`
-- **Devis** : CRUD basique (status auto-draft)
-- **Factures** : CRUD avec items inline (transaction), référence auto `INV-YYYYMM-XXXX`, total calculé auto
+- **Récurrences matérialisées** : service `InterventionExpander` qui explose les RRULE en occurrences virtuelles. Drag-and-drop d'une occurrence → création auto d'une exception sur la série
+- **Interventions** : table unifiée ponctuel/récurrent via `is_recurring` + exceptions via `is_exception/parent_id/exception_date`
+- **Devis** : CRUD basique (status auto-draft) + sync Pennylane (mock + réel)
+- **Factures** : CRUD avec items inline (transaction), référence auto `INV-YYYYMM-XXXX`, total calculé auto, **Factur-X PDF/A-3** EN16931, sync Pennylane
+- **Règlements** : ventilations sur factures + update auto `payment_status`
+
+### Phase 4 — Télégestion ✅
+- QR codes par adresse (génération, rotation, révoque)
+- Badgeage in/out via QR + auto-création intervention si manquante
+- Saisie manuelle admin (oubli badgeage) avec motif obligatoire
+- Journal des badgeages filtrable
+
+### Phase 5 — Portail client ✅
+- Réclamations (3 types × 4 priorités × 4 statuts)
+- Réassorts consommables (workflow pending → delivered)
+- Signatures électroniques (request + sign public via token)
+- Contrôles qualité (rating 1-5 + commentaire)
+
+### Phase 6 — Stock par entité ✅
+- Produits consommables avec seuils d'alerte
+- Mouvements typés (in / out / adjustment) en transaction atomique
+- Page d'alertes "produits sous seuil"
+- Filtre low_stock dans la liste
+
+### Cartographie ✅
+- Vue Leaflet OpenStreetMap
+- Markers colorés clients (bleu) / intervenants (mauve) / interventions (vert)
+- Auto-fit bounds + sidebar interventions du jour
+
+### Notifications ✅
+- Centre de notifications dans le topbar (bell + badge unread count)
+- Polling 30s pour unread_count, 60s pour la liste
+- mark read / mark all read
 
 ## 🚧 Reste à faire (post-MVP)
 
-### Critique court terme
-- **Matérialisation des récurrences** : expansion RRULE → events explosés dans le calendrier (actuellement 1 seul event affiché par récurrence)
-- **Factur-X output** sur factures (deadline 1er septembre)
-- **Pennylane API** sync devis + factures
-
-### Améliorations Phase 2.5/3
-- Édition inline des champs principaux fiches (actuellement dialog obligatoire)
-- Reglements + ventilations (paiements reçus)
-- Génération SEPA (mandats + ordres XML)
-
-### Phases ultérieures
-- **Phase 4** : Télégestion (QR/NFC + checkins + saisie manuelle)
-- **Phase 5** : Portail client (réclamations, signatures électroniques, qualité, réassorts consommables)
-- **Phase 6** : Stock par entité
 - **Phase 7** : Messagerie mobile-first
-- **Phase 8** : Notifications multi-canal
+- **Phase 8** : Notifications push/email/SMS multi-canal (jobs)
 - **Phase 9** : Gestion flotte véhicule
 - **Phase 10** : Matching auto intervenant (rêve cliente — skills + proximité + dispo)
 

@@ -13,9 +13,13 @@ import { EmployeesListPage } from "@/pages/employees/EmployeesListPage";
 import { EmployeeFichePage } from "@/pages/employees/EmployeeFichePage";
 import { ProductsListPage } from "@/pages/products/ProductsListPage";
 import { PlanningPage } from "@/pages/planning/PlanningPage";
+import { MapPage } from "@/pages/planning/MapPage";
 import { QuotesListPage } from "@/pages/sales/QuotesListPage";
 import { InvoicesListPage } from "@/pages/sales/InvoicesListPage";
 import { ReglementsListPage } from "@/pages/sales/ReglementsListPage";
+import { StockPage } from "@/pages/stock/StockPage";
+import { TelegestionPage } from "@/pages/telegestion/TelegestionPage";
+import { PortailPage } from "@/pages/portail/PortailPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +48,10 @@ export default function App() {
               <Route path="/intervenants/:id" element={<EmployeeFichePage />} />
               <Route path="/prestations" element={<ProductsListPage />} />
               <Route path="/planning" element={<PlanningPage />} />
+              <Route path="/carte" element={<MapPage />} />
+              <Route path="/telegestion" element={<TelegestionPage />} />
+              <Route path="/stock" element={<StockPage />} />
+              <Route path="/portail-client" element={<PortailPage />} />
               <Route path="/devis" element={<QuotesListPage />} />
               <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/reglements" element={<ReglementsListPage />} />
