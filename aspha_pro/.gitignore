@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Builds
+/backend/public/build/
+/backend/public/hot
+/backend/public/storage
+/frontend/dist/
+/frontend/dist-ssr/
+
+# Logs
+*.log
+/backend/storage/logs/*.log
+/backend/storage/framework/cache/data/*
+/backend/storage/framework/sessions/*
+/backend/storage/framework/views/*
+!/backend/storage/framework/cache/data/.gitignore
+!/backend/storage/framework/sessions/.gitignore
+!/backend/storage/framework/views/.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Local DB (SQLite dev)
+/backend/database/*.sqlite
+/backend/database/*.sqlite-journal
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Composer / NPM
+/backend/auth.json
+composer.phar
+npm-debug.log*
+yarn-debug.log*
+
+# PHPUnit
+/backend/.phpunit.cache/
+/backend/.phpunit.result.cache
+
+# Vite
+/frontend/.vite/
+/frontend/stats.html
+
+# Office temp lock files
+~$*.docx
+~$*.xlsx

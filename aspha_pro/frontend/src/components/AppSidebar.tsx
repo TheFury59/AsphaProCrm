@@ -1,0 +1,105 @@
+import { Link, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Users,
+  UserCog,
+  Package,
+  Calendar,
+  FileText,
+  Receipt,
+  Settings,
+  Building2,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+
+const NAV_GROUPS = [
+  {
+    label: "Pilotage",
+    items: [
+      { to: "/", label: "Tableau de bord", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Métier",
+    items: [
+      { to: "/clients", label: "Clients", icon: Users },
+      { to: "/intervenants", label: "Intervenants", icon: UserCog },
+      { to: "/prestations", label: "Prestations", icon: Package },
+      { to: "/planning", label: "Planning", icon: Calendar },
+    ],
+  },
+  {
+    label: "Ventes",
+    items: [
+      { to: "/devis", label: "Devis", icon: FileText },
+      { to: "/factures", label: "Factures", icon: Receipt },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { to: "/parametres", label: "Paramètres", icon: Settings },
+    ],
+  },
+];
+
+export function AppSidebar() {
+  const { pathname } = useLocation();
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Building2 className="h-4 w-4" />
+          </div>
+          <div className="flex flex-col text-sm">
+            <span className="font-semibold leading-tight">Aspha Pro</span>
+            <span className="text-xs text-muted-foreground">Services à la personne</span>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {NAV_GROUPS.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
+                  return (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link to={item.to}>
+                          <Icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        <div className="px-2 py-1 text-xs text-muted-foreground">v0.1.0 — Aspha Pro</div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}

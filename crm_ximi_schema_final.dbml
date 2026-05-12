@@ -1,0 +1,1598 @@
+Project CRM_XIMI_CLONE {
+  database_type: "MySQL"
+}
+
+////////////////////
+// AUTH
+////////////////////
+
+Table roles {
+  id int [pk, increment]
+  name varchar [unique]
+  description varchar         // Description du rôle
+  is_duplicable boolean       // Peut être dupliqué pour créer un nouveau rôle similaire
+  is_system boolean           // Rôle système non supprimable (super_admin, employee, client)
+  created_at timestamp
+}
+
+Table permissions {
+  id int [pk, increment]
+  name varchar [unique]       // e.g. 'invoices.view', 'planning.edit', 'telemanagement.badge'
+  module varchar              // Module concerné: 'clients', 'rh', 'planning', 'sales', 'telemanagement', 'stock'
+  description varchar
+}
+
+Table role_permission {
+  role_id int
+  permission_id int
+  indexes { (role_id, permission_id) [pk] }
+}
+
+Table users {
+  id int [pk, increment]
+  name varchar
+  email varchar [unique]
+  password varchar
+  role_id int
+  status varchar // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// ENTITIES (BRANCHES / AGENCIES)
+////////////////////
+
+Table entities {
+  id int [pk, increment]
+  name varchar
+  phone varchar
+  email varchar
+  siret varchar
+  status varchar // 'active', 'inactive'
+  modulation_enabled boolean
+  annualisation_enabled boolean
+  // Geolocation — main coordinates of the entity (denormalized for fast proximity queries)
+  latitude float
+  longitude float
+  created_at timestamp
+}
+
+////////////////////
+// ENTITY ZONES (coverage zones per entity)
+////////////////////
+
+Table entity_zones {
+  id int [pk, increment]
+  entity_id int
+  label varchar               // e.g. "Zone Nord", "Zone Centre-ville"
+  center_latitude float       // centre de la zone
+  center_longitude float
+  radius_km float             // rayon de couverture en km
+  status varchar              // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// ADDRESSES (polymorphic — clients, employees, entities)
+////////////////////
+
+Table addresses {
+  id int [pk, increment]
+  owner_type varchar // 'client', 'employee', 'entity'
+  owner_id int
+  type varchar // 'main', 'billing', 'intervention', 'other'
+  address varchar
+  city varchar
+  postal_code varchar
+  latitude float
+  longitude float
+}
+
+////////////////////
+// CLIENTS (companies only)
+////////////////////
+
+Table clients {
+  id int [pk, increment]
+  code varchar [unique]
+  status varchar // 'active', 'inactive', 'suspended'
+  entity_id int
+  owner_user_id int // gestionnaire du dossier client
+  print_intervention_detail varchar // 'always', 'never', 'except_forfait'
+  created_at timestamp
+}
+
+Table client_companies {
+  id int [pk, increment]
+  client_id int [unique]
+  company_name varchar        // Nom de l'entreprise (remplace nom de famille)
+  legal_form varchar          // Forme juridique
+  siret varchar               // N° SIRET (remplace N° sécurité sociale)
+  vat_number varchar          // N° TVA
+  manager_civility varchar    // Civilité du gérant
+  manager_first_name varchar  // Prénom du gérant
+  manager_last_name varchar   // Nom du gérant
+  manager_role varchar        // Rôle du gérant
+  phone_landline varchar      // Téléphone fixe
+  phone_mobile varchar        // Téléphone portable
+  primary_email varchar       // Email prioritaire de la société
+  photo varchar               // Photo (facilite reconnaissance des lieux)
+  allow_duplicate boolean     // Autoriser doublon (client avec plusieurs SIRET)
+  created_at timestamp
+}
+
+// Contact de facturation dédié (séparé des contacts généraux)
+Table billing_contacts {
+  id int [pk, increment]
+  client_id int [unique]      // un seul contact de facturation par client
+  civility varchar
+  first_name varchar
+  last_name varchar
+  email varchar
+  phone varchar
+  created_at timestamp
+}
+
+Table client_contacts {
+  id int [pk, increment]
+  client_id int
+  type varchar                // 'phone', 'email', 'mobile'
+  value varchar
+  is_primary boolean          // Email / téléphone prioritaire
+}
+
+Table related_contacts {
+  id int [pk, increment]
+  client_id int
+  type varchar // 'family', 'doctor', 'emergency'
+  name varchar
+  phone varchar
+}
+
+////////////////////
+// CLIENT ABSENCES
+////////////////////
+
+Table client_absence_reasons {
+  id int [pk, increment]
+  label varchar // e.g. 'Hospitalisation', 'Congé', 'Autre'
+  status varchar // 'active', 'inactive'
+  allow_indefinite_duration boolean
+}
+
+Table client_absences {
+  id int [pk, increment]
+  client_id int
+  reason_id int
+  is_hourly boolean           // TypeHoraireJournalier
+  planning_action varchar     // 'cancel', 'delete', 'nothing'
+  comment text
+
+  // Ponctuelle
+  start_datetime datetime
+  duration_hours float
+
+  // Périodique (si is_periodic = true)
+  is_periodic boolean
+  start_date date
+  start_time time
+  end_time time
+  frequency varchar           // 'daily', 'weekly', 'monthly', 'yearly'
+  interval int
+  days_of_week varchar
+  exclude_school_holidays boolean
+  exclude_public_holidays boolean
+  end_type varchar            // 'never', 'on_date', 'after_occurrences'
+  end_date date
+  occurrences_count int
+
+  created_at timestamp
+}
+
+////////////////////
+// EMPLOYEES
+////////////////////
+
+Table employees {
+  id int [pk, increment]
+  user_id int [unique]
+  entity_id int
+  owner_user_id int           // gestionnaire du dossier intervenant
+  name varchar
+  phone varchar
+  classification varchar      // 'non_cadre', 'cadre'
+  transport_mode varchar      // Mode de déplacement principal
+  has_company_vehicle boolean // Véhicule de service à temps plein (jamais véhicule perso)
+  diploma text                // Diplômes (champ libre)
+  job_reference_free text     // Emploi repère (champ libre)
+  created_at timestamp
+}
+
+////////////////////
+// KM & MEAL INDEMNITY RATES (barèmes configurables)
+////////////////////
+
+Table km_indemnity_rates {
+  id int [pk, increment]
+  entity_id int               // nullable = global
+  label varchar               // e.g. "Barème voiture 0.25€/km"
+  transport_mode varchar      // 'car', 'bike', 'moto', 'other'
+  rate_per_km decimal
+  status varchar              // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// JOB REFERENCES (Emploi repère)
+////////////////////
+
+Table job_references {
+  id int [pk, increment]
+  label varchar
+  classification varchar      // 'non_cadre', 'cadre'
+  level int
+  status varchar              // 'active', 'inactive'
+}
+
+////////////////////
+// CONTRACTS (CDI / CDD / Convention de stage)
+////////////////////
+
+Table contracts {
+  id int [pk, increment]
+  employee_id int
+  entity_id int
+
+  // ── GÉNÉRAL ────────────────────────────────────────────────
+  position varchar            // Poste
+  intervention_zone varchar   // Zone d'intervention
+
+  // ── MODALITÉS ──────────────────────────────────────────────
+  contract_type varchar       // 'cdi', 'cdd', 'stage'
+
+  // CDI only
+  activity_modality varchar
+  is_cdi_inclusion boolean
+
+  // CDD only
+  cdd_reason varchar
+  cdd_imprecise_term boolean
+  end_date date
+  precarity_payment boolean
+
+  // Stage only
+  tutor_name varchar
+  is_mandatory_internship boolean
+
+  // Dates partagées
+  start_date date
+  trial_period boolean
+  trial_start date
+  trial_end date
+  trial_renewed boolean
+  first_intervention_date date
+  sent_date date
+  signed_date date
+  dpae_date date
+  is_non_salarie boolean
+  medical_visit_address_type varchar // 'entity', 'other'
+  medical_visit_address_id int
+
+  // ── RÉMUNÉRATION ───────────────────────────────────────────
+  work_time_type varchar      // 'full_time', 'part_time'
+  monthly_duration float      // Durée mensuelle (heures)
+  weekly_duration float       // Durée hebdomadaire (heures)
+
+  pay_mode varchar            // 'monthly_salary', 'hourly_salary'
+  // Si monthly_salary : montant fixe mensuel
+  monthly_salary decimal
+  // Si hourly_salary : taux horaire × durée mensuelle
+  hourly_rate decimal
+  // Dans les deux cas : taux horaire calculé ou saisi selon le mode
+
+  // ── INDEMNITÉS KILOMÉTRIQUES ────────────────────────────────
+  // Deux types de calcul automatique basé sur les interventions du profil
+  km_rate_inter_vacation decimal // Taux €/km entre clients (inter-vacation)
+  km_rate_intervention decimal   // Taux €/km pendant l'intervention (courses, etc.)
+  // Le calcul du montant est automatique via les interventions liées
+  // Premier trajet domicile→1ère intervention : non comptabilisé
+
+  // ── PAIE ───────────────────────────────────────────────────
+  qualification varchar
+  employee_status varchar     // 'non_cadre', 'cadre'
+  seniority_date date
+  profession_code varchar
+  socio_professional_category varchar
+  conventional_categorical_status varchar
+  conventional_classification varchar
+  non_compete_clause boolean
+  is_accre_beneficiary boolean
+  is_mandatory_internship_school boolean // stage only
+  geographic_zone varchar     // 'france_metro', 'alsace_moselle', 'dom'
+
+  // ── PARAMÈTRES PAIE ────────────────────────────────────────
+  working_days_mask tinyint   // bitmask lun→dim (bit0=lun … bit6=dim)
+  is_night_worker boolean
+  is_office_staff boolean
+  subject_to_mobility_contribution boolean
+  public_holidays_worked varchar // 'never', 'always', 'sometimes'
+  real_payment boolean
+  multiple_employers boolean
+  rural_territory_exemption boolean
+  part_time_full_contribution boolean
+  cp_payment_mode varchar
+  cp_days_current_month decimal
+
+  // N4DS
+  population_code varchar
+  prudhommal_code varchar
+
+  // Pénibilité bitmask (bit0=hyperbare … bit9=bruit)
+  penibility_exposure_mask smallint
+
+  // ── COMPLÉMENTAIRE SANTÉ ───────────────────────────────────
+  health_insurance varchar    // 'none', etc.
+  health_insurance_reason varchar
+
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// CONTRACT BLOCKED SLOTS (Horaires de travail — grille visuelle)
+// Vert dans la grille = créneau BLOQUÉ = intervenant non disponible
+// Le planning rejette toute affectation sur ces créneaux
+// Plusieurs lignes par jour pour modéliser les trous
+// Ex screenshot: mer bloqué 00:00-08:00 + 12:00-14:00 + 22:00-24:00
+// = travail possible uniquement 08:00-12:00 et 14:00-22:00
+////////////////////
+
+Table contract_blocked_slots {
+  id int [pk, increment]
+  contract_id int
+  day_of_week tinyint         // 0=lun, 1=mar, 2=mer, 3=jeu, 4=ven, 5=sam, 6=dim
+  slot_start time             // début du créneau bloqué
+  slot_end time               // fin du créneau bloqué
+}
+
+////////////////////
+// CONTRACT SURCHARGE OVERRIDES (majorations spécifiques)
+////////////////////
+
+Table contract_surcharge_overrides {
+  id int [pk, increment]
+  contract_id int
+  surcharge_rule_id int
+  custom_rate decimal
+  custom_rate_type varchar    // 'percentage', 'flat'
+}
+
+Table skills {
+  id int [pk, increment]
+  label varchar
+  status varchar // 'active', 'inactive'
+}
+
+Table employee_skills {
+  employee_id int
+  skill_id int
+  indexes { (employee_id, skill_id) [pk] }
+}
+
+Table client_employee_history {
+  id int [pk, increment]
+  client_id int
+  employee_id int
+  link_type varchar // 'preferred', 'incompatible'
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// EMPLOYEE ABSENCES
+////////////////////
+
+Table absence_reasons {
+  id int [pk, increment]
+  code varchar [unique]
+  label varchar
+  acronym varchar
+  is_paid boolean
+  is_secondary boolean
+  status varchar // 'active', 'inactive'
+  color varchar
+  description text
+}
+
+Table employee_absences {
+  id int [pk, increment]
+  employee_id int
+  reason_id int
+  // Type : absence classique OU dispo/indispo (fusionnés)
+  entry_type varchar          // 'absence', 'availability', 'unavailability', 'weekly_rest'
+  is_hourly boolean
+  planning_action varchar     // 'none', 'flag', 'reassign'
+  justification_status varchar // 'pending', 'justified', 'unjustified'
+
+  // Ponctuel
+  start_datetime datetime
+  duration_hours float
+
+  // Périodique
+  is_periodic boolean
+  start_date date
+  is_full_day boolean
+  start_time time
+  end_time time
+  frequency varchar           // 'daily', 'weekly', 'monthly', 'yearly'
+  interval int
+  days_of_week varchar
+  exclude_school_holidays boolean
+  exclude_public_holidays boolean
+  end_type varchar            // 'never', 'on_date', 'after_occurrences'
+  end_date date
+  occurrences_count int
+
+  // Transfert de prestation (proximité + disponibilité)
+  transfer_prestation boolean
+
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// TRAININGS
+////////////////////
+
+Table trainings {
+  id int [pk, increment]
+  employee_id int
+  training_phase varchar      // 'onboarding' (entrée entreprise) ou 'ongoing' (en cours)
+  title varchar
+  training_center varchar
+  start_date date
+  end_date date
+  hours_count float
+  trainer varchar
+  is_paid boolean
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// SALARY DEDUCTIONS
+////////////////////
+
+Table creditor_contacts {
+  id int [pk, increment]
+  first_name varchar
+  last_name varchar
+  type varchar
+  office_phone varchar
+  mobile_phone varchar
+  home_phone varchar
+  email varchar
+  newsletter_subscribed boolean
+  postal_code varchar
+  city varchar
+  company varchar
+  role varchar
+}
+
+Table bank_accounts {
+  id int [pk, increment]
+  iban varchar
+  bic varchar
+  owner_name varchar
+}
+
+Table salary_deductions {
+  id int [pk, increment]
+  employee_id int
+  creditor_name varchar
+  case_number varchar
+  address text
+  creditor_contact_id int
+  bank_account_id int
+  payment_method varchar // 'transfer', 'check', 'cash'
+  comment text
+  created_at timestamp
+}
+
+Table salary_deduction_debts {
+  id int [pk, increment]
+  salary_deduction_id int
+  type varchar
+  is_alimony_calculated boolean
+  start_date date
+  end_date date
+  priority int
+  total_due decimal
+  partial_release_amount decimal
+  amount_paid decimal
+  balance decimal
+  full_release_date date
+}
+
+Table deduction_payments {
+  id int [pk, increment]
+  salary_deduction_id int
+  amount decimal
+  paid_at datetime
+  method varchar
+  note text
+}
+
+////////////////////
+// SURCHARGE RULES (superadmin config)
+////////////////////
+
+Table surcharge_rules {
+  id int [pk, increment]
+  label varchar
+  type varchar // 'night', 'weekend', 'holiday', 'calendar'
+  rate decimal
+  rate_type varchar // 'percentage', 'flat'
+  applies_from time
+  applies_to time
+  status varchar // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// THIRD PARTY PAYERS
+////////////////////
+
+Table third_party_payers {
+  id int [pk, increment]
+  name varchar
+  type varchar // 'apa', 'caf', 'mutuelle', 'other'
+  address text
+  phone varchar
+  email varchar
+  status varchar // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// SUPPLIERS
+////////////////////
+
+Table suppliers {
+  id int [pk, increment]
+  name varchar
+  address text
+  phone varchar
+  email varchar
+  status varchar // 'active', 'inactive'
+  created_at timestamp
+}
+
+////////////////////
+// QUOTE TYPES (templates)
+////////////////////
+
+Table quote_types {
+  id int [pk, increment]
+  entity_id int
+  label varchar
+  modality varchar
+  nature varchar // 'regular', 'punctual'
+  billing_mode varchar
+  quote_calculation varchar // 'per_week', 'per_month', 'per_unit'
+  commitment_duration varchar // '1_month', '2_months', 'indefinite'
+  billing_rhythm varchar
+  deposit_percent decimal
+  status varchar // 'active', 'inactive'
+}
+
+////////////////////
+// QUOTES (Devis)
+////////////////////
+
+Table quotes {
+  id int [pk, increment]
+  client_id int
+  quote_type_id int
+  address_id int
+  entity_id int
+  owner_user_id int
+
+  nature varchar // 'regular', 'punctual'
+  quote_date date
+  validity_date date
+  billing_mode varchar
+  quote_calculation varchar // 'per_week', 'per_month', 'per_unit'
+  consideration_date date
+  commitment_duration varchar
+  billing_rhythm varchar
+  deposit_percent decimal
+
+  // PEC
+  has_pec boolean
+  pec_third_party_payer_id int
+  pec_file_number varchar
+  pec_status varchar // 'active', 'inactive'
+  pec_mode varchar
+  pec_billing_rhythm varchar
+  pec_validity_end date
+  pec_base_rate decimal
+  pec_coverage_percent decimal
+  pec_ceiling_scope varchar // 'monthly', 'weekly'
+  pec_client_base_rate decimal
+  pec_beyond_ceiling varchar // 'allowed', 'forbidden'
+  pec_detail_surcharges boolean
+  pec_ceiling_type varchar // 'global', 'per_week'
+  pec_ceiling_hours decimal
+
+  // Follow-up
+  success_rate decimal
+  desired_start_date date
+  immediate_start boolean
+  meeting_done boolean
+
+  // Surcharge flags
+  has_calendar_surcharges boolean
+  has_night_surcharge boolean
+
+  comment text
+  status varchar              // 'draft', 'sent', 'accepted', 'refused', 'expired'
+
+  // Pennylane API integration
+  pennylane_id varchar        // ID du devis côté Pennylane (nullable)
+  pennylane_synced_at datetime
+
+  created_at timestamp
+}
+
+Table quote_surcharge_rules {
+  quote_id int
+  surcharge_rule_id int
+  indexes { (quote_id, surcharge_rule_id) [pk] }
+}
+
+////////////////////
+// PRODUCT CATALOG (Produits — catalogue de prestations)
+////////////////////
+
+// TVA rates — managed by superadmin
+Table vat_rates {
+  id int [pk, increment]
+  label varchar               // e.g. "TVA 20%", "TVA 5.5%"
+  rate decimal                // e.g. 20.00
+  status varchar              // 'active', 'inactive'
+}
+
+// Product categories
+Table product_categories {
+  id int [pk, increment]
+  label varchar
+  status varchar              // 'active', 'inactive'
+}
+
+// Products (= Services in prestations)
+Table products {
+  id int [pk, increment]
+  code varchar [unique]
+  status varchar              // 'active', 'inactive'
+  name varchar
+  entity_id int               // entité propriétaire (nullable = global)
+  type varchar                // 'hourly', 'forfait', 'frais', 'remise', 'carte', 'exceptional'
+  nature varchar              // 'regular', 'punctual'
+  billing_mode varchar        // 'per_intervention', 'per_month', 'per_week', 'per_unit'
+  category_id int
+  default_duration_minutes int  // Durée standard
+  has_degressive_pricing boolean // Tarif dégressif
+  price decimal               // Prix HT
+  cost decimal                // Coût
+  vat_rate_id int
+  amount_incl_tax boolean     // true = TTC, false = HT
+  specific_rates_forbidden boolean // Tarifs spécifiques interdits
+  accounting_code varchar     // Code comptable
+  chapter varchar             // Chapitre
+  description text
+  medical_visit_address_id int // Adresse des visites médicales (nullable)
+  created_at timestamp
+}
+
+// Degressive pricing tiers (Tarif dégressif)
+// Multiple price tiers based on quantity/hours thresholds
+Table product_price_tiers {
+  id int [pk, increment]
+  product_id int
+  from_quantity decimal       // seuil à partir duquel ce tarif s'applique
+  price decimal               // prix à ce palier
+}
+
+////////////////////
+// SERVICES & MISSIONS & PRESTATIONS
+////////////////////
+
+Table missions {
+  id int [pk, increment]
+  client_id int
+  quote_id int
+  name varchar
+  status varchar              // 'active', 'suspended', 'cancelled'
+  no_intervention_no_bill boolean
+  // Moyens de paiement : 'check,sepa,card,transfer,cash'
+  payment_methods varchar
+  online_payment_enabled boolean // Intégration CB en ligne (module futur)
+  billing_rhythm varchar      // Rythme de facturation
+  created_at timestamp
+}
+
+Table client_prestations {
+  id int [pk, increment]
+  client_id int
+  mission_id int
+  product_id int             // Produit du catalogue
+  quote_id int
+  label varchar
+  start_date date
+  end_date date
+  billing_type varchar // 'hourly', 'forfait', 'frais', 'remise', 'carte', 'exceptional'
+  pricing_type varchar // 'default', 'custom'
+  custom_price decimal
+  base_price decimal
+  no_intervention_no_bill boolean
+}
+
+////////////////////
+// PLANNING CORE
+// interventions = table unifiée (ponctuelles + périodiques)
+////////////////////
+
+Table interventions {
+  id int [pk, increment]
+  client_id int
+  mission_id int
+  client_prestation_id int
+  employee_id int
+
+  // Type
+  is_recurring boolean        // false = ponctuelle, true = périodique
+  status varchar              // 'a_pourvoir', 'planifiee', 'realisee', 'annulee', 'draft', 'terminated'
+  is_group boolean            // intervention groupée
+
+  // Ponctuel — datetime exact
+  start_datetime datetime
+  end_datetime datetime
+
+  // Récurrent — règle de périodicité
+  recurrence_start_date date
+  start_time time
+  end_time time
+  frequency varchar           // 'daily', 'weekly', 'monthly', 'yearly'
+  interval int
+  days_of_week varchar        // 'mon,tue,wed...'
+  exclude_holidays boolean
+  exclude_school_holidays boolean
+  end_type varchar            // 'never', 'on_date', 'after_occurrences'
+  recurrence_end_date date
+  occurrences_count int
+  next_intervention_id int    // self-ref: nouvelle règle après modif périodicité
+
+  // Exception (occurrence modifiée d'une récurrence)
+  parent_id int               // FK to parent recurring intervention
+  is_exception boolean
+  exception_date date         // date de l'occurrence remplacée
+
+  // Remplacement d'intervenant en urgence
+  replacement_employee_id int // Intervenant remplaçant (badge à la place de employee_id)
+  replacement_reason varchar  // Raison du remplacement (délai trop juste, absence, etc.)
+
+  // Billing & pay
+  is_paid boolean
+  is_billed boolean
+  bill_client boolean         // Facturer client
+  adjustment_of_id int        // self-ref for adjustment lines
+
+  // Comments
+  comment text
+  internal_comment text
+  client_comment text
+  employee_comment text
+
+  // Transport
+  transport_mode varchar
+  vehicle_type varchar        // 'personal', 'company' — renseigné après coup, pas à la création
+  is_transport_fixed boolean
+  kms_done float
+  kms_paid float
+
+  created_at timestamp
+}
+
+////////////////////
+// RECURRENCE ASSIGNMENTS (affectation history)
+////////////////////
+
+Table recurrence_assignments {
+  id int [pk, increment]
+  recurrence_id int
+  employee_id int
+  assignment_type varchar // 'definitive', 'temporary'
+  start_date date
+  end_date date // NULL for definitive
+  created_at timestamp
+}
+
+////////////////////
+// MATCHING REQUESTS (Appariement)
+////////////////////
+
+Table matching_requests {
+  id int [pk, increment]
+  recurrence_id int
+  intervention_id int
+  requested_by int
+  assignment_type varchar // 'definitive', 'temporary'
+  start_date date
+  end_date date
+  status varchar // 'pending', 'assigned', 'cancelled'
+  selected_employee_id int
+  created_at timestamp
+}
+
+////////////////////
+// CLIENT EVENT TYPES
+////////////////////
+
+Table client_event_types {
+  id int [pk, increment]
+  label varchar
+  status varchar // 'active', 'inactive'
+  planning_color varchar
+}
+
+////////////////////
+// CLIENT EVENTS (ponctuel)
+////////////////////
+
+Table client_events {
+  id int [pk, increment]
+  client_id int
+  event_type_id int
+  contact_id int
+  date datetime
+  duration_minutes int
+  is_cancelled boolean // keep trace even if cancelled
+  is_remote boolean // A distance
+  address_type varchar // 'client', 'other'
+  custom_address_id int
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// CLIENT EVENT RECURRENCES (périodiques)
+////////////////////
+
+Table client_event_recurrences {
+  id int [pk, increment]
+  client_id int
+  event_type_id int
+  contact_id int
+  is_remote boolean
+  address_type varchar // 'client', 'other'
+  custom_address_id int
+  comment text
+  start_date date
+  start_time time
+  end_time time
+  frequency varchar // 'daily', 'weekly', 'monthly', 'yearly'
+  interval int
+  days_of_week varchar
+  exclude_school_holidays boolean
+  exclude_public_holidays boolean
+  end_type varchar // 'never', 'on_date', 'after_occurrences'
+  end_date date
+  occurrences_count int
+  status varchar // 'draft', 'active', 'terminated'
+  next_recurrence_id int // self-ref after periodicity change
+  created_at timestamp
+}
+
+////////////////////
+// AVAILABILITIES
+// Fusionnées dans employee_absences (entry_type = 'availability' / 'unavailability' / 'weekly_rest')
+////////////////////
+
+////////////////////
+// EMPLOYEE EVENT TYPES (config)
+////////////////////
+
+Table employee_event_types {
+  id int [pk, increment]
+  label varchar
+  status varchar // 'active', 'inactive'
+  is_payable boolean
+  impacts_modulation boolean // default for events created with this type
+  base_type varchar // 'absence', 'event', 'training', 'rest'
+  exported_to_payroll boolean
+  export_position int
+  planning_color varchar
+}
+
+////////////////////
+// TELEMANAGEMENT LOGS
+////////////////////
+
+Table telemanagement_logs {
+  id int [pk, increment]
+  origin varchar              // 'manual', 'mobile', 'landline'
+  event_type varchar          // 'arrival', 'departure', 'unrecognized'
+  is_unrecognized boolean
+  called_at datetime
+  employee_id int
+  client_id int
+  intervention_id int         // Intervention liée au badgeage
+  // Visible sur agenda avec icône téléphone + onglet télégestion
+  intervention_quality varchar // 'good', 'average', 'bad'
+  comment text
+  created_at timestamp
+}
+
+////////////////////
+// EMPLOYEE EVENTS (ponctuel)
+////////////////////
+
+Table employee_events {
+  id int [pk, increment]
+  employee_id int
+  contract_id int
+  event_type_id int
+  event_date date
+  duration_minutes int
+  // Événements non badgés (entretien, réunion, etc.)
+  // Le lien télégestion est uniquement sur les interventions via checkins
+  is_employee_paid boolean
+  impacts_modulation boolean
+  address_type varchar        // 'entity', 'other'
+  custom_address_id int
+  comment text
+  employee_comment text
+  created_at timestamp
+}
+
+////////////////////
+// EMPLOYEE EVENT RECURRENCES (périodique)
+////////////////////
+
+Table employee_event_recurrences {
+  id int [pk, increment]
+  employee_id int
+  contract_id int
+  event_type_id int
+  is_employee_paid boolean
+  address_type varchar // 'entity', 'other'
+  custom_address_id int
+  comment text
+  start_date date
+  start_time time
+  end_time time
+  frequency varchar // 'daily', 'weekly', 'monthly', 'yearly'
+  interval int
+  days_of_week varchar
+  exclude_school_holidays boolean
+  exclude_public_holidays boolean
+  end_type varchar // 'never', 'on_date', 'after_occurrences'
+  end_date date
+  occurrences_count int
+  transport_mode varchar
+  is_transport_fixed boolean
+  kms_done float
+  created_at timestamp
+}
+
+////////////////////
+// TELEMANAGEMENT (QR / NFC + checkins)
+////////////////////
+
+Table qr_codes {
+  id int [pk, increment]
+  address_id int
+  event_type_id int
+  type varchar // 'qrcode', 'nfc'
+  code varchar [unique]
+  status varchar // 'valid', 'obsolete', 'invalid', 'to_validate'
+}
+
+Table checkins {
+  id int [pk, increment]
+  employee_id int
+  intervention_id int
+  qr_code_id int
+  checkin_time datetime
+  checkout_time datetime
+  latitude float
+  longitude float
+}
+
+////////////////////
+// ENTITY BANK & SEPA
+////////////////////
+
+Table entity_bank_accounts {
+  id int [pk, increment]
+  entity_id int
+  label varchar
+  iban varchar
+  bic varchar
+  is_default boolean
+  created_at timestamp
+}
+
+Table entity_sepa_config {
+  id int [pk, increment]
+  entity_id int [unique]
+  bank_norm varchar // 'sepa', 'cfonb', 'mixed'
+  show_contract_info_on_mandate boolean
+  show_entity_address_on_mandate boolean
+  omit_bic boolean
+  use_smnda_on_bank_change boolean
+  has_intermediate_creditor boolean
+  intermediate_creditor_name varchar
+  intermediate_creditor_iban varchar
+  use_due_date_as_operation_date boolean
+  use_ddfip_format boolean
+}
+
+Table sepa_mandates {
+  id int [pk, increment]
+  client_id int
+  entity_id int
+  entity_bank_account_id int
+  debtor_bank_account_id int
+  mandate_reference varchar [unique] // RUM
+  creditor_id varchar // ICS
+  contract_description text
+  signed_at date
+  sequence_type varchar // 'FRST', 'RCUR', 'OOFF', 'FNAL'
+  status varchar // 'active', 'cancelled', 'expired'
+  created_at timestamp
+}
+
+Table sepa_orders {
+  id int [pk, increment]
+  entity_id int
+  entity_bank_account_id int
+  lot_number varchar [unique]
+  operation_date date
+  total_amount decimal
+  format varchar // 'sepa', 'cfonb', 'ddfip'
+  status varchar // 'generated', 'sent', 'cancelled'
+  file_path varchar
+  created_at timestamp
+}
+
+////////////////////
+// BILLING CYCLES
+////////////////////
+
+Table billing_cycles {
+  id int [pk, increment]
+  entity_id int
+  label varchar
+  period_start date
+  period_end date
+  status varchar // 'open', 'closed'
+  closed_at timestamp
+  created_at timestamp
+}
+
+////////////////////
+// INVOICES
+////////////////////
+
+Table invoices {
+  id int [pk, increment]
+  reference varchar [unique] // never deleted — incremental accounting ref
+  type varchar // 'client', 'third_party', 'credit_note', 'manual'
+  client_id int
+  mission_id int // for separate billing per mission
+  third_party_payer_id int
+  entity_id int
+  billing_cycle_id int
+  intervention_address_id int
+  payment_mode varchar
+  payment_status varchar // 'unpaid', 'partial', 'paid', 'loss'
+  send_mode varchar // 'email', 'mail', 'portal'
+  invoice_date date
+  due_date date
+  total decimal
+  needs_recalculation boolean
+  comment text
+  status varchar              // 'draft', 'sent', 'cancelled', 'loss'
+  // Facturation électronique (obligatoire 1er septembre)
+  e_invoice_format varchar    // 'factur-x', 'ubl', 'cii'
+  e_invoice_sent_at datetime
+  e_invoice_status varchar    // 'pending', 'sent', 'acknowledged', 'rejected'
+
+  // Pennylane API integration
+  pennylane_id varchar        // ID de la facture côté Pennylane (nullable)
+  pennylane_synced_at datetime // Dernière synchronisation Pennylane
+
+  created_at timestamp
+}
+
+Table invoice_items {
+  id int [pk, increment]
+  invoice_id int
+  client_prestation_id int
+  intervention_id int
+  item_type varchar // 'hourly', 'forfait', 'frais', 'remise', 'produit', 'carte', 'adjustment'
+  label varchar
+  quantity decimal // decimal to handle fractional hours
+  unit_price decimal
+  total decimal
+}
+
+////////////////////
+// RÈGLEMENTS
+////////////////////
+
+Table reglements {
+  id int [pk, increment]
+  reference varchar [unique]
+  type varchar // 'reglement', 'prelevement_sepa'
+  status varchar // 'received', 'pending', 'cancelled'
+  is_non_deductible boolean
+  client_id int
+  third_party_payer_id int
+  employee_id int
+  supplier_id int
+  payment_method varchar // 'cash', 'check', 'card', 'transfer', 'cesu', 'sepa'
+  cesu_count int
+  cesu_unit_price decimal
+  sepa_order_id int
+  sepa_mandate_id int
+  amount decimal
+  ventilation_status varchar // 'unallocated', 'partial', 'allocated'
+  operation_date date
+  value_date date
+  entity_id int
+  entity_bank_account_id int
+  description text
+  created_at timestamp
+}
+
+Table reglement_invoice_lines {
+  id int [pk, increment]
+  reglement_id int
+  invoice_id int
+  allocated_amount decimal
+  created_at timestamp
+}
+
+
+
+
+
+////////////////////
+// MESSAGERIE
+////////////////////
+
+Table message_threads {
+  id int [pk, increment]
+  entity_id int
+  subject varchar
+  type varchar // 'direct', 'group', 'telemanagement'
+  created_by int
+  created_at timestamp
+}
+
+Table message_thread_participants {
+  thread_id int
+  user_id int
+  joined_at timestamp
+  last_read_at timestamp
+  indexes { (thread_id, user_id) [pk] }
+}
+
+Table messages {
+  id int [pk, increment]
+  thread_id int
+  sender_id int
+  body text
+  checkin_id int // for telemanagement messages
+  sent_at timestamp
+}
+
+////////////////////
+// KEYS
+////////////////////
+
+Table keys {
+  id int [pk, increment]
+  client_id int
+  label varchar
+  current_holder varchar
+}
+
+Table key_movements {
+  id int [pk, increment]
+  key_id int
+  from_holder varchar
+  to_holder varchar
+  date datetime
+}
+
+////////////////////
+// DOCUMENTS (polymorphic)
+////////////////////
+
+Table documents {
+  id int [pk, increment]
+  owner_type varchar          // 'client', 'employee', 'contract', 'invoice', 'quote'
+  owner_id int
+  file_path varchar
+  label varchar
+  document_type varchar       // 'contract', 'invoice', 'insurance', 'product_sheet', 'protocol', 'other'
+  is_client_visible boolean   // Visible dans le portail client
+  created_at timestamp
+}
+
+////////////////////
+// CLIENT PORTAL
+////////////////////
+
+// Réclamations et signalements (portail client)
+Table client_requests {
+  id int [pk, increment]
+  client_id int
+  type varchar                // 'complaint', 'problem_report', 'consumable_reorder'
+  subject varchar
+  body text
+  status varchar              // 'open', 'in_progress', 'resolved', 'closed'
+  priority varchar            // 'low', 'normal', 'high', 'urgent'
+  assigned_to int             // user_id du gestionnaire
+  resolved_at datetime
+  created_at timestamp
+}
+
+// Demandes de réassort consommables
+Table consumable_reorders {
+  id int [pk, increment]
+  client_id int
+  stock_product_id int        // Produit demandé
+  quantity_requested int
+  comment text
+  status varchar              // 'pending', 'approved', 'delivered'
+  created_at timestamp
+}
+
+// Signatures électroniques
+Table electronic_signatures {
+  id int [pk, increment]
+  document_id int             // Document à signer
+  signer_type varchar         // 'client', 'employee'
+  signer_id int
+  signed_at datetime
+  signature_token varchar     // Token unique de validation
+  ip_address varchar
+  status varchar              // 'pending', 'signed', 'refused', 'expired'
+  created_at timestamp
+}
+
+// Contrôles qualité (historique dates)
+Table quality_controls {
+  id int [pk, increment]
+  client_id int
+  controlled_by int           // user_id
+  control_date datetime
+  result varchar              // 'satisfactory', 'needs_improvement', 'unsatisfactory'
+  comment text
+  next_control_date date
+  created_at timestamp
+}
+
+////////////////////
+// STOCK / INVENTAIRE
+////////////////////
+
+// Catégories de produits stock
+Table stock_categories {
+  id int [pk, increment]
+  label varchar               // e.g. "Produits ménagers", "EPI", "Consommables"
+  status varchar              // 'active', 'inactive'
+}
+
+// Produits en stock (ex: produits ménagers)
+Table stock_products {
+  id int [pk, increment]
+  entity_id int               // Chaque entité a son propre stock
+  category_id int
+  name varchar
+  reference varchar
+  unit varchar                // 'unit', 'liter', 'kg', 'pack'
+  alert_threshold int         // Seuil d'alerte commande
+  current_quantity int        // Quantité actuelle
+  status varchar              // 'active', 'inactive'
+  created_at timestamp
+}
+
+// Inventaires périodiques (ex: hebdomadaire)
+Table stock_inventories {
+  id int [pk, increment]
+  entity_id int
+  done_by int                 // user_id
+  inventory_date date
+  comment text
+  status varchar              // 'draft', 'validated'
+  created_at timestamp
+}
+
+// Lignes d'inventaire
+Table stock_inventory_lines {
+  id int [pk, increment]
+  inventory_id int
+  stock_product_id int
+  expected_quantity int       // Quantité théorique
+  actual_quantity int         // Quantité comptée
+  gap int                     // Écart (calculé)
+  comment text
+}
+
+// Mouvements de stock (entrées / sorties)
+Table stock_movements {
+  id int [pk, increment]
+  stock_product_id int
+  movement_type varchar       // 'in', 'out', 'adjustment'
+  quantity int
+  reason varchar              // 'reorder', 'usage', 'loss', 'inventory_adjustment'
+  reference_id int            // FK optionnelle vers consumable_reorders si réassort
+  done_by int                 // user_id
+  movement_date datetime
+  created_at timestamp
+}
+
+////////////////////
+// NOTIFICATIONS
+////////////////////
+
+// Types de notifications configurables
+Table notification_types {
+  id int [pk, increment]
+  code varchar [unique]       // e.g. 'intervention_assigned', 'absence_created', 'stock_alert'
+  label varchar
+  module varchar              // 'planning', 'rh', 'stock', 'portal', 'telemanagement'
+  default_channels varchar    // 'push,email,sms' — canaux par défaut
+  status varchar              // 'active', 'inactive'
+}
+
+// Préférences de notification par utilisateur
+Table notification_preferences {
+  id int [pk, increment]
+  user_id int
+  notification_type_id int
+  via_push boolean            // Notification in-app / mobile
+  via_email boolean
+  via_sms boolean
+  is_enabled boolean          // Peut désactiver ce type entièrement
+}
+
+// Notifications générées
+Table notifications {
+  id int [pk, increment]
+  user_id int                 // Destinataire
+  notification_type_id int
+  title varchar
+  body text
+  // Lien vers l'objet concerné (polymorphique)
+  target_type varchar         // 'intervention', 'absence', 'stock_product', 'client_request', etc.
+  target_id int
+  channel varchar             // 'push', 'email', 'sms'
+  is_read boolean
+  read_at datetime
+  sent_at datetime
+  created_at timestamp
+}
+
+////////////////////
+// RELATIONS
+////////////////////
+
+// NOTIFICATIONS
+Ref: notification_preferences.user_id > users.id
+Ref: notification_preferences.notification_type_id > notification_types.id
+Ref: notifications.user_id > users.id
+Ref: notifications.notification_type_id > notification_types.id
+
+// AUTH
+Ref: users.role_id > roles.id
+Ref: role_permission.role_id > roles.id
+Ref: role_permission.permission_id > permissions.id
+
+// ENTITIES
+Ref: entity_zones.entity_id > entities.id
+Ref: km_indemnity_rates.entity_id > entities.id
+Ref: clients.entity_id > entities.id
+Ref: employees.entity_id > entities.id
+Ref: quote_types.entity_id > entities.id
+Ref: quotes.entity_id > entities.id
+Ref: billing_cycles.entity_id > entities.id
+Ref: invoices.entity_id > entities.id
+Ref: reglements.entity_id > entities.id
+Ref: message_threads.entity_id > entities.id
+
+// CLIENTS
+Ref: clients.owner_user_id > users.id
+Ref: client_companies.client_id > clients.id
+Ref: billing_contacts.client_id > clients.id
+Ref: client_contacts.client_id > clients.id
+Ref: related_contacts.client_id > clients.id
+Ref: client_absences.client_id > clients.id
+Ref: client_absences.reason_id > client_absence_reasons.id
+
+// EMPLOYEES
+Ref: employees.user_id > users.id
+Ref: contracts.employee_id > employees.id
+Ref: contracts.entity_id > entities.id
+Ref: contracts.medical_visit_address_id > addresses.id
+Ref: contract_blocked_slots.contract_id > contracts.id
+Ref: contract_surcharge_overrides.contract_id > contracts.id
+Ref: contract_surcharge_overrides.surcharge_rule_id > surcharge_rules.id
+Ref: employee_skills.employee_id > employees.id
+Ref: employee_skills.skill_id > skills.id
+Ref: client_employee_history.client_id > clients.id
+Ref: client_employee_history.employee_id > employees.id
+
+// ABSENCES (employee)
+Ref: employee_absences.employee_id > employees.id
+Ref: employee_absences.reason_id > absence_reasons.id
+
+// TRAININGS
+Ref: trainings.employee_id > employees.id
+
+// SALARY DEDUCTIONS
+Ref: salary_deductions.employee_id > employees.id
+Ref: salary_deductions.creditor_contact_id > creditor_contacts.id
+Ref: salary_deductions.bank_account_id > bank_accounts.id
+Ref: salary_deduction_debts.salary_deduction_id > salary_deductions.id
+Ref: deduction_payments.salary_deduction_id > salary_deductions.id
+
+// QUOTES
+Ref: quotes.client_id > clients.id
+Ref: quotes.quote_type_id > quote_types.id
+Ref: quotes.address_id > addresses.id
+Ref: quotes.owner_user_id > users.id
+Ref: quotes.pec_third_party_payer_id > third_party_payers.id
+Ref: quote_surcharge_rules.quote_id > quotes.id
+Ref: quote_surcharge_rules.surcharge_rule_id > surcharge_rules.id
+
+// PRODUCTS
+Ref: products.entity_id > entities.id
+Ref: products.category_id > product_categories.id
+Ref: products.vat_rate_id > vat_rates.id
+Ref: products.medical_visit_address_id > addresses.id
+Ref: product_price_tiers.product_id > products.id
+
+// MISSIONS & PRESTATIONS
+Ref: missions.client_id > clients.id
+Ref: missions.quote_id > quotes.id
+Ref: client_prestations.client_id > clients.id
+Ref: client_prestations.mission_id > missions.id
+Ref: client_prestations.product_id > products.id
+Ref: client_prestations.quote_id > quotes.id
+
+// PLANNING
+Ref: interventions.client_id > clients.id
+Ref: interventions.mission_id > missions.id
+Ref: interventions.client_prestation_id > client_prestations.id
+Ref: interventions.employee_id > employees.id
+Ref: interventions.replacement_employee_id > employees.id
+Ref: interventions.parent_id > interventions.id
+Ref: interventions.next_intervention_id > interventions.id
+Ref: interventions.adjustment_of_id > interventions.id
+
+// AVAILABILITIES
+// Fusionnées dans employee_absences — pas de table séparée
+
+// EMPLOYEE EVENTS
+Ref: employee_event_recurrences.employee_id > employees.id
+Ref: employee_event_recurrences.contract_id > contracts.id
+Ref: employee_event_recurrences.event_type_id > employee_event_types.id
+Ref: employee_event_recurrences.custom_address_id > addresses.id
+Ref: employee_events.employee_id > employees.id
+Ref: employee_events.contract_id > contracts.id
+Ref: employee_events.event_type_id > employee_event_types.id
+Ref: employee_events.custom_address_id > addresses.id
+
+// TELEMANAGEMENT LOGS
+Ref: telemanagement_logs.employee_id > employees.id
+Ref: telemanagement_logs.client_id > clients.id
+Ref: telemanagement_logs.intervention_id > interventions.id
+
+// QR CODES & CHECKINS
+Ref: qr_codes.address_id > addresses.id
+Ref: qr_codes.event_type_id > employee_event_types.id
+Ref: checkins.employee_id > employees.id
+Ref: checkins.intervention_id > interventions.id
+Ref: checkins.qr_code_id > qr_codes.id
+
+// ENTITY BANK & SEPA
+Ref: entity_bank_accounts.entity_id > entities.id
+Ref: entity_sepa_config.entity_id > entities.id
+Ref: sepa_mandates.client_id > clients.id
+Ref: sepa_mandates.entity_id > entities.id
+Ref: sepa_mandates.entity_bank_account_id > entity_bank_accounts.id
+Ref: sepa_mandates.debtor_bank_account_id > bank_accounts.id
+Ref: sepa_orders.entity_id > entities.id
+Ref: sepa_orders.entity_bank_account_id > entity_bank_accounts.id
+
+// INVOICES
+Ref: invoices.client_id > clients.id
+Ref: invoices.mission_id > missions.id
+Ref: invoices.third_party_payer_id > third_party_payers.id
+Ref: invoices.billing_cycle_id > billing_cycles.id
+Ref: invoices.intervention_address_id > addresses.id
+Ref: invoice_items.invoice_id > invoices.id
+Ref: invoice_items.client_prestation_id > client_prestations.id
+Ref: invoice_items.intervention_id > interventions.id
+
+// RÈGLEMENTS
+Ref: reglements.client_id > clients.id
+Ref: reglements.third_party_payer_id > third_party_payers.id
+Ref: reglements.employee_id > employees.id
+Ref: reglements.supplier_id > suppliers.id
+Ref: reglements.sepa_order_id > sepa_orders.id
+Ref: reglements.sepa_mandate_id > sepa_mandates.id
+Ref: reglements.entity_bank_account_id > entity_bank_accounts.id
+Ref: reglement_invoice_lines.reglement_id > reglements.id
+Ref: reglement_invoice_lines.invoice_id > invoices.id
+
+// MESSAGERIE
+Ref: message_threads.created_by > users.id
+Ref: message_thread_participants.thread_id > message_threads.id
+Ref: message_thread_participants.user_id > users.id
+Ref: messages.thread_id > message_threads.id
+Ref: messages.sender_id > users.id
+Ref: messages.checkin_id > checkins.id
+
+// RECURRENCE ASSIGNMENTS
+Ref: recurrence_assignments.recurrence_id > interventions.id
+Ref: recurrence_assignments.employee_id > employees.id
+
+// MATCHING REQUESTS
+Ref: matching_requests.recurrence_id > interventions.id
+Ref: matching_requests.intervention_id > interventions.id
+Ref: matching_requests.requested_by > users.id
+Ref: matching_requests.selected_employee_id > employees.id
+
+// CLIENT EVENT TYPES & EVENTS
+Ref: client_events.client_id > clients.id
+Ref: client_events.event_type_id > client_event_types.id
+Ref: client_events.contact_id > related_contacts.id
+Ref: client_events.custom_address_id > addresses.id
+Ref: client_event_recurrences.client_id > clients.id
+Ref: client_event_recurrences.event_type_id > client_event_types.id
+Ref: client_event_recurrences.contact_id > related_contacts.id
+Ref: client_event_recurrences.custom_address_id > addresses.id
+Ref: client_event_recurrences.next_recurrence_id > client_event_recurrences.id
+
+// INTERVENTION self-ref
+
+// CLIENT PORTAL
+Ref: client_requests.client_id > clients.id
+Ref: client_requests.assigned_to > users.id
+Ref: consumable_reorders.client_id > clients.id
+Ref: consumable_reorders.stock_product_id > stock_products.id
+Ref: electronic_signatures.document_id > documents.id
+Ref: quality_controls.client_id > clients.id
+Ref: quality_controls.controlled_by > users.id
+
+// STOCK
+Ref: stock_products.entity_id > entities.id
+Ref: stock_products.category_id > stock_categories.id
+Ref: stock_inventories.entity_id > entities.id
+Ref: stock_inventories.done_by > users.id
+Ref: stock_inventory_lines.inventory_id > stock_inventories.id
+Ref: stock_inventory_lines.stock_product_id > stock_products.id
+Ref: stock_movements.stock_product_id > stock_products.id
+Ref: stock_movements.done_by > users.id
+
+// KEYS
+Ref: keys.client_id > clients.id
+Ref: key_movements.key_id > keys.id
