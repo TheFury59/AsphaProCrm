@@ -55,28 +55,26 @@ export function PlanningPage() {
   const update = useUpdateIntervention();
   const del = useDeleteIntervention();
 
-  const events: EventInput[] = useMemo(() => (interventions.data ?? []).map((i: any) => {
-    if (i.is_recurring) {
-      // Pour MVP : afficher juste le premier RDV (date_start + start_time)
-      // (matérialisation complète des RRULE à venir)
-      const date = i.recurrence_start_date ?? new Date().toISOString().slice(0, 10);
-      const start = i.start_time ? `${date}T${i.start_time}` : date;
-      const end = i.end_time ? `${date}T${i.end_time}` : start;
-      return {
-        id: String(i.id),
-        title: `🔁 ${i.client?.code ?? "?"} ${i.employee?.name ? `· ${i.employee.name}` : ""}`,
-        start, end,
-        backgroundColor: "#8b5cf6",
-        extendedProps: { intervention: i },
-      };
-    }
+  // Events sont des occurrences expansées (1 event = 1 RDV concret, même pour les récurrentes)
+  const events: EventInput[] = useMemo(() => (interventions.data ?? []).map((ev) => {
+    const recurringPrefix = ev.is_recurring ? "🔁 " : "";
+    const employeeSuffix = ev.employee?.name ? ` · ${ev.employee.name}` : " · à pourvoir";
     return {
-      id: String(i.id),
-      title: `${i.client?.code ?? "?"} ${i.employee?.name ? `· ${i.employee.name}` : ""}`,
-      start: i.start_datetime,
-      end: i.end_datetime,
-      backgroundColor: i.status === "realisee" ? "#10b981" : i.status === "annulee" ? "#ef4444" : "#3b82f6",
-      extendedProps: { intervention: i },
+      id: ev.id,
+      title: `${recurringPrefix}${ev.client?.code ?? "?"}${employeeSuffix}`,
+      start: ev.start_datetime,
+      end: ev.end_datetime,
+      backgroundColor: ev.status === "realisee"
+        ? "#10b981"
+        : ev.status === "annulee"
+          ? "#ef4444"
+          : ev.is_recurring
+            ? "#8b5cf6"
+            : "#3b82f6",
+      borderColor: "transparent",
+      // Drag-drop seulement sur les ponctuelles (pas sur les occurrences virtuelles)
+      editable: !ev.is_occurrence,
+      extendedProps: { intervention: ev },
     };
   }), [interventions.data]);
 
@@ -85,10 +83,15 @@ export function PlanningPage() {
   };
 
   const handleEventDrop = (arg: EventDropArg | EventResizeDoneArg) => {
-    const id = Number(arg.event.id);
+    const ev = arg.event.extendedProps.intervention;
+    if (!ev || ev.is_occurrence) {
+      // Drag d'une occurrence virtuelle non supporté (créerait une exception)
+      arg.revert();
+      return;
+    }
     if (!arg.event.start || !arg.event.end) return;
     update.mutate({
-      id,
+      id: ev.intervention_id,
       patch: {
         start_datetime: arg.event.start.toISOString(),
         end_datetime: arg.event.end.toISOString(),
@@ -195,15 +198,18 @@ export function PlanningPage() {
                 {selected.employee && <Badge variant="outline">{selected.employee.name}</Badge>}
               </div>
               <div className="text-xs text-muted-foreground">
-                {selected.is_recurring
-                  ? `Récurrence à partir du ${selected.recurrence_start_date} · ${selected.frequency} · ${selected.start_time}-${selected.end_time}`
-                  : `${new Date(selected.start_datetime).toLocaleString("fr-FR")} → ${new Date(selected.end_datetime).toLocaleString("fr-FR")}`}
+                {new Date(selected.start_datetime).toLocaleString("fr-FR")} → {new Date(selected.end_datetime).toLocaleString("fr-FR")}
+                {selected.is_recurring && (
+                  <div className="mt-1">
+                    Série {selected.frequency} · jours : {selected.days_of_week ?? "—"}
+                  </div>
+                )}
               </div>
               {selected.comment && <p className="text-sm border-t pt-2">{selected.comment}</p>}
             </div>
             <DialogFooter>
-              <Button variant="destructive" size="sm" onClick={async () => { await del.mutateAsync(selected.id); setSelected(null); }}>
-                Supprimer
+              <Button variant="destructive" size="sm" onClick={async () => { await del.mutateAsync(selected.intervention_id); setSelected(null); }}>
+                {selected.is_occurrence ? "Supprimer toute la série" : "Supprimer"}
               </Button>
               <Button variant="outline" onClick={() => setSelected(null)}>Fermer</Button>
             </DialogFooter>

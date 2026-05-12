@@ -90,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('products', ProductController::class);
 
     // Phase 3 — Planning
+    Route::get('interventions/calendar', [InterventionController::class, 'calendar']);
     Route::apiResource('interventions', InterventionController::class);
 
     // Phase 3 — Ventes

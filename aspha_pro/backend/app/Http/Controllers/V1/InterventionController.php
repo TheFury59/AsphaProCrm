@@ -4,6 +4,8 @@ namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Intervention;
+use App\Services\InterventionExpander;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -49,6 +51,55 @@ class InterventionController extends Controller
             ->with(['employee:id,name', 'client:id,code']);
 
         return ['data' => $query->paginate($perPage)];
+    }
+
+    /**
+     * GET /api/v1/interventions/calendar?from=...&to=...&employee_id=...&client_id=...
+     *
+     * Feed FullCalendar : retourne les ponctuelles + les occurrences virtuelles
+     * des récurrentes dans la fenêtre demandée.
+     */
+    public function calendar(Request $request, InterventionExpander $expander)
+    {
+        abort_unless($request->user()?->can('planning.view'), 403);
+
+        $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after_or_equal:from'],
+            'employee_id' => ['nullable', 'integer'],
+            'client_id' => ['nullable', 'integer'],
+        ]);
+
+        $from = Carbon::parse($request->query('from'))->startOfDay();
+        $to = Carbon::parse($request->query('to'))->endOfDay();
+
+        $query = Intervention::query()
+            ->with(['employee:id,name', 'client:id,code'])
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('start_datetime', [$from, $to]);
+                $q->orWhere(function ($q2) use ($from, $to) {
+                    $q2->where('is_recurring', true)
+                       ->where(function ($q3) use ($to) {
+                           $q3->whereNull('recurrence_start_date')
+                              ->orWhere('recurrence_start_date', '<=', $to);
+                       })
+                       ->where(function ($q3) use ($from) {
+                           $q3->whereNull('recurrence_end_date')
+                              ->orWhere('recurrence_end_date', '>=', $from);
+                       });
+                });
+            });
+
+        if ($employeeId = $request->integer('employee_id')) {
+            $query->where('employee_id', $employeeId);
+        }
+        if ($clientId = $request->integer('client_id')) {
+            $query->where('client_id', $clientId);
+        }
+
+        $events = $expander->expandWindow($from, $to, $query->get());
+
+        return ['data' => $events->values()];
     }
 
     public function show(Request $request, Intervention $intervention)

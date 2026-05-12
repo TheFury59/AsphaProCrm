@@ -193,19 +193,44 @@ type InterventionParams = {
   client_id?: number;
 };
 
+/**
+ * Type d'un événement calendrier (occurrence virtuelle ou ponctuelle expansée).
+ * Différent d'Intervention (la ligne de BDD) : un Intervention récurrent
+ * génère N CalendarEvents virtuels.
+ */
+export type CalendarEvent = {
+  id: string;                    // "12-20260512" pour occurrence, "12" pour ponctuelle
+  intervention_id: number;
+  is_occurrence: boolean;
+  is_recurring: boolean;
+  occurrence_date: string;
+  start_datetime: string;
+  end_datetime: string;
+  status: string | null;
+  client?: { id: number; code: string } | null;
+  employee?: { id: number; name: string } | null;
+  comment: string | null;
+  frequency: string | null;
+  days_of_week: string | null;
+};
+
+/**
+ * Feed du calendrier — utilise /interventions/calendar qui retourne
+ * les ponctuelles + les occurrences virtuelles des récurrentes
+ * expansées dans la fenêtre [from, to].
+ */
 export function useInterventions(params: InterventionParams = {}) {
   return useQuery({
-    queryKey: ["interventions", params],
+    queryKey: ["interventions", "calendar", params],
+    enabled: !!params.from && !!params.to,
     queryFn: async () => {
       const qs = new URLSearchParams();
-      if (params.from) qs.set("filter[from]", params.from);
-      if (params.to) qs.set("filter[to]", params.to);
-      if (params.employee_id) qs.set("filter[employee_id]", String(params.employee_id));
-      if (params.client_id) qs.set("filter[client_id]", String(params.client_id));
-      qs.set("per_page", "200");
-      const res = await api.get<{ data: { data: Intervention[] } }>(`/interventions?${qs}`);
-      // Spatie pagination wrapping
-      return (res.data as any).data?.data ?? (res.data as any).data ?? [];
+      if (params.from) qs.set("from", params.from);
+      if (params.to) qs.set("to", params.to);
+      if (params.employee_id) qs.set("employee_id", String(params.employee_id));
+      if (params.client_id) qs.set("client_id", String(params.client_id));
+      const res = await api.get<{ data: CalendarEvent[] }>(`/interventions/calendar?${qs}`);
+      return res.data.data;
     },
     staleTime: 30_000,
   });
