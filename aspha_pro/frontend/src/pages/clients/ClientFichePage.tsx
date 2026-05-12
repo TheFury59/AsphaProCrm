@@ -5,14 +5,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, FileText, Key, Receipt, Users, Calendar, MessageSquare } from "lucide-react";
+import { Building2, FileText, Key, Receipt, Users, Calendar, MessageSquare, MapPin } from "lucide-react";
+import { ClientContactsTab } from "./tabs/ClientContactsTab";
+import { ClientAddressesTab } from "./tabs/ClientAddressesTab";
+import { ClientAbsencesTab } from "./tabs/ClientAbsencesTab";
+import { ClientKeysTab } from "./tabs/ClientKeysTab";
+import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 
 export function ClientFichePage() {
   const { id } = useParams();
   const clientId = id ? parseInt(id, 10) : null;
   const { data: c, isLoading } = useClient(clientId);
 
-  if (isLoading || !c) {
+  if (isLoading || !c || !clientId) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
@@ -37,13 +42,14 @@ export function ClientFichePage() {
       />
 
       <Tabs defaultValue="general">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="general"><Building2 className="h-3.5 w-3.5 mr-1.5" /> Général</TabsTrigger>
           <TabsTrigger value="contacts"><Users className="h-3.5 w-3.5 mr-1.5" /> Contacts</TabsTrigger>
-          <TabsTrigger value="missions"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Missions ({c.counts?.missions ?? 0})</TabsTrigger>
+          <TabsTrigger value="addresses"><MapPin className="h-3.5 w-3.5 mr-1.5" /> Adresses</TabsTrigger>
           <TabsTrigger value="absences"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Absences ({c.counts?.absences ?? 0})</TabsTrigger>
           <TabsTrigger value="keys"><Key className="h-3.5 w-3.5 mr-1.5" /> Clés ({c.counts?.keys ?? 0})</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="h-3.5 w-3.5 mr-1.5" /> Documents</TabsTrigger>
+          <TabsTrigger value="missions"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Missions ({c.counts?.missions ?? 0})</TabsTrigger>
           <TabsTrigger value="sales"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Devis & factures</TabsTrigger>
           <TabsTrigger value="requests"><MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Demandes</TabsTrigger>
         </TabsList>
@@ -92,87 +98,31 @@ export function ClientFichePage() {
                 </CardContent>
               </Card>
             )}
-
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Adresses</CardTitle>
-                <CardDescription>{c.addresses?.length ?? 0} adresse(s) enregistrée(s)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {c.addresses && c.addresses.length > 0 ? (
-                  <ul className="space-y-2 text-sm">
-                    {c.addresses.map((a) => (
-                      <li key={a.id} className="rounded border p-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="text-xs">{a.type}</Badge>
-                        </div>
-                        <div>{a.address}</div>
-                        <div className="text-muted-foreground">{a.postal_code} {a.city}</div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Aucune adresse renseignée.</p>
-                )}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="contacts" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Contacts</CardTitle>
-              <CardDescription>Téléphones, emails, contacts liés (famille, médecin, urgence)</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <h4 className="text-sm font-medium mb-2">Contacts entreprise ({c.contacts?.length ?? 0})</h4>
-                {c.contacts?.length ? (
-                  <ul className="space-y-1 text-sm">
-                    {c.contacts.map((ct) => (
-                      <li key={ct.id} className="flex items-center justify-between border-b py-1">
-                        <span>
-                          <Badge variant="outline" className="mr-2 text-xs">{ct.type}</Badge>
-                          {ct.value}
-                        </span>
-                        {ct.is_primary && <Badge>Prioritaire</Badge>}
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-muted-foreground">Aucun contact.</p>}
-              </div>
-              <div>
-                <h4 className="text-sm font-medium mb-2">Contacts liés ({c.related_contacts?.length ?? 0})</h4>
-                {c.related_contacts?.length ? (
-                  <ul className="space-y-1 text-sm">
-                    {c.related_contacts.map((rc) => (
-                      <li key={rc.id} className="flex items-center justify-between border-b py-1">
-                        <span>
-                          <Badge variant="outline" className="mr-2 text-xs">{rc.type}</Badge>
-                          {rc.name}
-                        </span>
-                        <span className="text-muted-foreground">{rc.phone}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="text-sm text-muted-foreground">Aucun contact lié.</p>}
-              </div>
-            </CardContent>
-          </Card>
+          <ClientContactsTab clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="addresses" className="mt-4">
+          <ClientAddressesTab clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="absences" className="mt-4">
+          <ClientAbsencesTab clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="keys" className="mt-4">
+          <ClientKeysTab clientId={clientId} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsTab ownerType="client" ownerId={clientId} />
         </TabsContent>
 
         <TabsContent value="missions" className="mt-4">
-          <PlaceholderTab title="Missions" phase="Phase 3" />
-        </TabsContent>
-        <TabsContent value="absences" className="mt-4">
-          <PlaceholderTab title="Absences client (ponctuelles + périodiques)" phase="Phase 2.5" />
-        </TabsContent>
-        <TabsContent value="keys" className="mt-4">
-          <PlaceholderTab title="Clés + historique mouvements" phase="Phase 2.5" />
-        </TabsContent>
-        <TabsContent value="documents" className="mt-4">
-          <PlaceholderTab title="Documents (upload, contrats signés, factures)" phase="Phase 2.5" />
+          <PlaceholderTab title="Missions & prestations" phase="Phase 3" />
         </TabsContent>
         <TabsContent value="sales" className="mt-4">
           <PlaceholderTab title="Devis & factures" phase="Phase 3" />

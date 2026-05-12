@@ -6,13 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { User, FileText, Award, Calendar, GraduationCap, Receipt, Wallet } from "lucide-react";
+import { EmployeeSkillsTab } from "./tabs/EmployeeSkillsTab";
+import { EmployeeAbsencesTab } from "./tabs/EmployeeAbsencesTab";
+import { EmployeeTrainingsTab } from "./tabs/EmployeeTrainingsTab";
+import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
   const employeeId = id ? parseInt(id, 10) : null;
   const { data: e, isLoading } = useEmployee(employeeId);
 
-  if (isLoading || !e) {
+  if (isLoading || !e || !employeeId) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
@@ -36,14 +40,14 @@ export function EmployeeFichePage() {
       />
 
       <Tabs defaultValue="general">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="general"><User className="h-3.5 w-3.5 mr-1.5" /> Général</TabsTrigger>
           <TabsTrigger value="contract"><FileText className="h-3.5 w-3.5 mr-1.5" /> Contrat</TabsTrigger>
           <TabsTrigger value="skills"><Award className="h-3.5 w-3.5 mr-1.5" /> Compétences ({e.skills?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="absences"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Absences ({e.counts?.absences ?? 0})</TabsTrigger>
           <TabsTrigger value="trainings"><GraduationCap className="h-3.5 w-3.5 mr-1.5" /> Formations ({e.counts?.trainings ?? 0})</TabsTrigger>
           <TabsTrigger value="planning"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Planning ({e.counts?.interventions ?? 0})</TabsTrigger>
-          <TabsTrigger value="payroll"><Wallet className="h-3.5 w-3.5 mr-1.5" /> Saisies salaire ({e.counts?.salary_deductions ?? 0})</TabsTrigger>
+          <TabsTrigger value="payroll"><Wallet className="h-3.5 w-3.5 mr-1.5" /> Saisies ({e.counts?.salary_deductions ?? 0})</TabsTrigger>
           <TabsTrigger value="documents"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Documents</TabsTrigger>
         </TabsList>
 
@@ -122,46 +126,36 @@ export function EmployeeFichePage() {
                   <Field label="Date d'entrée" value={e.current_contract.start_date} />
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">Aucun contrat actif. Crée-en un depuis cette fiche (à venir).</p>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Aucun contrat actif.</p>
+                  <Badge variant="secondary">CRUD contrat à venir — Sprint B</Badge>
+                </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="skills" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Compétences</CardTitle>
-              <CardDescription>Liste à enrichir par Pauline ultérieurement</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {e.skills?.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {e.skills.map((s) => (
-                    <Badge key={s.id} variant="outline">{s.label}</Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Aucune compétence sélectionnée.</p>
-              )}
-            </CardContent>
-          </Card>
+          <EmployeeSkillsTab employeeId={employeeId} currentSkillIds={(e.skills ?? []).map((s) => s.id)} />
         </TabsContent>
 
         <TabsContent value="absences" className="mt-4">
-          <PlaceholderTab title="Absences (ponctuelles + périodiques fusionnées)" phase="Phase 2.5" />
+          <EmployeeAbsencesTab employeeId={employeeId} />
         </TabsContent>
+
         <TabsContent value="trainings" className="mt-4">
-          <PlaceholderTab title="Formations (onboarding + ongoing)" phase="Phase 2.5" />
+          <EmployeeTrainingsTab employeeId={employeeId} />
         </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsTab ownerType="employee" ownerId={employeeId} />
+        </TabsContent>
+
         <TabsContent value="planning" className="mt-4">
           <PlaceholderTab title="Planning (interventions assignées)" phase="Phase 3" />
         </TabsContent>
         <TabsContent value="payroll" className="mt-4">
-          <PlaceholderTab title="Saisies sur salaire (créanciers, dettes, paiements)" phase="Phase 2.5" />
-        </TabsContent>
-        <TabsContent value="documents" className="mt-4">
-          <PlaceholderTab title="Documents (upload libre)" phase="Phase 2.5" />
+          <PlaceholderTab title="Saisies sur salaire" phase="Sprint B" />
         </TabsContent>
       </Tabs>
     </div>
