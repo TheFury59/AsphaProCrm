@@ -21,6 +21,8 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Sparkles } from "lucide-react";
+import { MatchingSuggestionsDialog } from "@/components/MatchingSuggestionsDialog";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -43,6 +45,7 @@ export function PlanningPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selected, setSelected] = useState<any>(null);
+  const [matchingOpen, setMatchingOpen] = useState(false);
 
   const { data: employeesData } = useEmployees({ per_page: 100 });
   const { data: clientsData } = useClients({ per_page: 100 });
@@ -230,7 +233,11 @@ export function PlanningPage() {
               </div>
               {selected.comment && <p className="text-sm border-t pt-2">{selected.comment}</p>}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-wrap gap-2">
+              <Button variant="default" size="sm" onClick={() => setMatchingOpen(true)}>
+                <Sparkles className="mr-2 h-3 w-3" />
+                Suggérer un intervenant
+              </Button>
               <Button variant="destructive" size="sm" onClick={async () => { await del.mutateAsync(selected.intervention_id); setSelected(null); }}>
                 {selected.is_occurrence ? "Supprimer toute la série" : "Supprimer"}
               </Button>
@@ -239,6 +246,13 @@ export function PlanningPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      <MatchingSuggestionsDialog
+        interventionId={selected?.intervention_id ?? null}
+        open={matchingOpen}
+        onClose={() => setMatchingOpen(false)}
+        onAssigned={() => { setSelected(null); interventions.refetch(); }}
+      />
     </div>
   );
 }

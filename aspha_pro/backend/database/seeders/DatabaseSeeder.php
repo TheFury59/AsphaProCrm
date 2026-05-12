@@ -15,6 +15,9 @@ class DatabaseSeeder extends Seeder
         // Étape 2 : catalogue (entité, TVA, raisons, compétences, barèmes, etc.)
         $this->call(CatalogSeeder::class);
 
+        // Étape 2bis : types de notifications applicatives
+        $this->call(NotificationTypesSeeder::class);
+
         // Étape 3 : super-admin par défaut
         $admin = User::firstOrCreate(
             ['email' => 'admin@aspha.local'],

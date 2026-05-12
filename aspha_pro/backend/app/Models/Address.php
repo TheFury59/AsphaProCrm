@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\GeocodingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -9,6 +10,38 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 class Address extends Model
 {
     public $timestamps = false;
+
+    /**
+     * Auto-géocodage à la sauvegarde si address/city/postal_code changent
+     * et que lat/lng ne sont pas explicitement fournis.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Address $addr) {
+            $needsGeocode = $addr->isDirty(['address', 'city', 'postal_code'])
+                && ! $addr->isDirty(['latitude', 'longitude']);
+
+            if (! $needsGeocode) {
+                return;
+            }
+            if (! $addr->address && ! $addr->city) {
+                return;
+            }
+
+            try {
+                $coords = app(GeocodingService::class)->geocode(
+                    $addr->address,
+                    $addr->postal_code,
+                    $addr->city,
+                );
+                if ($coords) {
+                    [$addr->latitude, $addr->longitude] = $coords;
+                }
+            } catch (\Throwable $e) {
+                // Géocodage best-effort, on n'empêche jamais la sauvegarde
+            }
+        });
+    }
 
     protected $fillable = [
         'owner_type',

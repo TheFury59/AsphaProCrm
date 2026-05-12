@@ -2,7 +2,7 @@
 
 CRM métier services à la personne — Aspha Pro. Construit sur la base du schéma DBML `crm_ximi_schema_final.dbml` et des modifications fonctionnelles validées avec la cliente.
 
-> **Statut** : **MVP étendu** — Phases 0 → 6 livrées + Carte + Notifications. Utilisable en démo cliente. Voir [plan-rebuild-aspha-pro.docx](../plan-rebuild-aspha-pro.docx) pour le détail.
+> **Statut** : **MVP complet** — Phases 0 → 10 livrées (toutes les phases du plan initial). Voir [INTEGRATIONS.md](./INTEGRATIONS.md) pour les étapes additionnelles avant production (APIs externes, app mobile, hardware).
 
 ## Stack
 
@@ -164,12 +164,42 @@ aspha_pro/
 - Polling 30s pour unread_count, 60s pour la liste
 - mark read / mark all read
 
-## 🚧 Reste à faire (post-MVP)
+### Phase 7 — Messagerie ✅
+- Threads (direct / group / telemanagement), participants avec last_read_at
+- Page chat 2 colonnes (liste + thread view) avec polling 10s
+- Compteur unread total + per-thread
 
-- **Phase 7** : Messagerie mobile-first
-- **Phase 8** : Notifications push/email/SMS multi-canal (jobs)
-- **Phase 9** : Gestion flotte véhicule
-- **Phase 10** : Matching auto intervenant (rêve cliente — skills + proximité + dispo)
+### Phase 8 — Notifications multi-canal ✅
+- `NotificationDispatcher` orchestre 3 canaux : push (FCM), email (Mail), SMS (Twilio / OVH / mock)
+- 3 jobs queue avec retry/backoff
+- 16 types de notifications seedés (planning, RH, stock, portail, ventes, télégestion, matching, messagerie)
+- Préférences user par type × canal (UI à finaliser)
+
+### Phase 9 — Flotte véhicule ✅
+- 4 tables : `vehicles`, `vehicle_assignments`, `vehicle_maintenances`, `vehicle_incidents`
+- Règle métier : 1 attribution active à la fois, auto-clôture sur nouvelle
+- Alertes : assurance < 30j, CT < 30j, sinistres ouverts
+- Page complète : liste + détail (4 onglets : Infos / Attributions / Entretiens / Sinistres)
+
+### Phase 10 — Matching auto intervenant ✅
+- `InterventionMatchingService` score composite [0..100] : skills (40) + proximité Haversine (30) + dispo (20) + préférence client (10)
+- Endpoint `GET /interventions/{id}/match` + table `matching_requests` (workflow assign/cancel)
+- Dialog "Suggérer un intervenant" dans le planning avec affectation 1-clic
+
+### Géocodage auto ✅
+- Service `GeocodingService` via BAN.gouv.fr (gratuit, sans clé)
+- Observer sur model `Address` : auto-géocode dès qu'une adresse change
+- Cache 30 jours pour économiser les requêtes
+
+## 🚧 Reste à faire (production)
+
+Voir [INTEGRATIONS.md](./INTEGRATIONS.md) pour le détail. En résumé :
+
+- **App mobile intervenant** (React Native) — pas encore développée, c'est l'élément le plus important
+- **Comptes externes** : Pennylane (clé réelle), Mailgun, Twilio, Firebase FCM, Yousign (signatures eIDAS)
+- **SEPA XML** (mandats + ordres)
+- **Hardware** : impression QR codes physiques pour les adresses
+- **Prod** : migration MariaDB, CORS strict, queue worker permanent, Sentry, backups
 
 ## Commandes utiles
 

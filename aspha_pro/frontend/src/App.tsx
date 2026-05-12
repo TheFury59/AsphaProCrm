@@ -20,6 +20,8 @@ import { ReglementsListPage } from "@/pages/sales/ReglementsListPage";
 import { StockPage } from "@/pages/stock/StockPage";
 import { TelegestionPage } from "@/pages/telegestion/TelegestionPage";
 import { PortailPage } from "@/pages/portail/PortailPage";
+import { MessagingPage } from "@/pages/messaging/MessagingPage";
+import { FleetPage } from "@/pages/fleet/FleetPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +54,8 @@ export default function App() {
               <Route path="/telegestion" element={<TelegestionPage />} />
               <Route path="/stock" element={<StockPage />} />
               <Route path="/portail-client" element={<PortailPage />} />
+              <Route path="/messagerie" element={<MessagingPage />} />
+              <Route path="/flotte" element={<FleetPage />} />
               <Route path="/devis" element={<QuotesListPage />} />
               <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/reglements" element={<ReglementsListPage />} />

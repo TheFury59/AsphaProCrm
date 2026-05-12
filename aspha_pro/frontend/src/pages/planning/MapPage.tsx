@@ -58,24 +58,27 @@ export function MapPage() {
     const pts: Array<{ lat: number; lng: number; type: "client" | "employee" | "intervention"; label: string; details?: string }> = [];
 
     // Clients : prendre la première adresse avec géo
-    clients.forEach((c) => {
-      const addr = c.addresses?.find((a) => a.lat && a.lng);
-      if (addr && addr.lat && addr.lng) {
+    clients.forEach((c: any) => {
+      const addrs = c.addresses ?? [];
+      const addr = addrs.find((a: any) => a.latitude && a.longitude);
+      if (addr) {
         pts.push({
-          lat: addr.lat, lng: addr.lng, type: "client",
-          label: c.company?.company_name ?? c.display_name,
-          details: `${addr.line1}, ${addr.postal_code} ${addr.city}`,
+          lat: addr.latitude, lng: addr.longitude, type: "client",
+          label: c.company?.company_name ?? c.display_name ?? c.code ?? `Client #${c.id}`,
+          details: `${addr.address ?? ""}, ${addr.postal_code ?? ""} ${addr.city ?? ""}`.trim(),
         });
       }
     });
 
-    // Intervenants : adresse perso geo
-    employees.forEach((e) => {
-      if (e.address?.lat && e.address?.lng) {
+    // Intervenants : adresse perso géocodée
+    employees.forEach((e: any) => {
+      const addrs = e.addresses ?? [];
+      const addr = addrs.find((a: any) => a.latitude && a.longitude);
+      if (addr) {
         pts.push({
-          lat: e.address.lat, lng: e.address.lng, type: "employee",
-          label: e.full_name,
-          details: `${e.address.line1 ?? ""}, ${e.address.postal_code ?? ""} ${e.address.city ?? ""}`.trim(),
+          lat: addr.latitude, lng: addr.longitude, type: "employee",
+          label: e.name ?? e.full_name ?? `Intervenant #${e.id}`,
+          details: `${addr.address ?? ""}, ${addr.postal_code ?? ""} ${addr.city ?? ""}`.trim(),
         });
       }
     });

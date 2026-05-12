@@ -14,6 +14,8 @@ import {
   QrCode,
   Boxes,
   LifeBuoy,
+  MessageSquare,
+  Car,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +53,8 @@ const NAV_GROUPS = [
       { to: "/telegestion", label: "Télégestion", icon: QrCode },
       { to: "/stock", label: "Stock", icon: Boxes },
       { to: "/portail-client", label: "Portail client", icon: LifeBuoy },
+      { to: "/messagerie", label: "Messagerie", icon: MessageSquare },
+      { to: "/flotte", label: "Flotte véhicule", icon: Car },
     ],
   },
   {

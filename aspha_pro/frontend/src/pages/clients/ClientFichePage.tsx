@@ -11,6 +11,7 @@ import { ClientContactsTab } from "./tabs/ClientContactsTab";
 import { ClientAddressesTab } from "./tabs/ClientAddressesTab";
 import { ClientAbsencesTab } from "./tabs/ClientAbsencesTab";
 import { ClientKeysTab } from "./tabs/ClientKeysTab";
+import { ClientPortalTab } from "./tabs/ClientPortalTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 
 export function ClientFichePage() {
@@ -22,6 +23,11 @@ export function ClientFichePage() {
   const updateCompany = async (field: string, value: string | null) => {
     if (!clientId) return;
     await updateClient.mutateAsync({ id: clientId, patch: { company: { [field]: value } as any } });
+  };
+
+  const updateBilling = async (field: string, value: string | null) => {
+    if (!clientId) return;
+    await updateClient.mutateAsync({ id: clientId, patch: { billing_contact: { [field]: value } as any } });
   };
 
   if (isLoading || !c || !clientId) {
@@ -99,9 +105,11 @@ export function ClientFichePage() {
                   <CardDescription>Destinataire des factures et relances</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <ReadOnlyRow label="Nom" value={`${c.billing_contact.civility ?? ""} ${c.billing_contact.first_name ?? ""} ${c.billing_contact.last_name ?? ""}`.trim()} />
-                  <ReadOnlyRow label="Email" value={c.billing_contact.email} />
-                  <ReadOnlyRow label="Téléphone" value={c.billing_contact.phone} />
+                  <EditableRow label="Civilité" value={c.billing_contact.civility} onSave={(v) => updateBilling("civility", v)} />
+                  <EditableRow label="Prénom" value={c.billing_contact.first_name} onSave={(v) => updateBilling("first_name", v)} />
+                  <EditableRow label="Nom" value={c.billing_contact.last_name} onSave={(v) => updateBilling("last_name", v)} />
+                  <EditableRow label="Email" value={c.billing_contact.email} type="email" onSave={(v) => updateBilling("email", v)} />
+                  <EditableRow label="Téléphone" value={c.billing_contact.phone} type="tel" onSave={(v) => updateBilling("phone", v)} />
                 </CardContent>
               </Card>
             )}
@@ -135,7 +143,7 @@ export function ClientFichePage() {
           <PlaceholderTab title="Devis & factures" phase="Phase 3" />
         </TabsContent>
         <TabsContent value="requests" className="mt-4">
-          <PlaceholderTab title="Réclamations & réassorts (portail client)" phase="Phase 5" />
+          <ClientPortalTab clientId={clientId} />
         </TabsContent>
       </Tabs>
     </div>

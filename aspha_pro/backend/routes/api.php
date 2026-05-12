@@ -8,8 +8,11 @@ use App\Http\Controllers\V1\ContractController;
 use App\Http\Controllers\V1\DocumentController;
 use App\Http\Controllers\V1\EmployeeController;
 use App\Http\Controllers\V1\EmployeeSubResourceController;
+use App\Http\Controllers\V1\FleetController;
 use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
+use App\Http\Controllers\V1\MatchingController;
+use App\Http\Controllers\V1\MessagingController;
 use App\Http\Controllers\V1\NotificationController;
 use App\Http\Controllers\V1\ProductController;
 use App\Http\Controllers\V1\QuoteController;
@@ -147,9 +150,46 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('alerts', 'alerts');
     });
 
+    // === Phase 10 — Matching auto intervenant ===
+    Route::get('interventions/{intervention}/match', [MatchingController::class, 'suggest']);
+    Route::prefix('matching-requests')->controller(MatchingController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::patch('{matchingRequest}/assign', 'assign');
+        Route::patch('{matchingRequest}/cancel', 'cancel');
+    });
+
+    // === Phase 9 — Flotte véhicule ===
+    Route::prefix('fleet')->controller(FleetController::class)->group(function () {
+        Route::get('vehicles', 'index');
+        Route::post('vehicles', 'store');
+        Route::get('vehicles/{vehicle}', 'show');
+        Route::patch('vehicles/{vehicle}', 'update');
+        Route::delete('vehicles/{vehicle}', 'destroy');
+        Route::post('vehicles/{vehicle}/assign', 'assign');
+        Route::post('vehicles/{vehicle}/unassign', 'unassign');
+        Route::get('vehicles/{vehicle}/maintenances', 'listMaintenances');
+        Route::post('vehicles/{vehicle}/maintenances', 'createMaintenance');
+        Route::get('vehicles/{vehicle}/incidents', 'listIncidents');
+        Route::post('vehicles/{vehicle}/incidents', 'createIncident');
+        Route::get('alerts', 'alerts');
+    });
+
+    // === Phase 7 — Messagerie ===
+    Route::prefix('messaging')->controller(MessagingController::class)->group(function () {
+        Route::get('threads', 'index');
+        Route::post('threads', 'store');
+        Route::get('threads/{thread}', 'show');
+        Route::post('threads/{thread}/messages', 'postMessage');
+        Route::post('threads/{thread}/read', 'markRead');
+        Route::get('unread-total', 'totalUnread');
+    });
+
     // === Notifications ===
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+    Route::get('notifications/preferences', [NotificationController::class, 'listPreferences']);
+    Route::patch('notifications/preferences/{typeId}', [NotificationController::class, 'updatePreference']);
 });

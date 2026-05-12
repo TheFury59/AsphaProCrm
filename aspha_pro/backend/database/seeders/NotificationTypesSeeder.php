@@ -1,0 +1,57 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\NotificationType;
+use Illuminate\Database\Seeder;
+
+/**
+ * Référentiel des types de notifications applicatives.
+ * Catalogue minimal pour le MVP — à enrichir au fil des modules.
+ */
+class NotificationTypesSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $types = [
+            // Planning
+            ['code' => 'intervention_assigned', 'label' => 'Intervention assignée', 'module' => 'planning', 'default_channels' => 'push,email'],
+            ['code' => 'intervention_modified', 'label' => 'Intervention modifiée', 'module' => 'planning', 'default_channels' => 'push'],
+            ['code' => 'intervention_cancelled', 'label' => 'Intervention annulée', 'module' => 'planning', 'default_channels' => 'push,email,sms'],
+            ['code' => 'replacement_requested', 'label' => 'Remplacement demandé', 'module' => 'planning', 'default_channels' => 'push,sms'],
+
+            // RH
+            ['code' => 'absence_created', 'label' => 'Absence enregistrée', 'module' => 'rh', 'default_channels' => 'push'],
+            ['code' => 'training_due', 'label' => 'Formation à renouveler', 'module' => 'rh', 'default_channels' => 'email'],
+
+            // Stock
+            ['code' => 'stock_alert', 'label' => 'Stock sous le seuil', 'module' => 'stock', 'default_channels' => 'push,email'],
+
+            // Portail
+            ['code' => 'client_request_new', 'label' => 'Nouvelle réclamation client', 'module' => 'portal', 'default_channels' => 'push,email'],
+            ['code' => 'client_reorder_new', 'label' => 'Nouveau réassort client', 'module' => 'portal', 'default_channels' => 'push'],
+            ['code' => 'signature_requested', 'label' => 'Signature demandée', 'module' => 'portal', 'default_channels' => 'email'],
+
+            // Télégestion
+            ['code' => 'checkin_late', 'label' => 'Retard de badgeage', 'module' => 'telemanagement', 'default_channels' => 'push'],
+            ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,sms'],
+
+            // Ventes
+            ['code' => 'invoice_paid', 'label' => 'Facture réglée', 'module' => 'sales', 'default_channels' => 'push'],
+            ['code' => 'invoice_overdue', 'label' => 'Facture en retard', 'module' => 'sales', 'default_channels' => 'email'],
+
+            // Messagerie
+            ['code' => 'new_message', 'label' => 'Nouveau message', 'module' => 'messaging', 'default_channels' => 'push'],
+
+            // Matching
+            ['code' => 'matching_proposal', 'label' => 'Proposition d\'affectation', 'module' => 'matching', 'default_channels' => 'push,email'],
+        ];
+
+        foreach ($types as $t) {
+            NotificationType::updateOrCreate(
+                ['code' => $t['code']],
+                $t + ['status' => 'active'],
+            );
+        }
+    }
+}

@@ -1,39 +1,48 @@
 # Aspha Pro — Todo
 
-## Phases livrées (✅)
+## Toutes les phases du plan initial sont livrées ✅
 
-- [x] **Phase 0** — Bootstrap Laravel 11 + Sanctum + Vite/React + Tailwind v4 + shadcn
-- [x] **Phase 1** — Schéma BDD (78 migrations, 76 modèles, soft deletes, audit log, polymorphes)
+- [x] **Phase 0** — Bootstrap (Laravel 11, Sanctum, Vite/React, Tailwind v4, shadcn)
+- [x] **Phase 1** — Schéma BDD (78+ migrations, 80+ modèles)
 - [x] **Phase 2** — Clients / Intervenants / Prestations
-- [x] **Phase 2.5 Sprint A** — Contacts, adresses polym., absences, clés, documents, compétences, formations
-- [x] **Phase 2.5 Sprint B** — Contrats intervenant + saisies sur salaire
-- [x] **Phase 3** — Planning (FullCalendar + drag-drop), récurrences matérialisées via `InterventionExpander`, Ventes (Devis/Factures/Règlements), Factur-X PDF/A-3, sync Pennylane (mock + réel)
-- [x] **Phase 4** — Télégestion : QR codes, badgeages, saisie manuelle admin
-- [x] **Phase 5** — Portail client : réclamations + réassorts + signatures + contrôles qualité
-- [x] **Phase 6** — Stock par entité : produits, mouvements, alertes seuil
-- [x] **Cartographie** Leaflet (clients/intervenants/interventions)
-- [x] **Notifications** : bell topbar + unread count + mark read
+- [x] **Phase 2.5 Sprint A** — Sous-modules fiches
+- [x] **Phase 2.5 Sprint B** — Contrats + saisies sur salaire
+- [x] **Phase 3** — Planning (FullCalendar + récurrences) + Ventes (Factur-X + Pennylane)
+- [x] **Phase 4** — Télégestion (QR + badgeages + saisie manuelle)
+- [x] **Phase 5** — Portail client (réclamations + réassorts + signatures + qualité)
+- [x] **Phase 6** — Stock par entité
+- [x] **Phase 7** — Messagerie interne
+- [x] **Phase 8** — Notifications multi-canal (push FCM + email + SMS)
+- [x] **Phase 9** — Flotte véhicule
+- [x] **Phase 10** — Matching auto intervenant (score composite skills+géo+dispo+préférence)
+- [x] **Cartographie** Leaflet
+- [x] **Géocodage auto** BAN.gouv.fr
+- [x] **Tab Portail intégré** dans fiche client
+- [x] **Édition inline généralisée** (Entreprise, Gérant, Identité, Diplômes, Contact facturation)
 
-## Reste à faire
+## Reste à faire — voir INTEGRATIONS.md
 
-- [ ] **Phase 7** — Messagerie mobile-first
-- [ ] **Phase 8** — Notifications multi-canal (jobs push/email/SMS)
-- [ ] **Phase 9** — Gestion flotte véhicule
-- [ ] **Phase 10** — Matching auto intervenant (skills + proximité + dispo)
-- [ ] Édition inline des champs principaux dans les fiches (au-delà des dialogs)
-- [ ] Génération SEPA (mandats + ordres XML)
-- [ ] Tests E2E Playwright
+Tout le travail "additionnel" qui n'est pas du code dans le repo :
+- **App mobile intervenant** (React Native) — non développée
+- **Comptes externes** à créer : Pennylane prod, Mailgun, Twilio, FCM Firebase, Yousign
+- **SEPA** : génération XML (mandats + ordres)
+- **Hardware** : impression QR codes physiques pour les adresses
+- **Prod** : MariaDB, CORS strict, queue worker, Sentry, backups, RGPD/DPA
+- **Tests E2E** : Playwright
 
-## Review (session 2026-05-12)
+## Review session 2026-05-12 — finale
 
-**Objectif** : enchaîner toutes les phases 4-6 + carte + drag-drop occurrences + notifications.
+**Volume** : 9 phases complètes en 2 sessions.
 
-**Livré** :
-- Drag-and-drop d'une occurrence virtuelle crée automatiquement une exception sur la série (UX clé)
-- 4 nouveaux controllers backend (TelemanagementController, ClientPortalController, StockController, NotificationController)
-- 4 nouvelles pages UI (Stock, Télégestion, Portail, Carte) avec dialogs CRUD complets
-- NotificationsBell dans le topbar avec polling
-- Sidebar étendue (groupe "Opérations" + Carte)
-- ~30 routes API ajoutées
+**Stack finale** :
+- ~157 routes V1
+- 80+ migrations, 85+ modèles Eloquent
+- 14+ pages frontend (clients, intervenants, planning, carte, stock, télégestion, portail, messagerie, flotte, devis, factures, règlements, prestations, dashboard)
+- 0 erreur TypeScript
+- Auto-géocodage BAN, matching composite, Factur-X EN16931, Pennylane sync, FCM/Twilio/Mail jobs
 
-**Métriques** : ~125 routes V1, 78 migrations, 76 modèles, frontend tsc clean.
+**Décisions structurantes** :
+- Notification : 3 jobs séparés (push/email/SMS) plutôt qu'un dispatcher en ligne → permet retry/backoff par canal
+- Matching : score composite hardcodé 40/30/20/10 → simple et expliquable, ajustable plus tard
+- Géocodage : observer sur le model Address → transparent pour toutes les sources (création, update, import)
+- Messagerie : participants comme model standard (pas Pivot Spatie/Eloquent) → besoin d'updater last_read_at indépendamment
