@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { LogOut, Search, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth";
@@ -14,6 +15,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { GlobalSearchDialog } from "@/components/GlobalSearchDialog";
 
 function initials(name: string) {
   return name
@@ -27,6 +29,19 @@ function initials(name: string) {
 export function AppTopbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Raccourci clavier ⌘K / Ctrl+K pour ouvrir la recherche
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -41,6 +56,7 @@ export function AppTopbar() {
       <div className="flex-1">
         <button
           type="button"
+          onClick={() => setSearchOpen(true)}
           className="inline-flex items-center gap-2 rounded-lg border bg-muted/40 hover:bg-muted px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-full max-w-md cursor-pointer group"
         >
           <Search className="h-4 w-4 group-hover:text-primary transition-colors" />
@@ -50,6 +66,8 @@ export function AppTopbar() {
           </kbd>
         </button>
       </div>
+
+      <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
       <NotificationsBell />
 
