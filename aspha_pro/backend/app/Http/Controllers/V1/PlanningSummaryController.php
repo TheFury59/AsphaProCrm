@@ -138,8 +138,8 @@ class PlanningSummaryController extends Controller
             ->get();
 
         $candidates = $employees->map(function (Employee $e) use ($start, $end, $clientAddr, $distanceService) {
-            // Check conflit sur le créneau
-            $hasConflict = Intervention::where('employee_id', $e->id)
+            // Récupère le ou les RDV qui chevauchent le créneau (avec détails pour l'UI)
+            $conflictingInterventions = Intervention::where('employee_id', $e->id)
                 ->where('is_exception', false)
                 ->where(function ($q) use ($start, $end) {
                     $q->whereBetween('start_datetime', [$start, $end])
@@ -149,7 +149,18 @@ class PlanningSummaryController extends Controller
                             ->where('end_datetime', '>=', $end);
                       });
                 })
-                ->exists();
+                ->with('client:id,code')
+                ->limit(3)  // max 3 pour l'affichage
+                ->get();
+
+            $hasConflict = $conflictingInterventions->isNotEmpty();
+            $conflicts = $conflictingInterventions->map(fn ($c) => [
+                'intervention_id' => $c->id,
+                'client_code' => $c->client?->code,
+                'start_time' => $c->start_datetime?->format('H:i'),
+                'end_time' => $c->end_datetime?->format('H:i'),
+                'status' => $c->status,
+            ])->values();
 
             // Distance au client
             $empAddr = $e->addresses->first();
@@ -167,8 +178,10 @@ class PlanningSummaryController extends Controller
                 'employee_lat' => $empAddr?->latitude,
                 'employee_lng' => $empAddr?->longitude,
                 'has_conflict' => $hasConflict,
+                'conflicts' => $conflicts,
                 'distance_km' => $dist['distance_km'] ?? null,
                 'duration_minutes' => $dist['duration_minutes'] ?? null,
+                'source' => $dist['source'] ?? null,
             ];
         })->sortBy([['has_conflict', 'asc'], ['distance_km', 'asc']])->values();
 

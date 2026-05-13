@@ -114,8 +114,16 @@ export type AvailableEmployee = {
   employee_lat: number | null;
   employee_lng: number | null;
   has_conflict: boolean;
+  conflicts: Array<{
+    intervention_id: number;
+    client_code: string | null;
+    start_time: string | null;
+    end_time: string | null;
+    status: string | null;
+  }>;
   distance_km: number | null;
   duration_minutes: number | null;
+  source: "gmaps" | "haversine" | null;
 };
 
 export function useAvailableEmployees(params: {

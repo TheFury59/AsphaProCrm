@@ -485,7 +485,6 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
   const isRecurring = mode === "recurrent";
   const isAbsence = mode === "absence";
   const isIndispo = mode === "indispo";
-  const [mapMode, setMapMode] = useState(false);
   const [form, setForm] = useState<any>({
     client_id: "",
     employee_id: "",
@@ -625,116 +624,193 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
     );
   }
 
+  // Étapes pour le wizard (mode ponctuel ou récurrent)
+  const step1Done = !!form.client_id;
+  const step2Done = isRecurring
+    ? !!form.recurrence_start_date && !!form.start_time && !!form.end_time
+    : !!form.start_datetime && !!form.end_datetime;
+  // Le picker map ne fonctionne que pour les ponctuelles (besoin de start/end datetime concrets)
+  const showMapPicker = !isRecurring && step1Done && step2Done;
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className={mapMode ? "sm:max-w-4xl" : "sm:max-w-md"}>
+      <DialogContent className={showMapPicker ? "sm:max-w-[1100px] max-h-[90vh] overflow-y-auto" : "sm:max-w-md"}>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="text-xl">{title}</DialogTitle>
         </DialogHeader>
 
-        {mapMode && form.client_id && form.start_datetime && form.end_datetime ? (
-          <>
-            <AvailableEmployeesMap
-              startDatetime={form.start_datetime}
-              endDatetime={form.end_datetime}
-              clientId={parseInt(form.client_id, 10)}
-              onAssign={(empId) => {
-                setForm((f: any) => ({ ...f, employee_id: String(empId) }));
-                setMapMode(false);
-              }}
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setMapMode(false)}>
-                Retour au formulaire
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-        <form onSubmit={submit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Client *</Label>
-            <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9" required>
-              <option value="">— Choisir —</option>
-              {clients.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
-            </select>
-          </div>
+        <form onSubmit={submit}>
+          <div className={showMapPicker ? "grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5" : ""}>
+            {/* === COLONNE GAUCHE : formulaire avec étapes === */}
+            <div className="space-y-4">
+              {/* ÉTAPE 1 : Client */}
+              <WizardStep n={1} title="Client" done={step1Done}>
+                <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-10 cursor-pointer hover:border-primary/40 transition-colors" required>
+                  <option value="">— Choisir un client —</option>
+                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
+                </select>
+              </WizardStep>
 
-          <div className="space-y-1.5">
-            <Label className="flex items-center justify-between">
-              <span>Intervenant (optionnel)</span>
-              {form.client_id && form.start_datetime && form.end_datetime && !isRecurring && (
-                <button type="button" onClick={() => setMapMode(true)}
-                  className="text-[10px] text-primary hover:underline inline-flex items-center gap-1">
-                  <MapIcon className="h-3 w-3" />
-                  Voir sur la carte
-                </button>
-              )}
-            </Label>
-            <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9">
-              <option value="">À pourvoir</option>
-              {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
-            </select>
-          </div>
+              {/* ÉTAPE 2 : Horaires */}
+              <WizardStep n={2} title="Date et horaires" done={step2Done} disabled={!step1Done}>
+                {!isRecurring ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Début</Label>
+                      <Input type="datetime-local" value={form.start_datetime} onChange={(e) => setForm((f: any) => ({ ...f, start_datetime: e.target.value }))} required disabled={!step1Done} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fin</Label>
+                      <Input type="datetime-local" value={form.end_datetime} onChange={(e) => setForm((f: any) => ({ ...f, end_datetime: e.target.value }))} required disabled={!step1Done} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Date début</Label>
+                        <Input type="date" value={form.recurrence_start_date} onChange={(e) => setForm((f: any) => ({ ...f, recurrence_start_date: e.target.value }))} required />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fréquence</Label>
+                        <select value={form.frequency} onChange={(e) => setForm((f: any) => ({ ...f, frequency: e.target.value }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
+                          <option value="daily">Quotidienne</option>
+                          <option value="weekly">Hebdomadaire</option>
+                          <option value="monthly">Mensuelle</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Heure début</Label>
+                        <Input type="time" value={form.start_time} onChange={(e) => setForm((f: any) => ({ ...f, start_time: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Heure fin</Label>
+                        <Input type="time" value={form.end_time} onChange={(e) => setForm((f: any) => ({ ...f, end_time: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Jours (mon,tue,wed,thu,fri,sat,sun)</Label>
+                      <Input value={form.days_of_week} onChange={(e) => setForm((f: any) => ({ ...f, days_of_week: e.target.value }))} placeholder="mon,wed,fri" />
+                    </div>
+                  </div>
+                )}
+              </WizardStep>
 
-          {!isRecurring ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Début</Label>
-                <Input type="datetime-local" value={form.start_datetime} onChange={(e) => setForm((f: any) => ({ ...f, start_datetime: e.target.value }))} required />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fin</Label>
-                <Input type="datetime-local" value={form.end_datetime} onChange={(e) => setForm((f: any) => ({ ...f, end_datetime: e.target.value }))} required />
+              {/* ÉTAPE 3 : Intervenant — verrouillé tant que 1+2 pas faits */}
+              <WizardStep n={3} title="Intervenant" done={!!form.employee_id} disabled={!step1Done || !step2Done}>
+                {!step1Done || !step2Done ? (
+                  <div className="text-xs italic text-muted-foreground bg-muted/40 rounded-md p-3 flex items-center gap-2">
+                    <MapIcon className="h-3.5 w-3.5" />
+                    Sélectionne le client et les horaires pour voir les intervenants disponibles à proximité.
+                  </div>
+                ) : isRecurring ? (
+                  <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
+                    <option value="">À pourvoir</option>
+                    {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
+                  </select>
+                ) : (
+                  <div className="space-y-2">
+                    {form.employee_id ? (
+                      <div className="rounded-lg border bg-primary/5 border-primary/30 px-3 py-2 flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium">
+                          {employees.find((e: any) => String(e.id) === form.employee_id)?.full_name ?? "Sélectionné"}
+                        </div>
+                        <button type="button" onClick={() => setForm((f: any) => ({ ...f, employee_id: "" }))}
+                          className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer">
+                          Changer
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2.5 flex items-center gap-2">
+                        <MapIcon className="h-3.5 w-3.5 text-primary" />
+                        Choisis un intervenant dans la carte à droite →
+                      </div>
+                    )}
+                  </div>
+                )}
+              </WizardStep>
+
+              {/* Champ commentaire commun */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Commentaire</Label>
+                <Input value={form.comment} onChange={(e) => setForm((f: any) => ({ ...f, comment: e.target.value }))} placeholder="Notes administratives…" />
               </div>
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Date début</Label>
-                  <Input type="date" value={form.recurrence_start_date} onChange={(e) => setForm((f: any) => ({ ...f, recurrence_start_date: e.target.value }))} required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Fréquence</Label>
-                  <select value={form.frequency} onChange={(e) => setForm((f: any) => ({ ...f, frequency: e.target.value }))}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9">
-                    <option value="daily">Quotidienne</option>
-                    <option value="weekly">Hebdomadaire</option>
-                    <option value="monthly">Mensuelle</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Heure début</Label>
-                  <Input type="time" value={form.start_time} onChange={(e) => setForm((f: any) => ({ ...f, start_time: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Heure fin</Label>
-                  <Input type="time" value={form.end_time} onChange={(e) => setForm((f: any) => ({ ...f, end_time: e.target.value }))} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Jours (mon,tue,wed,thu,fri,sat,sun)</Label>
-                <Input value={form.days_of_week} onChange={(e) => setForm((f: any) => ({ ...f, days_of_week: e.target.value }))} placeholder="mon,wed,fri" />
-              </div>
-            </>
-          )}
 
-          <div className="space-y-1.5">
-            <Label>Commentaire</Label>
-            <Input value={form.comment} onChange={(e) => setForm((f: any) => ({ ...f, comment: e.target.value }))} />
+            {/* === COLONNE DROITE : map dispo intervenants === */}
+            {showMapPicker && (
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                    Choisir l'intervenant sur la carte
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Cercle vert = zone de recherche
+                  </div>
+                </div>
+                <AvailableEmployeesMap
+                  startDatetime={form.start_datetime}
+                  endDatetime={form.end_datetime}
+                  clientId={parseInt(form.client_id, 10)}
+                  onAssign={(empId) => {
+                    setForm((f: any) => ({ ...f, employee_id: String(empId) }));
+                  }}
+                />
+              </div>
+            )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-5 pt-4 border-t">
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-            <Button type="submit" disabled={create.isPending}>Créer</Button>
+            <Button
+              type="submit"
+              disabled={create.isPending || !step1Done || !step2Done}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+            >
+              {create.isPending ? "Création…" : "Créer l'intervention"}
+            </Button>
           </DialogFooter>
         </form>
-        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Étape du wizard : numéro dans rond + titre + état (done/disabled/active).
+ */
+function WizardStep({
+  n, title, done, disabled, children,
+}: {
+  n: number;
+  title: string;
+  done: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const state = disabled ? "disabled" : done ? "done" : "active";
+  const styles = {
+    done: { ring: "ring-primary/30", bg: "bg-primary text-primary-foreground", text: "text-foreground" },
+    active: { ring: "ring-primary/50", bg: "bg-gradient-aspha text-white", text: "text-foreground" },
+    disabled: { ring: "ring-border", bg: "bg-muted text-muted-foreground", text: "text-muted-foreground" },
+  }[state];
+
+  return (
+    <div className={`rounded-xl bg-card ring-1 ${styles.ring} p-3 transition-colors`}>
+      <div className="flex items-start gap-3 mb-2.5">
+        <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold shrink-0 ${styles.bg}`}>
+          {done && !disabled ? "✓" : n}
+        </div>
+        <div className={`text-sm font-medium pt-0.5 ${styles.text}`}>{title}</div>
+      </div>
+      <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
+        {children}
+      </div>
+    </div>
   );
 }
