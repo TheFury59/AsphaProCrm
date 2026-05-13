@@ -16,6 +16,7 @@ import {
   LifeBuoy,
   MessageSquare,
   Car,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +70,7 @@ const NAV_GROUPS = [
     label: "Administration",
     items: [
       { to: "/parametres", label: "Paramètres", icon: Settings },
+      { to: "/aide", label: "Aide", icon: HelpCircle },
     ],
   },
 ];

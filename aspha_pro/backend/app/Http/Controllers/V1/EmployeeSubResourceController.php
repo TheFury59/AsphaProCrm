@@ -80,6 +80,17 @@ class EmployeeSubResourceController extends Controller
     {
         $this->authorizeEdit($request);
         $data = $this->validateAbsence($request);
+
+        // Quick-add depuis le planning : motif libre → fusionne dans le commentaire
+        if (! empty($data['reason']) && empty($data['comment'])) {
+            $data['comment'] = $data['reason'];
+        }
+        unset($data['reason']);
+
+        // Defaults pragmatiques pour le quick-add
+        $data['entry_type'] = $data['entry_type'] ?? 'absence';
+        $data['is_full_day'] = $data['is_full_day'] ?? true;
+
         $absence = $employee->absences()->create($data);
         $absence->load('reason');
         return response()->json(['data' => $absence], 201);
@@ -105,8 +116,12 @@ class EmployeeSubResourceController extends Controller
     {
         $req = $partial ? 'sometimes' : 'required';
         return $request->validate([
-            'reason_id' => ["$req", 'exists:absence_reasons,id'],
-            'entry_type' => ["$req", 'in:absence,availability,unavailability,weekly_rest'],
+            // reason_id nullable pour permettre la création rapide depuis le clic droit planning
+            // (le motif libre va dans `comment`)
+            'reason_id' => ['nullable', 'exists:absence_reasons,id'],
+            'entry_type' => ['nullable', 'in:absence,availability,unavailability,weekly_rest'],
+            // Champ libre accepté en lieu et place de reason_id depuis quick-add
+            'reason' => ['nullable', 'string', 'max:255'],
             'is_hourly' => ['nullable', 'boolean'],
             'planning_action' => ['nullable', 'in:none,flag,reassign'],
             'justification_status' => ['nullable', 'in:pending,justified,unjustified'],

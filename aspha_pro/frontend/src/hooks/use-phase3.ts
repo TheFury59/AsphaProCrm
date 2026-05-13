@@ -236,6 +236,11 @@ export type CalendarEvent = {
     pricing_type: string | null;
     default_duration_minutes: number | null;
   } | null;
+  checkin?: {
+    id: number;
+    checkin_time: string | null;
+    checkout_time: string | null;
+  } | null;
 };
 
 /**

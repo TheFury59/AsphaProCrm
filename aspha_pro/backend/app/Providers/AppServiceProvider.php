@@ -7,8 +7,12 @@ use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Entity;
+use App\Models\Intervention;
 use App\Models\Invoice;
 use App\Models\Quote;
+use App\Models\StockProduct;
+use App\Observers\InterventionObserver;
+use App\Observers\StockProductObserver;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
 
@@ -37,5 +41,9 @@ class AppServiceProvider extends ServiceProvider
             'invoice' => Invoice::class,
             'quote' => Quote::class,
         ]);
+
+        // Observers pour déclencher les notifications applicatives
+        Intervention::observe(InterventionObserver::class);
+        StockProduct::observe(StockProductObserver::class);
     }
 }

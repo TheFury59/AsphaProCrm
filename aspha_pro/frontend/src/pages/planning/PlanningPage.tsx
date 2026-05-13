@@ -21,9 +21,14 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Map as MapIcon } from "lucide-react";
 import { MatchingSuggestionsDialog } from "@/components/MatchingSuggestionsDialog";
 import { EventTooltip } from "./EventTooltip";
+import { LongAbsenceBanner } from "./LongAbsenceBanner";
+import { ContractSummaryPanel } from "./ContractSummaryPanel";
+import { ContextMenuPlanning } from "./ContextMenuPlanning";
+import { TripSummaryPanel } from "./TripSummaryPanel";
+import { AvailableEmployeesMap } from "./AvailableEmployeesMap";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -79,6 +84,10 @@ export function PlanningPage() {
   const [matchingOpen, setMatchingOpen] = useState(false);
   // État pour le tooltip hover sur les events
   const [hover, setHover] = useState<{ ev: any; x: number; y: number } | null>(null);
+  // Menu contextuel clic droit
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; date: Date } | null>(null);
+  // Mode création pré-rempli (ponctuel / récurrent / absence / indisponibilité)
+  const [createMode, setCreateMode] = useState<"ponctuel" | "recurrent" | "absence" | "indispo">("ponctuel");
 
   const { data: employeesData } = useEmployees({ per_page: 100 });
   const { data: clientsData } = useClients({ per_page: 100 });
@@ -183,8 +192,35 @@ export function PlanningPage() {
 
   const handleSelect = (arg: DateSelectArg) => {
     setSelectedDate(arg.start);
+    setCreateMode("ponctuel");
     setCreateOpen(true);
     arg.view.calendar.unselect();
+  };
+
+  // Clic droit : on intercepte au niveau de la grille (event delegation sur le calendar wrapper)
+  // FullCalendar n'a pas de hook dédié context menu, donc on fait au DOM.
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    // Récupère le slot ciblé via data-time / data-date des attributs FullCalendar
+    const target = e.target as HTMLElement;
+    const slot = target.closest("[data-time], [data-date]") as HTMLElement | null;
+    let clickDate = new Date();
+    if (slot) {
+      const dateAttr = slot.getAttribute("data-date");
+      const timeAttr = slot.getAttribute("data-time");
+      if (dateAttr) clickDate = new Date(dateAttr + (timeAttr ? `T${timeAttr}` : "T09:00:00"));
+    } else {
+      // Fallback : on prend la date courante de la fenêtre
+      clickDate = new Date();
+    }
+    setCtxMenu({ x: e.clientX, y: e.clientY, date: clickDate });
+  };
+
+  const handleCtxAction = (mode: "ponctuel" | "recurrent" | "absence" | "indispo") => {
+    if (!ctxMenu) return;
+    setSelectedDate(ctxMenu.date);
+    setCreateMode(mode);
+    setCreateOpen(true);
   };
 
   return (
@@ -193,7 +229,7 @@ export function PlanningPage() {
         title="Planning"
         description="Interventions ponctuelles et récurrentes — drag-and-drop pour déplacer"
         actions={
-          <Button onClick={() => { setSelectedDate(undefined); setCreateOpen(true); }}>
+          <Button onClick={() => { setSelectedDate(undefined); setCreateMode("ponctuel"); setCreateOpen(true); }}>
             Nouvelle intervention
           </Button>
         }
@@ -217,9 +253,16 @@ export function PlanningPage() {
             {clients.map((c) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
           </select>
         </div>
+        <div className="ml-auto text-xs text-muted-foreground">
+          Clic droit sur le calendrier pour créer rapidement
+        </div>
       </div>
 
-      <div className="rounded-md border bg-card p-3">
+      {/* Bandeau absences longue durée */}
+      <LongAbsenceBanner from={window.from} to={window.to} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3">
+      <div className="rounded-md border bg-card p-3" onContextMenu={handleContextMenu}>
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView="timeGridWeek"
@@ -257,6 +300,21 @@ export function PlanningPage() {
             const iv = arg.event.extendedProps.intervention;
             const start = new Date(iv.start_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
             const end = new Date(iv.end_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+            // Affichage badge "✓ Pointé" si checkin présent
+            let badgeNode: React.ReactNode = null;
+            if (iv.checkin?.checkin_time) {
+              const badged = new Date(iv.checkin.checkin_time);
+              const planned = new Date(iv.start_datetime);
+              const lateMin = Math.round((badged.getTime() - planned.getTime()) / 60000);
+              const lateOK = lateMin <= 5;
+              const badgeTime = badged.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+              badgeNode = (
+                <div className={`text-[9px] mt-0.5 font-medium ${lateOK ? "text-emerald-200" : "text-orange-200"}`}>
+                  ✓ Pointé {badgeTime}
+                  {lateMin > 0 && ` (+${lateMin} min)`}
+                </div>
+              );
+            }
             return (
               <div className="leading-tight overflow-hidden text-[11px] px-0.5 py-px">
                 <div className="flex items-center gap-1 font-semibold">
@@ -269,20 +327,48 @@ export function PlanningPage() {
                   {iv.employee?.name ?? "À pourvoir"}
                 </div>
                 <div className="opacity-75 text-[10px]">{start}–{end}</div>
+                {badgeNode}
               </div>
             );
           }}
         />
       </div>
 
+      {/* Panneau latéral : suivi contrats + trajets */}
+      <div className="space-y-3">
+        <ContractSummaryPanel
+          from={window.from}
+          to={window.to}
+          employeeFilter={employeeFilter}
+        />
+        <TripSummaryPanel
+          from={window.from}
+          to={window.to}
+          employeeFilter={employeeFilter}
+        />
+      </div>
+      </div>
+
       {/* Création */}
       <CreateInterventionDialog
         open={createOpen}
         defaultDate={selectedDate}
+        mode={createMode}
         onClose={() => setCreateOpen(false)}
         clients={clients}
         employees={employees}
       />
+
+      {/* Menu contextuel clic droit */}
+      {ctxMenu && (
+        <ContextMenuPlanning
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          date={ctxMenu.date}
+          onAction={handleCtxAction}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
 
       {/* Détail RDV sélectionné */}
       {selected && (
@@ -340,9 +426,10 @@ export function PlanningPage() {
   );
 }
 
-function CreateInterventionDialog({ open, defaultDate, onClose, clients, employees }: {
+function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, employees }: {
   open: boolean;
   defaultDate?: Date;
+  mode: "ponctuel" | "recurrent" | "absence" | "indispo";
   onClose: () => void;
   clients: any[];
   employees: any[];
@@ -350,7 +437,10 @@ function CreateInterventionDialog({ open, defaultDate, onClose, clients, employe
   const create = useCreateIntervention();
   const initialDate = (defaultDate ?? new Date()).toISOString().slice(0, 10);
   const initialTime = (defaultDate ?? new Date()).toTimeString().slice(0, 5);
-  const [isRecurring, setIsRecurring] = useState(false);
+  const isRecurring = mode === "recurrent";
+  const isAbsence = mode === "absence";
+  const isIndispo = mode === "indispo";
+  const [mapMode, setMapMode] = useState(false);
   const [form, setForm] = useState<any>({
     client_id: "",
     employee_id: "",
@@ -363,10 +453,48 @@ function CreateInterventionDialog({ open, defaultDate, onClose, clients, employe
     frequency: "weekly",
     days_of_week: "mon",
     comment: "",
+    // Absence/Indispo
+    absence_start_date: initialDate,
+    absence_end_date: initialDate,
+    absence_reason: "",
   });
+
+  // Reset le form quand le mode change (pour qu'on parte sur du frais)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // → on garde simple : le user clique soit "ponctuel" soit "recurrent" et ça refait un render
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isAbsence) {
+      if (!form.employee_id) { toast.error("Choisis un intervenant"); return; }
+      // POST /employees/{id}/absences
+      const { api } = await import("@/lib/api");
+      await api.post(`/employees/${form.employee_id}/absences`, {
+        start_date: form.absence_start_date,
+        end_date: form.absence_end_date,
+        reason: form.absence_reason || null,
+        comment: form.comment || null,
+      });
+      toast.success("Absence enregistrée");
+      onClose();
+      return;
+    }
+
+    if (isIndispo) {
+      if (!form.client_id) { toast.error("Choisis un client"); return; }
+      const { api } = await import("@/lib/api");
+      await api.post(`/clients/${form.client_id}/absences`, {
+        start_date: form.absence_start_date,
+        end_date: form.absence_end_date,
+        reason: form.absence_reason || null,
+        comment: form.comment || null,
+      });
+      toast.success("Indisponibilité client enregistrée");
+      onClose();
+      return;
+    }
+
     const payload: any = {
       client_id: parseInt(form.client_id, 10),
       employee_id: form.employee_id ? parseInt(form.employee_id, 10) : null,
@@ -392,22 +520,92 @@ function CreateInterventionDialog({ open, defaultDate, onClose, clients, employe
     onClose();
   };
 
+  const title = isAbsence ? "Nouvelle absence intervenant"
+    : isIndispo ? "Nouvelle indisponibilité client"
+    : isRecurring ? "Nouvelle intervention récurrente"
+    : "Nouvelle intervention ponctuelle";
+
+  // Cas absence/indispo : formulaire simplifié
+  if (isAbsence || isIndispo) {
+    return (
+      <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+          <form onSubmit={submit} className="space-y-3">
+            {isAbsence && (
+              <div className="space-y-1.5">
+                <Label>Intervenant *</Label>
+                <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9" required>
+                  <option value="">— Choisir —</option>
+                  {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
+                </select>
+              </div>
+            )}
+            {isIndispo && (
+              <div className="space-y-1.5">
+                <Label>Client *</Label>
+                <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9" required>
+                  <option value="">— Choisir —</option>
+                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Du *</Label>
+                <Input type="date" value={form.absence_start_date} onChange={(e) => setForm((f: any) => ({ ...f, absence_start_date: e.target.value }))} required />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Au *</Label>
+                <Input type="date" value={form.absence_end_date} onChange={(e) => setForm((f: any) => ({ ...f, absence_end_date: e.target.value }))} required />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Motif</Label>
+              <Input value={form.absence_reason} onChange={(e) => setForm((f: any) => ({ ...f, absence_reason: e.target.value }))} placeholder={isAbsence ? "Congés, maladie, formation…" : "Vacances client, hospitalisation…"} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Commentaire</Label>
+              <Input value={form.comment} onChange={(e) => setForm((f: any) => ({ ...f, comment: e.target.value }))} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
+              <Button type="submit">Enregistrer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Nouvelle intervention</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="space-y-3">
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setIsRecurring(false)}
-              className={`flex-1 rounded border px-3 py-1.5 text-sm ${!isRecurring ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent"}`}>
-              Ponctuelle
-            </button>
-            <button type="button" onClick={() => setIsRecurring(true)}
-              className={`flex-1 rounded border px-3 py-1.5 text-sm ${isRecurring ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent"}`}>
-              Récurrente
-            </button>
-          </div>
+      <DialogContent className={mapMode ? "sm:max-w-4xl" : "sm:max-w-md"}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
 
+        {mapMode && form.client_id && form.start_datetime && form.end_datetime ? (
+          <>
+            <AvailableEmployeesMap
+              startDatetime={form.start_datetime}
+              endDatetime={form.end_datetime}
+              clientId={parseInt(form.client_id, 10)}
+              onAssign={(empId) => {
+                setForm((f: any) => ({ ...f, employee_id: String(empId) }));
+                setMapMode(false);
+              }}
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setMapMode(false)}>
+                Retour au formulaire
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+        <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1.5">
             <Label>Client *</Label>
             <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
@@ -418,9 +616,18 @@ function CreateInterventionDialog({ open, defaultDate, onClose, clients, employe
           </div>
 
           <div className="space-y-1.5">
-            <Label>Intervenant (optionnel)</Label>
+            <Label className="flex items-center justify-between">
+              <span>Intervenant (optionnel)</span>
+              {form.client_id && form.start_datetime && form.end_datetime && !isRecurring && (
+                <button type="button" onClick={() => setMapMode(true)}
+                  className="text-[10px] text-primary hover:underline inline-flex items-center gap-1">
+                  <MapIcon className="h-3 w-3" />
+                  Voir sur la carte
+                </button>
+              )}
+            </Label>
             <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9">
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9"
               <option value="">À pourvoir</option>
               {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
             </select>
@@ -481,6 +688,7 @@ function CreateInterventionDialog({ open, defaultDate, onClose, clients, employe
             <Button type="submit" disabled={create.isPending}>Créer</Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

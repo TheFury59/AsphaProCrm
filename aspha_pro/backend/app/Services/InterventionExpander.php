@@ -69,6 +69,7 @@ class InterventionExpander
                     'client.addresses',
                     'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
                     'clientPrestation.product:id,name,price,default_duration_minutes',
+                    'checkins:id,intervention_id,checkin_time,checkout_time',
                 ])
                 ->where(function ($q) use ($from, $to) {
                     // Ponctuelles ET exceptions dans la fenêtre
@@ -274,8 +275,27 @@ class InterventionExpander
                     'address' => $mainAddr->address,
                     'postal_code' => $mainAddr->postal_code,
                     'city' => $mainAddr->city,
+                    'latitude' => $mainAddr->latitude,
+                    'longitude' => $mainAddr->longitude,
                 ] : null,
             ];
+        }
+
+        // Checkin du jour (pour affichage "✓ Pointé 09:02")
+        // On prend le checkin dont la date du checkin_time correspond au start de l'occurrence
+        $checkin = null;
+        if ($iv->relationLoaded('checkins') && $iv->checkins->isNotEmpty()) {
+            $dayKey = $startC->toDateString();
+            $match = $iv->checkins->first(function ($c) use ($dayKey) {
+                return $c->checkin_time && Carbon::parse($c->checkin_time)->toDateString() === $dayKey;
+            });
+            if ($match) {
+                $checkin = [
+                    'id' => $match->id,
+                    'checkin_time' => $match->checkin_time ? Carbon::parse($match->checkin_time)->toIso8601String() : null,
+                    'checkout_time' => $match->checkout_time ? Carbon::parse($match->checkout_time)->toIso8601String() : null,
+                ];
+            }
         }
 
         // Prestation + prix
@@ -325,6 +345,7 @@ class InterventionExpander
             'is_billed' => (bool) $iv->is_billed,
 
             'prestation' => $prestation,
+            'checkin' => $checkin,
         ];
     }
 }

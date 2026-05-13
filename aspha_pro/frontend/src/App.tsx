@@ -22,6 +22,14 @@ import { TelegestionPage } from "@/pages/telegestion/TelegestionPage";
 import { PortailPage } from "@/pages/portail/PortailPage";
 import { MessagingPage } from "@/pages/messaging/MessagingPage";
 import { FleetPage } from "@/pages/fleet/FleetPage";
+import { ExtranetLayout } from "@/components/ExtranetLayout";
+import { RoleRouter } from "@/components/RoleRouter";
+import { IntervenantHome } from "@/pages/extranet/IntervenantHome";
+import { IntervenantPlanning } from "@/pages/extranet/IntervenantPlanning";
+import { ClientHome } from "@/pages/extranet/ClientHome";
+import { Home, CalendarDays, Receipt, Briefcase } from "lucide-react";
+import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
+import { HelpPage } from "@/pages/help/HelpPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,10 +44,57 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+
+            {/* Extranet intervenant */}
             <Route
               element={
                 <ProtectedRoute>
-                  <AppLayout />
+                  <RoleRouter>
+                    <ExtranetLayout
+                      title="Intervenant"
+                      variant="intervenant"
+                      tabs={[
+                        { to: "/extranet/intervenant", label: "Accueil", icon: Home },
+                        { to: "/extranet/intervenant/planning", label: "Mon planning", icon: CalendarDays },
+                      ]}
+                    />
+                  </RoleRouter>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/extranet/intervenant" element={<IntervenantHome />} />
+              <Route path="/extranet/intervenant/planning" element={<IntervenantPlanning />} />
+            </Route>
+
+            {/* Extranet client */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <RoleRouter>
+                    <ExtranetLayout
+                      title="Client"
+                      variant="client"
+                      tabs={[
+                        { to: "/extranet/client", label: "Accueil", icon: Home },
+                        { to: "/extranet/client/factures", label: "Factures", icon: Receipt },
+                        { to: "/extranet/client/prestations", label: "Prestations", icon: Briefcase },
+                      ]}
+                    />
+                  </RoleRouter>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/extranet/client" element={<ClientHome />} />
+              <Route path="/extranet/client/factures" element={<ClientHome />} />
+              <Route path="/extranet/client/prestations" element={<ClientHome />} />
+            </Route>
+
+            <Route
+              element={
+                <ProtectedRoute>
+                  <RoleRouter>
+                    <AppLayout />
+                  </RoleRouter>
                 </ProtectedRoute>
               }
             >
@@ -59,7 +114,8 @@ export default function App() {
               <Route path="/devis" element={<QuotesListPage />} />
               <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/reglements" element={<ReglementsListPage />} />
-              <Route path="/parametres" element={<PlaceholderPage title="Paramètres" phase="Phase ultérieure" />} />
+              <Route path="/parametres" element={<AdminSettingsPage />} />
+              <Route path="/aide" element={<HelpPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

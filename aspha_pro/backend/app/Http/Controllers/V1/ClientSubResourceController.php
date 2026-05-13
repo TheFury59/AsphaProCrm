@@ -171,6 +171,13 @@ class ClientSubResourceController extends Controller
     {
         $this->authorizeEdit($request);
         $data = $this->validateAbsence($request);
+
+        // Quick-add planning : motif libre → fusionne dans comment
+        if (! empty($data['reason']) && empty($data['comment'])) {
+            $data['comment'] = $data['reason'];
+        }
+        unset($data['reason']);
+
         $absence = $client->absences()->create($data);
         $absence->load('reason');
         return response()->json(['data' => $absence], 201);
@@ -196,7 +203,9 @@ class ClientSubResourceController extends Controller
     {
         $req = $partial ? 'sometimes' : 'required';
         $base = [
-            'reason_id' => ["$req", 'exists:client_absence_reasons,id'],
+            // Nullable pour le quick-add depuis le planning (motif libre via `reason`)
+            'reason_id' => ['nullable', 'exists:client_absence_reasons,id'],
+            'reason' => ['nullable', 'string', 'max:255'],
             'is_hourly' => ['nullable', 'boolean'],
             'planning_action' => ['nullable', 'in:cancel,delete,nothing'],
             'comment' => ['nullable', 'string'],

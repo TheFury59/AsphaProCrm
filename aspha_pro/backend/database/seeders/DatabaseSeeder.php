@@ -18,6 +18,15 @@ class DatabaseSeeder extends Seeder
         // Étape 2bis : types de notifications applicatives
         $this->call(NotificationTypesSeeder::class);
 
+        // Étape 2ter : settings applicatifs (seuils paramétrables)
+        $this->call(AppSettingsSeeder::class);
+
+        // Étape 2quater : référentiel docs requis intervenants
+        $this->call(RequiredDocumentTypesSeeder::class);
+
+        // Étape 2quinquies : articles d'aide in-app
+        $this->call(HelpArticlesSeeder::class);
+
         // Étape 3 : super-admin par défaut
         $admin = User::firstOrCreate(
             ['email' => 'admin@aspha.local'],

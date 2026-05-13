@@ -8,13 +8,19 @@ use App\Http\Controllers\V1\ContractController;
 use App\Http\Controllers\V1\DocumentController;
 use App\Http\Controllers\V1\EmployeeController;
 use App\Http\Controllers\V1\EmployeeSubResourceController;
+use App\Http\Controllers\V1\ExtranetController;
 use App\Http\Controllers\V1\FleetController;
+use App\Http\Controllers\V1\HelpController;
 use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
 use App\Http\Controllers\V1\NotificationController;
+use App\Http\Controllers\V1\PermissionsController;
+use App\Http\Controllers\V1\PlanningSummaryController;
 use App\Http\Controllers\V1\ProductController;
+use App\Http\Controllers\V1\RequiredDocumentTypesController;
+use App\Http\Controllers\V1\SettingsController;
 use App\Http\Controllers\V1\QuoteController;
 use App\Http\Controllers\V1\ReferentialsController;
 use App\Http\Controllers\V1\ReglementController;
@@ -99,6 +105,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Phase 3 — Planning
     Route::get('interventions/calendar', [InterventionController::class, 'calendar']);
+    Route::get('planning/contract-summary', [PlanningSummaryController::class, 'contractSummary']);
+    Route::get('planning/long-absences', [PlanningSummaryController::class, 'longAbsences']);
+    Route::get('planning/trips', [PlanningSummaryController::class, 'trips']);
+    Route::get('planning/available-employees', [PlanningSummaryController::class, 'availableEmployees']);
     Route::post('interventions/{intervention}/exceptions', [InterventionController::class, 'createException']);
     Route::apiResource('interventions', InterventionController::class);
 
@@ -192,4 +202,39 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
     Route::get('notifications/preferences', [NotificationController::class, 'listPreferences']);
     Route::patch('notifications/preferences/{typeId}', [NotificationController::class, 'updatePreference']);
+
+    // === Extranets (vue restreinte) ===
+    Route::prefix('extranet/intervenant')->controller(ExtranetController::class)->group(function () {
+        Route::get('profile', 'intervenantProfile');
+        Route::get('planning', 'intervenantPlanning');
+        Route::get('absences', 'intervenantAbsences');
+        Route::get('contract', 'intervenantContract');
+    });
+    Route::prefix('extranet/client')->controller(ExtranetController::class)->group(function () {
+        Route::get('profile', 'clientProfile');
+        Route::get('invoices', 'clientInvoices');
+        Route::get('quotes', 'clientQuotes');
+        Route::get('prestations', 'clientPrestations');
+    });
+
+    // === Settings ===
+    Route::get('settings/public', [SettingsController::class, 'publicSettings']);
+    Route::get('settings', [SettingsController::class, 'index']);
+    Route::patch('settings/{key}', [SettingsController::class, 'update']);
+
+    // === Admin : permissions (super_admin only) ===
+    Route::get('admin/permissions', [PermissionsController::class, 'index']);
+    Route::put('admin/roles/{role}/permissions', [PermissionsController::class, 'syncRolePermissions']);
+
+    // === Référentiel docs requis intervenants ===
+    Route::apiResource('required-document-types', RequiredDocumentTypesController::class)
+        ->parameters(['required-document-types' => 'requiredDocumentType']);
+    Route::get('employees/{employee}/required-documents', [RequiredDocumentTypesController::class, 'checklist']);
+
+    // === Documentation in-app ===
+    Route::get('help/articles', [HelpController::class, 'index']);
+    Route::get('help/articles/{slug}', [HelpController::class, 'show']);
+    Route::post('help/articles', [HelpController::class, 'store']);
+    Route::patch('help/articles/{slug}', [HelpController::class, 'update']);
+    Route::delete('help/articles/{slug}', [HelpController::class, 'destroy']);
 });
