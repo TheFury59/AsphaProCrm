@@ -34,38 +34,55 @@ class GeocodingService
         }
 
         $cacheKey = 'geocode:' . md5($query);
-        return Cache::remember($cacheKey, now()->addDays(self::CACHE_TTL_DAYS), function () use ($query, $postalCode) {
-            try {
-                $params = ['q' => $query, 'limit' => 1, 'autocomplete' => 0];
-                if ($postalCode) {
-                    $params['postcode'] = $postalCode;
-                }
 
-                $response = Http::timeout(5)
-                    ->retry(2, 200)
-                    ->get(self::BAN_ENDPOINT, $params);
+        // ⚠️ On ne `Cache::remember()` pas directement car ça mettrait `null`
+        // (échec) en cache pour 30 jours → une adresse corrigée resterait
+        // bloquée jusqu'à l'expiration. On gère le cache MANUELLEMENT pour ne
+        // mémoriser que les succès.
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
 
-                if (! $response->successful()) {
-                    Log::warning('Geocoding BAN HTTP failed', ['query' => $query, 'status' => $response->status()]);
-                    return null;
-                }
+        try {
+            $params = ['q' => $query, 'limit' => 1, 'autocomplete' => 0];
+            if ($postalCode) {
+                $params['postcode'] = $postalCode;
+            }
 
-                $features = $response->json('features', []);
-                if (empty($features)) {
-                    return null;
-                }
+            // ⚠️ SSL : PHP sous Windows n'a pas de bundle CA installé par défaut →
+            // cURL error 60 sur les appels HTTPS. En dev (APP_ENV=local) on
+            // désactive la vérification (BAN est public, pas de secret transitant).
+            // En prod Linux, openssl du système gère les CA, pas besoin.
+            $http = Http::timeout(5)->retry(2, 200);
+            if (app()->environment('local')) {
+                $http = $http->withOptions(['verify' => false]);
+            }
+            $response = $http->get(self::BAN_ENDPOINT, $params);
 
-                $coords = $features[0]['geometry']['coordinates'] ?? null;
-                if (! $coords || count($coords) !== 2) {
-                    return null;
-                }
-
-                // BAN renvoie [lon, lat]
-                return [(float) $coords[1], (float) $coords[0]];
-            } catch (\Throwable $e) {
-                Log::warning('Geocoding BAN exception', ['query' => $query, 'error' => $e->getMessage()]);
+            if (! $response->successful()) {
+                Log::warning('Geocoding BAN HTTP failed', ['query' => $query, 'status' => $response->status()]);
                 return null;
             }
-        });
+
+            $features = $response->json('features', []);
+            if (empty($features)) {
+                Log::info('Geocoding : aucun résultat BAN', ['query' => $query]);
+                return null;
+            }
+
+            $coords = $features[0]['geometry']['coordinates'] ?? null;
+            if (! $coords || count($coords) !== 2) {
+                return null;
+            }
+
+            // BAN renvoie [lon, lat] — on stocke [lat, lng]
+            $result = [(float) $coords[1], (float) $coords[0]];
+            Cache::put($cacheKey, $result, now()->addDays(self::CACHE_TTL_DAYS));
+            return $result;
+        } catch (\Throwable $e) {
+            Log::warning('Geocoding BAN exception', ['query' => $query, 'error' => $e->getMessage()]);
+            return null;
+        }
     }
 }
