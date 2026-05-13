@@ -80,14 +80,14 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+      <SidebarHeader className="border-b border-sidebar-border py-3">
+        <div className="flex items-center gap-2.5 px-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-aspha text-white shadow-brand shrink-0">
             <Building2 className="h-4 w-4" />
           </div>
-          <div className="flex flex-col text-sm">
-            <span className="font-semibold leading-tight">Aspha Pro</span>
-            <span className="text-xs text-muted-foreground">Services à la personne</span>
+          <div className="flex flex-col text-sm leading-tight">
+            <span className="font-semibold tracking-tight">Aspha <span className="text-gradient-aspha">Pro</span></span>
+            <span className="text-[10px] text-muted-foreground tracking-wide">CRM services à la personne</span>
           </div>
         </div>
       </SidebarHeader>
@@ -119,7 +119,13 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
-        <div className="px-2 py-1 text-xs text-muted-foreground">v0.1.0 — Aspha Pro</div>
+        <div className="px-2 py-2 flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground tracking-wide">v0.1.0</span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            En ligne
+          </span>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

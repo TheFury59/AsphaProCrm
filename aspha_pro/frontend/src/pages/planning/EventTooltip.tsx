@@ -66,10 +66,12 @@ export function EventTooltip({
 
   return (
     <div
-      className="pointer-events-auto fixed z-50 w-[360px] rounded-lg border bg-popover shadow-xl text-sm"
+      className="pointer-events-auto fixed z-50 w-[360px] rounded-xl border bg-popover/95 backdrop-blur-md shadow-2xl text-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       style={{ left: safeX, top: safeY }}
       onMouseEnter={(e) => e.stopPropagation()}
     >
+      {/* Bande de couleur en haut */}
+      <div className="h-1 bg-gradient-aspha" />
       {/* Header : client + statut */}
       <div className="border-b px-3 py-2">
         <div className="flex items-start justify-between gap-2">
@@ -102,20 +104,28 @@ export function EventTooltip({
           <span className="text-muted-foreground"> · {durationH}h</span>
         </Row>
 
-        {/* Adresse */}
-        {ev.client?.address?.address && (
-          <Row icon={<MapPin className="h-3 w-3" />}>
+        {/* Adresse — toujours affichée (placeholder si manquante) */}
+        <Row icon={<MapPin className="h-3 w-3" />}>
+          {ev.client?.address?.address ? (
             <span className="text-xs">
               {ev.client.address.address}
-              {ev.client.address.city && `, ${ev.client.address.postal_code ?? ""} ${ev.client.address.city}`}
+              {ev.client.address.city && (
+                <>, {ev.client.address.postal_code ?? ""} {ev.client.address.city}</>
+              )}
             </span>
-          </Row>
-        )}
+          ) : (
+            <span className="text-xs italic text-muted-foreground">Adresse non renseignée</span>
+          )}
+        </Row>
 
-        {/* Téléphone / Email */}
-        {ev.client?.phone && (
-          <Row icon={<Phone className="h-3 w-3" />}><span className="font-mono text-xs">{ev.client.phone}</span></Row>
-        )}
+        {/* Téléphone / Email — affichés en placeholder si manquants */}
+        <Row icon={<Phone className="h-3 w-3" />}>
+          {ev.client?.phone ? (
+            <span className="font-mono text-xs">{ev.client.phone}</span>
+          ) : (
+            <span className="text-xs italic text-muted-foreground">Téléphone non renseigné</span>
+          )}
+        </Row>
         {ev.client?.email && (
           <Row icon={<Mail className="h-3 w-3" />}><span className="text-xs">{ev.client.email}</span></Row>
         )}

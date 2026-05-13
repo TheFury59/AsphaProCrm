@@ -84,11 +84,22 @@ export type TripSummary = {
   unpaid_duration_minutes: number;
 };
 
+export type TripDiagnostics = {
+  total_events: number;
+  unassigned_events: number;
+  events_without_geocoded_address: number;
+};
+
 export function useTrips(params: { from: string; to: string; employee_id?: number | null }) {
   return useQuery({
     queryKey: ["planning", "trips", params],
     queryFn: async () => {
-      const { data } = await api.get<{ data: { trips: Trip[]; summary: TripSummary[]; paid_threshold_minutes: number } }>(
+      const { data } = await api.get<{ data: {
+        trips: Trip[];
+        summary: TripSummary[];
+        paid_threshold_minutes: number;
+        diagnostics: TripDiagnostics;
+      } }>(
         "/planning/trips", { params },
       );
       return data.data;

@@ -142,7 +142,8 @@ class InterventionController extends Controller
         $data = $request->validate([
             'exception_date' => ['required', 'date'],
             'start_datetime' => ['required', 'date'],
-            'end_datetime' => ['required', 'date', 'after:start_datetime'],
+            // after_or_equal car on peut très bien avoir un RDV qui dure 0 min (rare mais possible)
+            'end_datetime' => ['required', 'date', 'after_or_equal:start_datetime'],
             'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
             'status' => ['nullable', 'in:a_pourvoir,planifiee,realisee,annulee,draft,terminated'],
             'comment' => ['nullable', 'string'],
@@ -192,11 +193,14 @@ class InterventionController extends Controller
         $opt = $partial ? 'sometimes' : 'nullable';
 
         return $request->validate([
-            'client_id' => [$req, 'exists:clients,id'],
+            'client_id' => [$req, 'nullable', 'exists:clients,id'],
             'mission_id' => ['nullable', 'exists:missions,id'],
             'client_prestation_id' => ['nullable', 'exists:client_prestations,id'],
-            'employee_id' => [$opt, 'exists:employees,id'],
-            'is_recurring' => [$req, 'boolean'],
+            // `nullable` IMPÉRATIF : sans lui, envoyer `employee_id: null` (= "À pourvoir")
+            // fait échouer la règle `exists` → validation.exists
+            'employee_id' => [$opt, 'nullable', 'exists:employees,id'],
+            'replacement_employee_id' => ['nullable', 'exists:employees,id'],
+            'is_recurring' => [$opt, 'boolean'],
             'status' => ['nullable', 'in:a_pourvoir,planifiee,realisee,annulee,draft,terminated'],
 
             // Ponctuel

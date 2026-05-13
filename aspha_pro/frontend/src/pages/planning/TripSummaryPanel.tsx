@@ -34,7 +34,35 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
           {isLoading ? (
             <p className="text-xs text-muted-foreground p-2">Calcul…</p>
           ) : (data?.summary?.length ?? 0) === 0 ? (
-            <p className="text-xs text-muted-foreground p-2">Aucun trajet inter-RDV.</p>
+            <div className="p-2 space-y-1.5 text-[11px] text-muted-foreground">
+              <p className="font-medium text-foreground">Aucun trajet calculé</p>
+              <p>Le calcul nécessite :</p>
+              <ul className="list-disc list-inside space-y-0.5 pl-1">
+                <li>2+ RDV consécutifs le même jour</li>
+                <li>Un intervenant assigné (pas "À pourvoir")</li>
+                <li>Adresses clients géocodées (lat/lng)</li>
+              </ul>
+              {data?.diagnostics && (
+                <div className="mt-2 pt-2 border-t space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Total RDV :</span>
+                    <span className="font-medium text-foreground">{data.diagnostics.total_events}</span>
+                  </div>
+                  {data.diagnostics.unassigned_events > 0 && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Sans intervenant :</span>
+                      <span className="font-medium">{data.diagnostics.unassigned_events}</span>
+                    </div>
+                  )}
+                  {data.diagnostics.events_without_geocoded_address > 0 && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Sans adresse géocodée :</span>
+                      <span className="font-medium">{data.diagnostics.events_without_geocoded_address}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             data?.summary.map((s) => (
               <div key={s.employee_id} className="rounded-md border p-2 space-y-1.5 text-xs">

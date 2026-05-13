@@ -27,8 +27,10 @@ import { EventTooltip } from "./EventTooltip";
 import { LongAbsenceBanner } from "./LongAbsenceBanner";
 import { ContractSummaryPanel } from "./ContractSummaryPanel";
 import { ContextMenuPlanning } from "./ContextMenuPlanning";
+import { ContextMenuEvent } from "./ContextMenuEvent";
 import { TripSummaryPanel } from "./TripSummaryPanel";
 import { AvailableEmployeesMap } from "./AvailableEmployeesMap";
+import { EditInterventionDialog } from "./EditInterventionDialog";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -59,15 +61,25 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Couleur stable par employee_id — algo hash simple sur l'id pour
- * répartir sur une palette de 12 couleurs distinctes.
+ * Couleur stable par employee_id — palette saturée mais cohérente avec
+ * la marque Aspha (vert + bleu ciel dominants). 12 couleurs distinctes.
  */
 const EMPLOYEE_PALETTE = [
-  "#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4",
-  "#84cc16", "#f97316", "#a855f7", "#14b8a6", "#ef4444", "#6366f1",
+  "#10b981", // emerald (signature Aspha)
+  "#0ea5e9", // sky
+  "#8b5cf6", // violet
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#84cc16", // lime
+  "#f97316", // orange
+  "#a855f7", // purple
+  "#14b8a6", // teal
+  "#6366f1", // indigo
+  "#22c55e", // green
 ];
 function colorForEmployee(employeeId: number | null | undefined): string {
-  if (!employeeId) return "#94a3b8";  // gris pour "à pourvoir"
+  if (!employeeId) return "#94a3b8";  // slate pour "à pourvoir"
   return EMPLOYEE_PALETTE[employeeId % EMPLOYEE_PALETTE.length];
 }
 
@@ -84,8 +96,12 @@ export function PlanningPage() {
   const [matchingOpen, setMatchingOpen] = useState(false);
   // État pour le tooltip hover sur les events
   const [hover, setHover] = useState<{ ev: any; x: number; y: number } | null>(null);
-  // Menu contextuel clic droit
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; date: Date } | null>(null);
+  // Menu contextuel clic droit — peut cibler un slot vide OU un event existant
+  const [ctxMenu, setCtxMenu] = useState<
+    | { kind: "slot"; x: number; y: number; date: Date }
+    | { kind: "event"; x: number; y: number; intervention: any }
+    | null
+  >(null);
   // Mode création pré-rempli (ponctuel / récurrent / absence / indisponibilité)
   const [createMode, setCreateMode] = useState<"ponctuel" | "recurrent" | "absence" | "indispo">("ponctuel");
 
@@ -197,30 +213,70 @@ export function PlanningPage() {
     arg.view.calendar.unselect();
   };
 
-  // Clic droit : on intercepte au niveau de la grille (event delegation sur le calendar wrapper)
-  // FullCalendar n'a pas de hook dédié context menu, donc on fait au DOM.
+  // Clic droit : détecte si on cible un EVENT existant ou un SLOT vide
+  // (FullCalendar n'a pas de hook dédié → event delegation sur le wrapper)
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
-    // Récupère le slot ciblé via data-time / data-date des attributs FullCalendar
+    setHover(null);  // ferme le tooltip hover pour ne pas qu'il reste derrière le menu
     const target = e.target as HTMLElement;
+
+    // 1. Clic sur un event existant ?
+    const eventEl = target.closest(".fc-event") as HTMLElement | null;
+    if (eventEl) {
+      // FullCalendar n'expose pas l'event via data attribute directement,
+      // on retrouve via l'index dans le DOM ordering (méthode fragile mais simple).
+      // Plus robuste : extraire l'id depuis l'attribut "fcSeg" exposé dans __seg, ou retrouver
+      // l'event par sa position. Ici on lit l'innertext pour matcher via le titre (suffisant
+      // pour MVP — sinon FullCalendar's getEventById si on conserve l'id).
+      // Approche pragmatique : on déclenche un click natif pour que FullCalendar nous file l'event
+      // via son propre handler `eventClick`. À la place on lit directement extendedProps via
+      // ce qu'on a stocké dans hover ou on retrouve par data-fc-event.
+      // Le plus simple : on prend l'event sous la souris depuis le state `hover` (déjà setup au mouseenter).
+      if (hover?.ev) {
+        setCtxMenu({ kind: "event", x: e.clientX, y: e.clientY, intervention: hover.ev });
+        return;
+      }
+    }
+
+    // 2. Sinon, clic sur un slot vide → menu "créer"
     const slot = target.closest("[data-time], [data-date]") as HTMLElement | null;
     let clickDate = new Date();
     if (slot) {
       const dateAttr = slot.getAttribute("data-date");
       const timeAttr = slot.getAttribute("data-time");
       if (dateAttr) clickDate = new Date(dateAttr + (timeAttr ? `T${timeAttr}` : "T09:00:00"));
-    } else {
-      // Fallback : on prend la date courante de la fenêtre
-      clickDate = new Date();
     }
-    setCtxMenu({ x: e.clientX, y: e.clientY, date: clickDate });
+    setCtxMenu({ kind: "slot", x: e.clientX, y: e.clientY, date: clickDate });
   };
 
   const handleCtxAction = (mode: "ponctuel" | "recurrent" | "absence" | "indispo") => {
-    if (!ctxMenu) return;
+    if (!ctxMenu || ctxMenu.kind !== "slot") return;
     setSelectedDate(ctxMenu.date);
     setCreateMode(mode);
     setCreateOpen(true);
+  };
+
+  // Actions du menu contextuel sur un event existant
+  const handleCtxEventAction = (action: "edit" | "match" | "delete" | "cancel") => {
+    if (!ctxMenu || ctxMenu.kind !== "event") return;
+    const iv = ctxMenu.intervention;
+    setCtxMenu(null);
+    if (action === "edit") {
+      setSelected(iv);
+    } else if (action === "match") {
+      setSelected(iv);
+      setMatchingOpen(true);
+    } else if (action === "delete") {
+      if (confirm(iv.is_occurrence
+        ? "Supprimer toute la série de récurrences ?"
+        : "Supprimer cette intervention ?")) {
+        del.mutate(iv.intervention_id);
+      }
+    } else if (action === "cancel") {
+      update.mutate({ id: iv.intervention_id, patch: { status: "annulee" } as any }, {
+        onSuccess: () => toast.success("Intervention annulée"),
+      });
+    }
   };
 
   return (
@@ -282,7 +338,8 @@ export function PlanningPage() {
           selectable
           slotMinTime="06:00:00"
           slotMaxTime="22:00:00"
-          slotDuration="00:30:00"
+          slotDuration="00:15:00"
+          snapDuration="00:05:00"
           allDaySlot={false}
           nowIndicator
           height="75vh"
@@ -360,7 +417,7 @@ export function PlanningPage() {
       />
 
       {/* Menu contextuel clic droit */}
-      {ctxMenu && (
+      {ctxMenu?.kind === "slot" && (
         <ContextMenuPlanning
           x={ctxMenu.x}
           y={ctxMenu.y}
@@ -369,42 +426,25 @@ export function PlanningPage() {
           onClose={() => setCtxMenu(null)}
         />
       )}
+      {ctxMenu?.kind === "event" && (
+        <ContextMenuEvent
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          intervention={ctxMenu.intervention}
+          onAction={handleCtxEventAction}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
 
-      {/* Détail RDV sélectionné */}
+      {/* Édition RDV sélectionné */}
       {selected && (
-        <Dialog open onOpenChange={(o) => { if (!o) setSelected(null); }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{selected.client?.code ?? "Intervention"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2 text-sm">
-              <div className="flex gap-2 flex-wrap">
-                <Badge>{STATUS_LABELS[selected.status] ?? selected.status}</Badge>
-                {selected.is_recurring && <Badge variant="secondary">Récurrente</Badge>}
-                {selected.employee && <Badge variant="outline">{selected.employee.name}</Badge>}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {new Date(selected.start_datetime).toLocaleString("fr-FR")} → {new Date(selected.end_datetime).toLocaleString("fr-FR")}
-                {selected.is_recurring && (
-                  <div className="mt-1">
-                    Série {selected.frequency} · jours : {selected.days_of_week ?? "—"}
-                  </div>
-                )}
-              </div>
-              {selected.comment && <p className="text-sm border-t pt-2">{selected.comment}</p>}
-            </div>
-            <DialogFooter className="flex-wrap gap-2">
-              <Button variant="default" size="sm" onClick={() => setMatchingOpen(true)}>
-                <Sparkles className="mr-2 h-3 w-3" />
-                Suggérer un intervenant
-              </Button>
-              <Button variant="destructive" size="sm" onClick={async () => { await del.mutateAsync(selected.intervention_id); setSelected(null); }}>
-                {selected.is_occurrence ? "Supprimer toute la série" : "Supprimer"}
-              </Button>
-              <Button variant="outline" onClick={() => setSelected(null)}>Fermer</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <EditInterventionDialog
+          intervention={selected}
+          employees={employees}
+          onClose={() => setSelected(null)}
+          onSuggest={() => setMatchingOpen(true)}
+          onDeleted={() => setSelected(null)}
+        />
       )}
 
       <MatchingSuggestionsDialog
@@ -627,7 +667,7 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
               )}
             </Label>
             <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9">
               <option value="">À pourvoir</option>
               {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
             </select>

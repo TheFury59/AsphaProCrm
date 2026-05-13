@@ -53,11 +53,16 @@ class EmployeeController extends Controller
     public function store(StoreEmployeeRequest $request)
     {
         $employee = DB::transaction(function () use ($request) {
-            $employee = Employee::create($request->only([
+            $data = $request->only([
                 'user_id', 'entity_id', 'owner_user_id', 'name', 'phone',
                 'classification', 'transport_mode', 'has_company_vehicle',
                 'diploma', 'job_reference_free',
-            ]));
+            ]);
+            // owner_user_id est NOT NULL en BDD : on défaut sur l'utilisateur courant
+            // (= "qui a créé / gère ce dossier intervenant") si pas explicitement fourni.
+            $data['owner_user_id'] = $data['owner_user_id'] ?? $request->user()->id;
+
+            $employee = Employee::create($data);
 
             if ($request->filled('skill_ids')) {
                 $employee->skills()->sync($request->input('skill_ids'));

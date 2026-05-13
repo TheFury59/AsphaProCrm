@@ -208,11 +208,25 @@ class PlanningSummaryController extends Controller
         $trips = $planner->computeTrips($events);
         $summary = $planner->summarize($trips);
 
+        // Stats explicatives : combien de RDV sans intervenant / sans adresse géocodée ?
+        // Permet à l'UI d'expliquer "pourquoi 0 trajet" au lieu d'un simple message vide.
+        $totalEvents = $events->count();
+        $unassigned = $events->filter(fn ($e) => empty($e['employee']['id']))->count();
+        $missingAddress = $events->filter(function ($e) {
+            return empty($e['client']['address']['latitude'])
+                || empty($e['client']['address']['longitude']);
+        })->count();
+
         return [
             'data' => [
                 'trips' => $trips->values(),
                 'summary' => $summary,
                 'paid_threshold_minutes' => (int) \App\Models\AppSetting::get('paid_travel_max_minutes', 45),
+                'diagnostics' => [
+                    'total_events' => $totalEvents,
+                    'unassigned_events' => $unassigned,
+                    'events_without_geocoded_address' => $missingAddress,
+                ],
             ],
         ];
     }

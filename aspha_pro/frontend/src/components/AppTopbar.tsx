@@ -34,18 +34,18 @@ export function AppTopbar() {
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
-      <SidebarTrigger className="-ml-1" />
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 backdrop-blur-md px-4 sticky top-0 z-30">
+      <SidebarTrigger className="-ml-1 cursor-pointer" />
       <Separator orientation="vertical" className="mr-2 h-4" />
 
       <div className="flex-1">
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors w-full max-w-sm"
+          className="inline-flex items-center gap-2 rounded-lg border bg-muted/40 hover:bg-muted px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-full max-w-md cursor-pointer group"
         >
-          <Search className="h-4 w-4" />
-          <span>Rechercher…</span>
-          <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+          <Search className="h-4 w-4 group-hover:text-primary transition-colors" />
+          <span>Rechercher clients, intervenants, devis…</span>
+          <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
             <span className="text-xs">⌘</span>K
           </kbd>
         </button>
@@ -55,13 +55,15 @@ export function AppTopbar() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2">
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-xs">{user ? initials(user.name) : "?"}</AvatarFallback>
+          <Button variant="ghost" size="sm" className="gap-2 cursor-pointer hover:bg-accent">
+            <Avatar className="h-7 w-7 ring-2 ring-primary/30 ring-offset-1 ring-offset-background">
+              <AvatarFallback className="text-xs bg-gradient-aspha text-white font-medium">
+                {user ? initials(user.name) : "?"}
+              </AvatarFallback>
             </Avatar>
-            <div className="flex flex-col items-start text-xs">
+            <div className="flex flex-col items-start text-xs leading-tight">
               <span className="font-medium">{user?.name}</span>
-              <span className="text-muted-foreground">{user?.role}</span>
+              <span className="text-muted-foreground text-[10px]">{user?.role}</span>
             </div>
           </Button>
         </DropdownMenuTrigger>

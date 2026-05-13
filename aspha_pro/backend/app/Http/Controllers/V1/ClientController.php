@@ -77,9 +77,13 @@ class ClientController extends Controller
     public function store(StoreClientRequest $request)
     {
         $client = DB::transaction(function () use ($request) {
-            $client = Client::create($request->only([
+            $data = $request->only([
                 'code', 'status', 'entity_id', 'owner_user_id', 'print_intervention_detail',
-            ]));
+            ]);
+            // Si non précisé, l'utilisateur courant devient le gestionnaire par défaut
+            $data['owner_user_id'] = $data['owner_user_id'] ?? $request->user()->id;
+
+            $client = Client::create($data);
 
             $companyData = $request->input('company');
             $client->company()->create($companyData);
