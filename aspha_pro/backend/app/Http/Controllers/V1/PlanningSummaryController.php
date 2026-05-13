@@ -34,9 +34,11 @@ class PlanningSummaryController extends Controller
         $daysInWindow = $from->diffInDays($to) + 1;
         $weeksInWindow = $daysInWindow / 7;
 
+        // NB : employees n'a pas de colonne `status` — le soft delete (deleted_at)
+        // sert d'archive. Le model Employee use SoftDeletes → get() exclut
+        // déjà les archivés automatiquement.
         $employees = Employee::query()
             ->when(! empty($data['employee_id']), fn ($q) => $q->where('id', $data['employee_id']))
-            ->where('status', 'active')
             ->with(['currentContract:id,employee_id,weekly_duration,monthly_duration,position'])
             ->get();
 
@@ -135,7 +137,6 @@ class PlanningSummaryController extends Controller
             ->first(fn ($a) => $a->latitude && $a->longitude);
 
         $employees = Employee::query()
-            ->where('status', 'active')
             ->with(['addresses' => fn ($q) => $q->whereNotNull('latitude')])
             ->get();
 

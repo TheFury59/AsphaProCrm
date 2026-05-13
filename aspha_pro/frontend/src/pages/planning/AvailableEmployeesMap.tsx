@@ -168,9 +168,13 @@ export function AvailableEmployeesMap({
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
           <FitToCircle centerLat={lat} centerLng={lng} radiusKm={radiusKm} />
 
-          {/* Cercle de rayon autour du client */}
+          {/* Cercle de rayon autour du client.
+              ⚠️ key={radiusKm} : force un remount complet du Circle quand on
+              change de rayon (au lieu d'un update in-place qui peut crasher
+              Leaflet sur certains états transitoires). */}
           {radiusKm && (
             <Circle
+              key={`circle-${radiusKm}`}
               center={clientPos}
               radius={radiusKm * 1000}
               pathOptions={{

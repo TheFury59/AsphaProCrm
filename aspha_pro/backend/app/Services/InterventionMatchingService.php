@@ -30,9 +30,9 @@ class InterventionMatchingService
 
     public function findCandidates(Intervention $iv, int $limit = self::TOP_N): Collection
     {
-        // 1. Récupère les employés actifs de la même entité que le client si présent
+        // 1. Récupère les employés (le model use SoftDeletes → ->get() exclut
+        // déjà les archivés). Pas de colonne `status` sur employees.
         $query = Employee::query()
-            ->where('status', 'active')
             ->with([
                 'skills:id',
                 'addresses' => fn ($q) => $q->whereNotNull('latitude')->whereNotNull('longitude')->limit(1),
