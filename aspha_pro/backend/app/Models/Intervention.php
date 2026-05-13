@@ -85,6 +85,18 @@ class Intervention extends Model
             ->dontSubmitEmptyLogs();
     }
 
+    /**
+     * Défaut métier : on présume "à facturer" et "à payer" pour chaque RDV
+     * planifié, sauf décision contraire de l'admin (case décochable dans l'UI).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Intervention $iv) {
+            if ($iv->bill_client === null) $iv->bill_client = true;
+            if ($iv->is_paid === null) $iv->is_paid = true;
+        });
+    }
+
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class, 'client_id');

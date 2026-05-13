@@ -23,8 +23,26 @@ import {
 } from "@/components/ui/dialog";
 import { Sparkles } from "lucide-react";
 import { MatchingSuggestionsDialog } from "@/components/MatchingSuggestionsDialog";
+import { EventTooltip } from "./EventTooltip";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
+
+/**
+ * Convertit une Date JS en ISO local "YYYY-MM-DDTHH:MM:SS" SANS suffixe Z.
+ *
+ * Pourquoi : `Date.prototype.toISOString()` retourne toujours en UTC.
+ * Si on envoie "13:00:00Z" pour représenter 15h Paris, le backend Laravel
+ * stocke la chaîne naïve "2026-05-13 13:00:00" (perte du TZ → SQLite ne le
+ * conserve pas), puis le cast 'datetime' relit cette valeur en supposant
+ * la TZ de l'app (Paris) → on obtient 13h Paris au lieu de 15h Paris.
+ *
+ * En envoyant directement "2026-05-13T15:00:00" sans TZ, Carbon parse en
+ * timezone applicative (Paris) et le round-trip reste correct.
+ */
+function localISO(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   a_pourvoir: "À pourvoir",
@@ -34,6 +52,19 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   terminated: "Terminée",
 };
+
+/**
+ * Couleur stable par employee_id — algo hash simple sur l'id pour
+ * répartir sur une palette de 12 couleurs distinctes.
+ */
+const EMPLOYEE_PALETTE = [
+  "#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4",
+  "#84cc16", "#f97316", "#a855f7", "#14b8a6", "#ef4444", "#6366f1",
+];
+function colorForEmployee(employeeId: number | null | undefined): string {
+  if (!employeeId) return "#94a3b8";  // gris pour "à pourvoir"
+  return EMPLOYEE_PALETTE[employeeId % EMPLOYEE_PALETTE.length];
+}
 
 export function PlanningPage() {
   const [window, setWindow] = useState(() => ({
@@ -46,6 +77,8 @@ export function PlanningPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selected, setSelected] = useState<any>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
+  // État pour le tooltip hover sur les events
+  const [hover, setHover] = useState<{ ev: any; x: number; y: number } | null>(null);
 
   const { data: employeesData } = useEmployees({ per_page: 100 });
   const { data: clientsData } = useClients({ per_page: 100 });
@@ -63,24 +96,24 @@ export function PlanningPage() {
 
   // Events sont des occurrences expansées (1 event = 1 RDV concret, même pour les récurrentes)
   const events: EventInput[] = useMemo(() => (interventions.data ?? []).map((ev) => {
-    const recurringPrefix = ev.is_recurring ? "🔁 " : "";
-    const employeeSuffix = ev.employee?.name ? ` · ${ev.employee.name}` : " · à pourvoir";
+    const employeeName = ev.employee?.name ?? "À pourvoir";
+    const clientLabel = ev.client?.company_name ?? ev.client?.code ?? "?";
+    // Le titre est volontairement court ; l'event content riche fait le reste.
     return {
       id: ev.id,
-      title: `${recurringPrefix}${ev.client?.code ?? "?"}${employeeSuffix}`,
+      title: `${clientLabel}\n${employeeName}`,
       start: ev.start_datetime,
       end: ev.end_datetime,
-      backgroundColor: ev.status === "realisee"
-        ? "#10b981"
-        : ev.status === "annulee"
-          ? "#ef4444"
-          : ev.is_recurring
-            ? "#8b5cf6"
-            : "#3b82f6",
-      borderColor: "transparent",
-      // Drag-drop ET resize disponibles partout :
-      //   - Ponctuel/exception → update direct
-      //   - Occurrence virtuelle → crée une exception auto sur la nouvelle date
+      backgroundColor: ev.status === "annulee"
+        ? "#ef4444"
+        : colorForEmployee(ev.employee?.id),
+      borderColor: ev.status === "realisee" ? "#10b981" : "transparent",
+      textColor: "#ffffff",
+      classNames: [
+        ev.status === "annulee" ? "intervention-cancelled" : "",
+        ev.status === "realisee" ? "intervention-done" : "",
+        ev.is_recurring ? "intervention-recurring" : "",
+      ].filter(Boolean),
       editable: true,
       extendedProps: { intervention: ev },
     };
@@ -94,14 +127,23 @@ export function PlanningPage() {
     const ev = arg.event.extendedProps.intervention;
     if (!ev || !arg.event.start || !arg.event.end) return;
 
+    // CRITICAL : on envoie en local naïf (sans Z) pour que Carbon backend
+    // parse en TZ applicative (Paris). Sinon on perd 2h sur le round-trip
+    // (cf. localISO doc plus haut).
+    const startLocal = localISO(arg.event.start);
+    const endLocal = localISO(arg.event.end);
+
     // Cas 1 : occurrence virtuelle d'une récurrence → on crée une exception
     if (ev.is_occurrence) {
+      // Recalcule occurrence_date depuis la NOUVELLE start (sinon l'exception
+      // se lie à l'ancienne date et n'efface pas la bonne occurrence).
+      const newOccurrenceDate = arg.event.start.toLocaleDateString("sv-SE");  // YYYY-MM-DD local
       createException.mutate({
         parentId: ev.intervention_id,
         payload: {
-          exception_date: ev.occurrence_date,
-          start_datetime: arg.event.start.toISOString(),
-          end_datetime: arg.event.end.toISOString(),
+          exception_date: newOccurrenceDate,
+          start_datetime: startLocal,
+          end_datetime: endLocal,
           status: ev.status ?? "planifiee",
         },
       }, {
@@ -118,12 +160,20 @@ export function PlanningPage() {
     update.mutate({
       id: ev.intervention_id,
       patch: {
-        start_datetime: arg.event.start.toISOString(),
-        end_datetime: arg.event.end.toISOString(),
+        start_datetime: startLocal as any,
+        end_datetime: endLocal as any,
       },
     }, {
       onSuccess: () => toast.success(ev.is_exception ? "Exception déplacée" : "Intervention déplacée"),
       onError: () => arg.revert(),
+    });
+  };
+
+  // Toggle facturation/paiement depuis le hover popover
+  const toggleFlag = (interventionId: number, field: "bill_client" | "is_paid", value: boolean) => {
+    update.mutate({ id: interventionId, patch: { [field]: value } as any }, {
+      onSuccess: () => toast.success("Mis à jour"),
+      onError: (e: any) => toast.error(e?.response?.data?.message ?? "Erreur"),
     });
   };
 
@@ -198,6 +248,30 @@ export function PlanningPage() {
           eventResize={handleEventDrop}
           eventClick={handleEventClick}
           select={handleSelect}
+          eventMouseEnter={(arg) => {
+            const rect = (arg.el as HTMLElement).getBoundingClientRect();
+            setHover({ ev: arg.event.extendedProps.intervention, x: rect.right + 8, y: rect.top });
+          }}
+          eventMouseLeave={() => setHover(null)}
+          eventContent={(arg) => {
+            const iv = arg.event.extendedProps.intervention;
+            const start = new Date(iv.start_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+            const end = new Date(iv.end_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+            return (
+              <div className="leading-tight overflow-hidden text-[11px] px-0.5 py-px">
+                <div className="flex items-center gap-1 font-semibold">
+                  {iv.is_recurring && <span>🔁</span>}
+                  <span className="truncate">
+                    {iv.client?.company_name ?? iv.client?.code ?? "?"}
+                  </span>
+                </div>
+                <div className="truncate opacity-90 font-medium">
+                  {iv.employee?.name ?? "À pourvoir"}
+                </div>
+                <div className="opacity-75 text-[10px]">{start}–{end}</div>
+              </div>
+            );
+          }}
         />
       </div>
 
@@ -253,6 +327,15 @@ export function PlanningPage() {
         onClose={() => setMatchingOpen(false)}
         onAssigned={() => { setSelected(null); interventions.refetch(); }}
       />
+
+      {hover && (
+        <EventTooltip
+          ev={hover.ev}
+          x={hover.x}
+          y={hover.y}
+          onToggle={(field, value) => toggleFlag(hover.ev.intervention_id, field, value)}
+        />
+      )}
     </div>
   );
 }

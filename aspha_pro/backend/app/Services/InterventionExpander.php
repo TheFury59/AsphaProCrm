@@ -62,7 +62,14 @@ class InterventionExpander
         // Si aucune collection fournie, on charge tout ce qui pourrait chevaucher
         if ($interventions === null) {
             $interventions = Intervention::query()
-                ->with(['employee:id,name', 'client:id,code'])
+                ->with([
+                    'employee:id,name',
+                    'client:id,code',
+                    'client.company:id,client_id,company_name,phone_mobile,primary_email,manager_first_name,manager_last_name',
+                    'client.addresses',
+                    'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
+                    'clientPrestation.product:id,name,price,default_duration_minutes',
+                ])
                 ->where(function ($q) use ($from, $to) {
                     // Ponctuelles ET exceptions dans la fenêtre
                     $q->whereBetween('start_datetime', [$from, $to]);
@@ -248,6 +255,45 @@ class InterventionExpander
         $endC = $end instanceof CarbonImmutable ? $end : Carbon::parse($end);
         $dateKey = $startC->format('Ymd');
 
+        // Client + entreprise + adresse principale
+        $client = null;
+        if ($iv->relationLoaded('client') && $iv->client) {
+            $company = $iv->client->relationLoaded('company') ? $iv->client->company : null;
+            $mainAddr = $iv->client->relationLoaded('addresses')
+                ? $iv->client->addresses->sortBy(fn ($a) => $a->type === 'intervention' ? 0 : ($a->type === 'main' ? 1 : 2))->first()
+                : null;
+            $client = [
+                'id' => $iv->client->id,
+                'code' => $iv->client->code,
+                'company_name' => $company?->company_name,
+                'first_name' => $company?->manager_first_name,
+                'last_name' => $company?->manager_last_name,
+                'phone' => $company?->phone_mobile,
+                'email' => $company?->primary_email,
+                'address' => $mainAddr ? [
+                    'address' => $mainAddr->address,
+                    'postal_code' => $mainAddr->postal_code,
+                    'city' => $mainAddr->city,
+                ] : null,
+            ];
+        }
+
+        // Prestation + prix
+        $prestation = null;
+        if ($iv->relationLoaded('clientPrestation') && $iv->clientPrestation) {
+            $cp = $iv->clientPrestation;
+            $product = $cp->relationLoaded('product') ? $cp->product : null;
+            $prestation = [
+                'id' => $cp->id,
+                'label' => $cp->label ?? $product?->name,
+                'product_name' => $product?->name,
+                'unit_price' => (float) ($cp->custom_price ?? $cp->base_price ?? $product?->price ?? 0),
+                'billing_type' => $cp->billing_type,
+                'pricing_type' => $cp->pricing_type,
+                'default_duration_minutes' => $product?->default_duration_minutes,
+            ];
+        }
+
         return [
             'id' => $isOccurrence ? "{$iv->id}-{$dateKey}" : (string) $iv->id,
             'intervention_id' => $iv->id,
@@ -259,10 +305,7 @@ class InterventionExpander
             'start_datetime' => $startC->toIso8601String(),
             'end_datetime' => $endC->toIso8601String(),
             'status' => $iv->status,
-            'client' => $iv->relationLoaded('client') && $iv->client ? [
-                'id' => $iv->client->id,
-                'code' => $iv->client->code,
-            ] : null,
+            'client' => $client,
             'employee' => $iv->relationLoaded('employee') && $iv->employee ? [
                 'id' => $iv->employee->id,
                 'name' => $iv->employee->name,
@@ -273,6 +316,15 @@ class InterventionExpander
             'vehicle_type' => $iv->vehicle_type,
             'frequency' => $iv->frequency,
             'days_of_week' => $iv->days_of_week,
+            'start_time' => $iv->start_time,
+            'end_time' => $iv->end_time,
+
+            // Flags facturation / paiement (Phase R37–R39)
+            'bill_client' => (bool) $iv->bill_client,
+            'is_paid' => (bool) $iv->is_paid,
+            'is_billed' => (bool) $iv->is_billed,
+
+            'prestation' => $prestation,
         ];
     }
 }

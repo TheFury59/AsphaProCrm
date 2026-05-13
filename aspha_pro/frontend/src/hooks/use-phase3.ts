@@ -203,15 +203,39 @@ export type CalendarEvent = {
   intervention_id: number;
   is_occurrence: boolean;
   is_recurring: boolean;
+  is_exception?: boolean;
   occurrence_date: string;
   start_datetime: string;
   end_datetime: string;
   status: string | null;
-  client?: { id: number; code: string } | null;
+  client?: {
+    id: number;
+    code: string;
+    company_name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: { address: string | null; postal_code: string | null; city: string | null } | null;
+  } | null;
   employee?: { id: number; name: string } | null;
   comment: string | null;
   frequency: string | null;
   days_of_week: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  bill_client?: boolean;
+  is_paid?: boolean;
+  is_billed?: boolean;
+  prestation?: {
+    id: number;
+    label: string | null;
+    product_name: string | null;
+    unit_price: number;
+    billing_type: string | null;
+    pricing_type: string | null;
+    default_duration_minutes: number | null;
+  } | null;
 };
 
 /**
