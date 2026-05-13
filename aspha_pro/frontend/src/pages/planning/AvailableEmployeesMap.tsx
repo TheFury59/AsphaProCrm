@@ -113,6 +113,22 @@ export function AvailableEmployeesMap({
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
 
+  // ⚠️ TOUS les hooks DOIVENT être appelés avant les early returns
+  // (sinon "Rendered more hooks than during the previous render" car
+  // l'ordre d'appel des hooks change selon les chemins de rendering).
+  const lat = data?.client_address ? Number(data.client_address.lat) : 0;
+  const lng = data?.client_address ? Number(data.client_address.lng) : 0;
+  const clientPos = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
+
+  const candidates = data?.candidates ?? [];
+  const filtered = useMemo(() => candidates.filter((c: AvailableEmployee) => {
+    if (radiusKm === null) return true;
+    if (c.distance_km === null || c.distance_km === undefined) return false;
+    return Number(c.distance_km) <= radiusKm;
+  }).filter((c: AvailableEmployee) => !hideUnavailable || !c.has_conflict),
+  [candidates, radiusKm, hideUnavailable]);
+
+  // Early returns APRÈS tous les hooks
   if (isLoading) {
     return (
       <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -140,23 +156,6 @@ export function AvailableEmployeesMap({
       </div>
     );
   }
-
-  // Cast en number + stabilisation pour ne pas re-créer un nouveau tuple à
-  // chaque render (sinon MapContainer reçoit un nouveau `center` prop et peut
-  // re-initialiser la map).
-  const lat = Number(data.client_address.lat);
-  const lng = Number(data.client_address.lng);
-  const clientPos = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
-  const candidates = data.candidates;
-
-  // Filtre par rayon (côté frontend, sur les distances déjà calculées par le backend)
-  // ⚠️ distance_km arrive parfois en string (Laravel decimal cast) → cast Number()
-  const filtered = useMemo(() => candidates.filter((c: AvailableEmployee) => {
-    if (radiusKm === null) return true;
-    if (c.distance_km === null || c.distance_km === undefined) return false;
-    return Number(c.distance_km) <= radiusKm;
-  }).filter((c: AvailableEmployee) => !hideUnavailable || !c.has_conflict),
-  [candidates, radiusKm, hideUnavailable]);
 
   const availableCount = filtered.filter((c: AvailableEmployee) => !c.has_conflict).length;
   const conflictCount = filtered.filter((c: AvailableEmployee) => c.has_conflict).length;
