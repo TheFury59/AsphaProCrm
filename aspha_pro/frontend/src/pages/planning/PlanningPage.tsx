@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -471,6 +472,15 @@ export function PlanningPage() {
   );
 }
 
+/**
+ * Ajoute N heures à une heure "HH:MM" (clamp à 23:59).
+ */
+function addHours(time: string, h: number): string {
+  const [hh, mm] = time.split(":").map(Number);
+  const totalMin = Math.min(hh * 60 + mm + h * 60, 23 * 60 + 59);
+  return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+}
+
 function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, employees }: {
   open: boolean;
   defaultDate?: Date;
@@ -489,19 +499,32 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
     client_id: "",
     employee_id: "",
     status: "planifiee",
-    start_datetime: `${initialDate}T${initialTime}`,
-    end_datetime: `${initialDate}T${initialTime}`,
+    // ⚠️ date et heure séparés pour la lisibilité (recomposés à la soumission)
+    start_date: initialDate,
+    start_time_h: initialTime,
+    end_date: initialDate,
+    end_time_h: addHours(initialTime, 2),
     recurrence_start_date: initialDate,
     start_time: initialTime,
     end_time: "12:00",
     frequency: "weekly",
     days_of_week: "mon",
+    // Détails (étape 4)
+    transport_mode: "",
+    vehicle_type: "",
+    bill_client: true,
+    is_paid: true,
     comment: "",
+    internal_comment: "",
     // Absence/Indispo
     absence_start_date: initialDate,
     absence_end_date: initialDate,
     absence_reason: "",
   });
+
+  // Datetime recomposés pour la map + le payload
+  const start_datetime = `${form.start_date}T${form.start_time_h}:00`;
+  const end_datetime = `${form.end_date}T${form.end_time_h}:00`;
 
   // Reset le form quand le mode change (pour qu'on parte sur du frais)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -544,7 +567,12 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
       employee_id: form.employee_id ? parseInt(form.employee_id, 10) : null,
       is_recurring: isRecurring,
       status: form.status,
-      comment: form.comment,
+      comment: form.comment || null,
+      internal_comment: form.internal_comment || null,
+      transport_mode: form.transport_mode || null,
+      vehicle_type: form.vehicle_type || null,
+      bill_client: form.bill_client,
+      is_paid: form.is_paid,
     };
     if (isRecurring) {
       Object.assign(payload, {
@@ -556,8 +584,8 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
       });
     } else {
       Object.assign(payload, {
-        start_datetime: form.start_datetime,
-        end_datetime: form.end_datetime,
+        start_datetime,
+        end_datetime,
       });
     }
     await create.mutateAsync(payload);
@@ -628,21 +656,35 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
   const step1Done = !!form.client_id;
   const step2Done = isRecurring
     ? !!form.recurrence_start_date && !!form.start_time && !!form.end_time
-    : !!form.start_datetime && !!form.end_datetime;
+    : !!form.start_date && !!form.start_time_h && !!form.end_date && !!form.end_time_h;
   // Le picker map ne fonctionne que pour les ponctuelles (besoin de start/end datetime concrets)
   const showMapPicker = !isRecurring && step1Done && step2Done;
 
+  const selectedClient = clients.find((c: any) => String(c.id) === form.client_id);
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className={showMapPicker ? "sm:max-w-[1100px] max-h-[90vh] overflow-y-auto" : "sm:max-w-md"}>
-        <DialogHeader>
-          <DialogTitle className="text-xl">{title}</DialogTitle>
+      <DialogContent
+        className={
+          showMapPicker
+            ? "w-[96vw] max-w-[1280px] h-[88vh] max-h-[88vh] sm:rounded-2xl p-0 flex flex-col overflow-hidden gap-0"
+            : "w-[96vw] sm:max-w-lg max-h-[88vh] p-0 flex flex-col overflow-hidden gap-0"
+        }
+      >
+        {/* === HEADER fixe === */}
+        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
+          <DialogTitle className="text-xl tracking-tight">{title}</DialogTitle>
+          {step1Done && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {selectedClient?.company?.company_name ?? selectedClient?.code ?? "—"}
+            </p>
+          )}
         </DialogHeader>
 
-        <form onSubmit={submit}>
-          <div className={showMapPicker ? "grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5" : ""}>
-            {/* === COLONNE GAUCHE : formulaire avec étapes === */}
-            <div className="space-y-4">
+        <form onSubmit={submit} className="flex-1 flex flex-col min-h-0">
+          <div className={`flex-1 min-h-0 ${showMapPicker ? "grid grid-cols-1 lg:grid-cols-[400px_1fr]" : ""}`}>
+            {/* === COLONNE GAUCHE : formulaire en étapes (scrollable) === */}
+            <div className="overflow-y-auto p-5 lg:p-6 space-y-4 lg:border-r">
               {/* ÉTAPE 1 : Client */}
               <WizardStep n={1} title="Client" done={step1Done}>
                 <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
@@ -652,28 +694,36 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
                 </select>
               </WizardStep>
 
-              {/* ÉTAPE 2 : Horaires */}
+              {/* ÉTAPE 2 : Date + Heure SÉPARÉS */}
               <WizardStep n={2} title="Date et horaires" done={step2Done} disabled={!step1Done}>
                 {!isRecurring ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Début</Label>
-                      <Input type="datetime-local" value={form.start_datetime} onChange={(e) => setForm((f: any) => ({ ...f, start_datetime: e.target.value }))} required disabled={!step1Done} />
+                  <div className="space-y-3">
+                    {/* Début */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Début</Label>
+                      <div className="grid grid-cols-[1fr_110px] gap-2">
+                        <Input type="date" value={form.start_date} onChange={(e) => setForm((f: any) => ({ ...f, start_date: e.target.value, end_date: f.end_date < e.target.value ? e.target.value : f.end_date }))} required />
+                        <Input type="time" value={form.start_time_h} onChange={(e) => setForm((f: any) => ({ ...f, start_time_h: e.target.value }))} required />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fin</Label>
-                      <Input type="datetime-local" value={form.end_datetime} onChange={(e) => setForm((f: any) => ({ ...f, end_datetime: e.target.value }))} required disabled={!step1Done} />
+                    {/* Fin */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fin</Label>
+                      <div className="grid grid-cols-[1fr_110px] gap-2">
+                        <Input type="date" value={form.end_date} min={form.start_date} onChange={(e) => setForm((f: any) => ({ ...f, end_date: e.target.value }))} required />
+                        <Input type="time" value={form.end_time_h} onChange={(e) => setForm((f: any) => ({ ...f, end_time_h: e.target.value }))} required />
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Date début</Label>
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Date début</Label>
                         <Input type="date" value={form.recurrence_start_date} onChange={(e) => setForm((f: any) => ({ ...f, recurrence_start_date: e.target.value }))} required />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fréquence</Label>
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fréquence</Label>
                         <select value={form.frequency} onChange={(e) => setForm((f: any) => ({ ...f, frequency: e.target.value }))}
                           className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
                           <option value="daily">Quotidienne</option>
@@ -684,28 +734,29 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Heure début</Label>
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Heure début</Label>
                         <Input type="time" value={form.start_time} onChange={(e) => setForm((f: any) => ({ ...f, start_time: e.target.value }))} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Heure fin</Label>
+                        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Heure fin</Label>
                         <Input type="time" value={form.end_time} onChange={(e) => setForm((f: any) => ({ ...f, end_time: e.target.value }))} />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Jours (mon,tue,wed,thu,fri,sat,sun)</Label>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Jours de la semaine</Label>
                       <Input value={form.days_of_week} onChange={(e) => setForm((f: any) => ({ ...f, days_of_week: e.target.value }))} placeholder="mon,wed,fri" />
+                      <p className="text-[10px] text-muted-foreground">Codes : mon, tue, wed, thu, fri, sat, sun (séparés par virgules)</p>
                     </div>
                   </div>
                 )}
               </WizardStep>
 
-              {/* ÉTAPE 3 : Intervenant — verrouillé tant que 1+2 pas faits */}
+              {/* ÉTAPE 3 : Intervenant */}
               <WizardStep n={3} title="Intervenant" done={!!form.employee_id} disabled={!step1Done || !step2Done}>
                 {!step1Done || !step2Done ? (
                   <div className="text-xs italic text-muted-foreground bg-muted/40 rounded-md p-3 flex items-center gap-2">
                     <MapIcon className="h-3.5 w-3.5" />
-                    Sélectionne le client et les horaires pour voir les intervenants disponibles à proximité.
+                    Sélectionne le client et les horaires pour voir les intervenants disponibles.
                   </div>
                 ) : isRecurring ? (
                   <select value={form.employee_id} onChange={(e) => setForm((f: any) => ({ ...f, employee_id: e.target.value }))}
@@ -714,48 +765,116 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
                     {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
                   </select>
                 ) : (
-                  <div className="space-y-2">
+                  <div>
                     {form.employee_id ? (
-                      <div className="rounded-lg border bg-primary/5 border-primary/30 px-3 py-2 flex items-center justify-between gap-2">
-                        <div className="text-sm font-medium">
-                          {employees.find((e: any) => String(e.id) === form.employee_id)?.full_name ?? "Sélectionné"}
+                      <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-3 py-2.5 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-medium">
+                            {employees.find((e: any) => String(e.id) === form.employee_id)?.full_name ?? "Sélectionné"}
+                          </div>
+                          <div className="text-[10px] text-primary">✓ Affecté à ce RDV</div>
                         </div>
                         <button type="button" onClick={() => setForm((f: any) => ({ ...f, employee_id: "" }))}
-                          className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer">
-                          Changer
+                          className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer underline">
+                          Retirer
                         </button>
                       </div>
                     ) : (
                       <div className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2.5 flex items-center gap-2">
                         <MapIcon className="h-3.5 w-3.5 text-primary" />
-                        Choisis un intervenant dans la carte à droite →
+                        <span>Choisis dans la carte <span className="hidden lg:inline">à droite</span><span className="lg:hidden">ci-dessous</span> ou laisse "À pourvoir"</span>
                       </div>
                     )}
                   </div>
                 )}
               </WizardStep>
 
-              {/* Champ commentaire commun */}
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Commentaire</Label>
-                <Input value={form.comment} onChange={(e) => setForm((f: any) => ({ ...f, comment: e.target.value }))} placeholder="Notes administratives…" />
-              </div>
+              {/* ÉTAPE 4 : Détails */}
+              <WizardStep n={4} title="Détails (facultatif)" done={false} disabled={!step1Done || !step2Done}>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Statut</Label>
+                      <select value={form.status} onChange={(e) => setForm((f: any) => ({ ...f, status: e.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
+                        <option value="planifiee">Planifiée</option>
+                        <option value="a_pourvoir">À pourvoir</option>
+                        <option value="realisee">Terminée</option>
+                        <option value="annulee">Annulée</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Mode transport</Label>
+                      <select value={form.transport_mode} onChange={(e) => setForm((f: any) => ({ ...f, transport_mode: e.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
+                        <option value="">—</option>
+                        <option value="car">Voiture</option>
+                        <option value="bike">Vélo</option>
+                        <option value="walk">À pied</option>
+                        <option value="transit">Transports</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {form.transport_mode === "car" && (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Type véhicule</Label>
+                      <select value={form.vehicle_type} onChange={(e) => setForm((f: any) => ({ ...f, vehicle_type: e.target.value }))}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
+                        <option value="">—</option>
+                        <option value="personal">Véhicule personnel</option>
+                        <option value="company">Véhicule de service</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Toggles facturation / paiement */}
+                  <div className="space-y-1.5 rounded-lg bg-muted/40 p-2.5">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <Checkbox
+                        checked={form.bill_client}
+                        onCheckedChange={(v) => setForm((f: any) => ({ ...f, bill_client: v === true }))}
+                      />
+                      <span className="font-medium">Facturer au client</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <Checkbox
+                        checked={form.is_paid}
+                        onCheckedChange={(v) => setForm((f: any) => ({ ...f, is_paid: v === true }))}
+                      />
+                      <span className="font-medium">Payer l'intervenant</span>
+                    </label>
+                  </div>
+
+                  {/* Commentaires */}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Commentaire admin</Label>
+                    <Input value={form.comment} onChange={(e) => setForm((f: any) => ({ ...f, comment: e.target.value }))} placeholder="Notes visibles par tous les admins…" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Note interne</Label>
+                    <Input value={form.internal_comment} onChange={(e) => setForm((f: any) => ({ ...f, internal_comment: e.target.value }))} placeholder="Note privée (non visible client/intervenant)…" />
+                  </div>
+                </div>
+              </WizardStep>
             </div>
 
-            {/* === COLONNE DROITE : map dispo intervenants === */}
+            {/* === COLONNE DROITE : map dispo intervenants (scrollable indépendamment) === */}
             {showMapPicker && (
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
-                    Choisir l'intervenant sur la carte
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    Cercle vert = zone de recherche
+              <div className="overflow-y-auto p-5 lg:p-6 bg-muted/20">
+                <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+                      Choisir l'intervenant
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Cercle vert = zone de recherche · filtre rayon ↗️
+                    </div>
                   </div>
                 </div>
                 <AvailableEmployeesMap
-                  startDatetime={form.start_datetime}
-                  endDatetime={form.end_datetime}
+                  startDatetime={start_datetime}
+                  endDatetime={end_datetime}
                   clientId={parseInt(form.client_id, 10)}
                   onAssign={(empId) => {
                     setForm((f: any) => ({ ...f, employee_id: String(empId) }));
@@ -765,7 +884,8 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
             )}
           </div>
 
-          <DialogFooter className="mt-5 pt-4 border-t">
+          {/* === FOOTER fixe === */}
+          <DialogFooter className="px-6 py-4 border-t bg-card shrink-0 flex-row gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
             <Button
               type="submit"
@@ -795,18 +915,18 @@ function WizardStep({
 }) {
   const state = disabled ? "disabled" : done ? "done" : "active";
   const styles = {
-    done: { ring: "ring-primary/30", bg: "bg-primary text-primary-foreground", text: "text-foreground" },
-    active: { ring: "ring-primary/50", bg: "bg-gradient-aspha text-white", text: "text-foreground" },
+    done: { ring: "ring-emerald-500/40", bg: "bg-emerald-500 text-white", text: "text-foreground" },
+    active: { ring: "ring-primary/40", bg: "bg-gradient-aspha text-white", text: "text-foreground" },
     disabled: { ring: "ring-border", bg: "bg-muted text-muted-foreground", text: "text-muted-foreground" },
   }[state];
 
   return (
-    <div className={`rounded-xl bg-card ring-1 ${styles.ring} p-3 transition-colors`}>
-      <div className="flex items-start gap-3 mb-2.5">
-        <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold shrink-0 ${styles.bg}`}>
+    <div className={`rounded-xl bg-card shadow-soft ring-1 ${styles.ring} p-4 transition-all`}>
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold shrink-0 ${styles.bg}`}>
           {done && !disabled ? "✓" : n}
         </div>
-        <div className={`text-sm font-medium pt-0.5 ${styles.text}`}>{title}</div>
+        <div className={`text-sm font-semibold tracking-tight ${styles.text}`}>{title}</div>
       </div>
       <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
         {children}

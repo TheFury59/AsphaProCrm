@@ -133,7 +133,7 @@ export function AvailableEmployeesMap({
   const conflictCount = filtered.filter((c: AvailableEmployee) => c.has_conflict).length;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-3 h-[500px]">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] gap-3 h-[min(560px,calc(88vh-260px))] min-h-[400px]">
       {/* === Map === */}
       <div className="rounded-xl overflow-hidden border bg-muted relative">
         <MapContainer center={clientPos} zoom={11} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
