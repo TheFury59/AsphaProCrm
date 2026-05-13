@@ -191,6 +191,8 @@ type InterventionParams = {
   to?: string;
   employee_id?: number;
   client_id?: number;
+  /** Désactive le fetch si false (utile pour exiger un filtre avant requête). */
+  enabled?: boolean;
 };
 
 /**
@@ -249,9 +251,13 @@ export type CalendarEvent = {
  * expansées dans la fenêtre [from, to].
  */
 export function useInterventions(params: InterventionParams = {}) {
+  // Si `enabled` est explicitement passé (false), on respecte. Sinon : fetch si from+to présents.
+  const isEnabled = params.enabled === undefined
+    ? (!!params.from && !!params.to)
+    : (params.enabled && !!params.from && !!params.to);
   return useQuery({
     queryKey: ["interventions", "calendar", params],
-    enabled: !!params.from && !!params.to,
+    enabled: isEnabled,
     queryFn: async () => {
       const qs = new URLSearchParams();
       if (params.from) qs.set("from", params.from);

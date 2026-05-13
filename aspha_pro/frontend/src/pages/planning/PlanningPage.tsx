@@ -32,6 +32,7 @@ import { ContextMenuEvent } from "./ContextMenuEvent";
 import { TripSummaryPanel } from "./TripSummaryPanel";
 import { AvailableEmployeesMap } from "./AvailableEmployeesMap";
 import { EditInterventionDialog } from "./EditInterventionDialog";
+import { EmptyFilterState } from "./EmptyFilterState";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -110,12 +111,19 @@ export function PlanningPage() {
   const { data: clientsData } = useClients({ per_page: 100 });
   const employees = employeesData?.data ?? [];
   const clients = clientsData?.data ?? [];
+
+  // ⚠️ RÈGLE MÉTIER : pas d'affichage "Tous" possible (trop de données).
+  // L'admin doit OBLIGATOIREMENT sélectionner un intervenant OU un client (ou les deux)
+  // pour voir le planning. Sans filtre, on n'appelle pas l'API.
+  const hasFilter = employeeFilter !== null || clientFilter !== null;
+
   const interventions = useInterventions({
     from: window.from,
     to: window.to,
     employee_id: employeeFilter ?? undefined,
     client_id: clientFilter ?? undefined,
-  });
+    enabled: hasFilter,  // ← passé au hook pour conditionner le fetch
+  } as any);
   const update = useUpdateIntervention();
   const del = useDeleteIntervention();
   const createException = useCreateInterventionException();
@@ -296,33 +304,68 @@ export function PlanningPage() {
         }
       />
 
-      {/* Filtres en card 3D */}
-      <div className="flex flex-wrap items-center gap-3 mb-5 px-4 py-3 rounded-2xl bg-card shadow-soft">
-        <div className="flex items-center gap-2">
-          <Label className="text-xs font-medium text-muted-foreground">Intervenant</Label>
-          <select value={employeeFilter ?? ""} onChange={(e) => setEmployeeFilter(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
-            <option value="">Tous</option>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-          </select>
+      {/* Filtres en card 3D — au moins un filtre OBLIGATOIRE */}
+      <div className="mb-5 px-4 py-3 rounded-2xl bg-card shadow-soft">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <Label className="text-xs font-medium text-muted-foreground shrink-0">Intervenant</Label>
+            <select value={employeeFilter ?? ""} onChange={(e) => setEmployeeFilter(e.target.value ? Number(e.target.value) : null)}
+              className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
+              <option value="">— Aucun —</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <Label className="text-xs font-medium text-muted-foreground shrink-0">Client</Label>
+            <select value={clientFilter ?? ""} onChange={(e) => setClientFilter(e.target.value ? Number(e.target.value) : null)}
+              className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
+              <option value="">— Aucun —</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
+            </select>
+          </div>
+          {hasFilter && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setEmployeeFilter(null); setClientFilter(null); }}
+              className="text-xs"
+            >
+              Réinitialiser
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs font-medium text-muted-foreground">Client</Label>
-          <select value={clientFilter ?? ""} onChange={(e) => setClientFilter(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
-            <option value="">Tous</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
-          </select>
-        </div>
-        <div className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md">
-          <Sparkles className="h-3 w-3 text-primary" />
-          Clic droit sur le calendrier pour créer rapidement
-        </div>
+        {hasFilter && (
+          <div className="mt-2 pt-2 border-t flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Sparkles className="h-3 w-3 text-primary" />
+            <span>Filtre actif :</span>
+            {employeeFilter !== null && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium">
+                Intervenant : {employees.find((e) => e.id === employeeFilter)?.full_name}
+                <button type="button" onClick={() => setEmployeeFilter(null)} className="hover:bg-primary/20 rounded px-1 cursor-pointer">×</button>
+              </span>
+            )}
+            {clientFilter !== null && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-700 dark:text-sky-300 font-medium">
+                Client : {clients.find((c) => c.id === clientFilter)?.company?.company_name ?? clients.find((c) => c.id === clientFilter)?.code}
+                <button type="button" onClick={() => setClientFilter(null)} className="hover:bg-sky-500/20 rounded px-1 cursor-pointer">×</button>
+              </span>
+            )}
+            <span className="ml-auto">Clic droit sur le calendrier pour créer rapidement</span>
+          </div>
+        )}
       </div>
 
       {/* Bandeau absences longue durée */}
-      <LongAbsenceBanner from={window.from} to={window.to} />
+      {hasFilter && <LongAbsenceBanner from={window.from} to={window.to} />}
 
+      {!hasFilter ? (
+        <EmptyFilterState
+          employees={employees}
+          clients={clients}
+          onPickEmployee={(id) => setEmployeeFilter(id)}
+          onPickClient={(id) => setClientFilter(id)}
+        />
+      ) : (
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
       <div className="rounded-2xl bg-card shadow-soft p-4 lg:p-5" onContextMenu={handleContextMenu}>
         <FullCalendar
@@ -411,6 +454,7 @@ export function PlanningPage() {
         />
       </div>
       </div>
+      )}
 
       {/* Création */}
       <CreateInterventionDialog
