@@ -283,33 +283,38 @@ export function PlanningPage() {
     <div>
       <PageHeader
         title="Planning"
-        description="Interventions ponctuelles et récurrentes — drag-and-drop pour déplacer"
+        description="Interventions ponctuelles et récurrentes — drag-and-drop pour déplacer, clic droit pour créer rapidement"
         actions={
-          <Button onClick={() => { setSelectedDate(undefined); setCreateMode("ponctuel"); setCreateOpen(true); }}>
+          <Button
+            onClick={() => { setSelectedDate(undefined); setCreateMode("ponctuel"); setCreateOpen(true); }}
+            className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
             Nouvelle intervention
           </Button>
         }
       />
 
-      {/* Filtres */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-md border bg-card">
+      {/* Filtres en card 3D */}
+      <div className="flex flex-wrap items-center gap-3 mb-5 px-4 py-3 rounded-2xl bg-card shadow-soft">
         <div className="flex items-center gap-2">
-          <Label className="text-xs">Intervenant</Label>
+          <Label className="text-xs font-medium text-muted-foreground">Intervenant</Label>
           <select value={employeeFilter ?? ""} onChange={(e) => setEmployeeFilter(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-md border bg-background px-3 py-1.5 text-sm">
+            className="rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
             <option value="">Tous</option>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <Label className="text-xs">Client</Label>
+          <Label className="text-xs font-medium text-muted-foreground">Client</Label>
           <select value={clientFilter ?? ""} onChange={(e) => setClientFilter(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-md border bg-background px-3 py-1.5 text-sm">
+            className="rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
             <option value="">Tous</option>
             {clients.map((c) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
           </select>
         </div>
-        <div className="ml-auto text-xs text-muted-foreground">
+        <div className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md">
+          <Sparkles className="h-3 w-3 text-primary" />
           Clic droit sur le calendrier pour créer rapidement
         </div>
       </div>
@@ -317,8 +322,8 @@ export function PlanningPage() {
       {/* Bandeau absences longue durée */}
       <LongAbsenceBanner from={window.from} to={window.to} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3">
-      <div className="rounded-md border bg-card p-3" onContextMenu={handleContextMenu}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+      <div className="rounded-2xl bg-card shadow-soft p-4 lg:p-5" onContextMenu={handleContextMenu}>
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView="timeGridWeek"

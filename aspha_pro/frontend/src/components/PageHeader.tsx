@@ -10,7 +10,7 @@ type Props = {
 
 export function PageHeader({ title, description, backTo, actions }: Props) {
   return (
-    <div className="flex items-start justify-between mb-6 gap-4 pb-4 border-b">
+    <div className="flex items-start justify-between mb-6 gap-4">
       <div className="min-w-0">
         {backTo && (
           <Link
@@ -20,9 +20,9 @@ export function PageHeader({ title, description, backTo, actions }: Props) {
             <ChevronLeft className="h-3 w-3 mr-1 group-hover:-translate-x-0.5 transition-transform" /> Retour
           </Link>
         )}
-        <h1 className="text-2xl md:text-[28px] font-semibold tracking-tight leading-tight">{title}</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight leading-tight">{title}</h1>
         {description && (
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{description}</p>
+          <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}

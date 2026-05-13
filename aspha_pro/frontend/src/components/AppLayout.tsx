@@ -7,9 +7,9 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="bg-muted/30">
+      <SidebarInset className="bg-gradient-to-br from-muted/40 via-background to-sky-50/30 dark:from-muted/20 dark:via-background dark:to-background min-h-screen">
         <AppTopbar />
-        <main className="flex-1 overflow-auto p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
           <Outlet />
         </main>
       </SidebarInset>
