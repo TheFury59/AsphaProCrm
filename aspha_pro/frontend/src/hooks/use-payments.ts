@@ -82,6 +82,12 @@ export function useCreateInterventionException() {
   return useMutation({
     mutationFn: async ({ parentId, payload }: { parentId: number; payload: any }) =>
       (await api.post(`/interventions/${parentId}/exceptions`, payload)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["interventions"] }),
+    onSuccess: () => {
+      // Invalide tous les caches dépendants pour rafraîchir le calendar
+      // ET les panneaux latéraux (trajets, contrats, absences) en même temps.
+      qc.invalidateQueries({ queryKey: ["interventions"] });
+      qc.invalidateQueries({ queryKey: ["planning"] });
+      qc.invalidateQueries({ queryKey: ["matching"] });
+    },
   });
 }

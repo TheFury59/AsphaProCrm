@@ -271,12 +271,28 @@ export function useInterventions(params: InterventionParams = {}) {
   });
 }
 
+/**
+ * Invalide TOUS les caches dépendants d'une intervention :
+ *  - liste/calendar des interventions
+ *  - "planning/*" : contract-summary, trips, long-absences, available-employees
+ *  - matching (suggestions qui dépendent de la liste des employés)
+ *
+ * Appelé après chaque mutation (create/update/delete/exception) pour que les
+ * panneaux latéraux (Trajets, Contrats, Bandeau absences) se mettent à jour
+ * sans rafraîchir la page.
+ */
+function invalidatePlanningRelated(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["interventions"] });
+  qc.invalidateQueries({ queryKey: ["planning"] });
+  qc.invalidateQueries({ queryKey: ["matching"] });
+}
+
 export function useCreateIntervention() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: Partial<Intervention>) =>
       (await api.post<Single<Intervention>>("/interventions", payload)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["interventions"] }),
+    onSuccess: () => invalidatePlanningRelated(qc),
   });
 }
 
@@ -285,7 +301,7 @@ export function useUpdateIntervention() {
   return useMutation({
     mutationFn: async ({ id, patch }: { id: number; patch: Partial<Intervention> }) =>
       (await api.patch<Single<Intervention>>(`/interventions/${id}`, patch)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["interventions"] }),
+    onSuccess: () => invalidatePlanningRelated(qc),
   });
 }
 
@@ -293,7 +309,7 @@ export function useDeleteIntervention() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await api.delete(`/interventions/${id}`); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["interventions"] }),
+    onSuccess: () => invalidatePlanningRelated(qc),
   });
 }
 
