@@ -711,8 +711,8 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
       <DialogContent
         className={
           showMapPicker
-            ? "w-[96vw] max-w-[1280px] h-[88vh] max-h-[88vh] sm:rounded-2xl p-0 flex flex-col overflow-hidden gap-0"
-            : "w-[96vw] sm:max-w-lg max-h-[88vh] p-0 flex flex-col overflow-hidden gap-0"
+            ? "w-[96vw] sm:!max-w-[1280px] h-[88vh] max-h-[88vh] sm:rounded-2xl p-0 flex flex-col overflow-hidden gap-0"
+            : "w-[96vw] sm:!max-w-lg max-h-[88vh] p-0 flex flex-col overflow-hidden gap-0"
         }
       >
         {/* === HEADER fixe === */}
