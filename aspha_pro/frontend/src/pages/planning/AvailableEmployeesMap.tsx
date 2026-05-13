@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -52,23 +52,34 @@ const RADIUS_OPTIONS = [
  * On calcule donc les bounds manuellement : 1° de latitude ≈ 111 km, et 1° de
  * longitude ≈ 111 km × cos(lat). Suffisant pour fitBounds approximatif.
  */
-function FitToCircle({ center, radiusKm }: { center: [number, number]; radiusKm: number | null }) {
+function FitToCircle({ centerLat, centerLng, radiusKm }: {
+  centerLat: number;
+  centerLng: number;
+  radiusKm: number | null;
+}) {
   const map = useMap();
   useEffect(() => {
-    if (radiusKm) {
-      const km = radiusKm;
-      const latOffset = km / 111;
-      const lngOffset = km / (111 * Math.cos((center[0] * Math.PI) / 180) || 1);
-      const bounds = L.latLngBounds(
-        [center[0] - latOffset, center[1] - lngOffset],
-        [center[0] + latOffset, center[1] + lngOffset],
-      );
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
-    } else {
-      map.setView(center, 10);
+    if (!map) return;  // guard : map pas encore prête
+    try {
+      if (radiusKm) {
+        const km = radiusKm;
+        const latOffset = km / 111;
+        const cosLat = Math.cos((centerLat * Math.PI) / 180);
+        const lngOffset = km / (111 * (cosLat || 1));
+        const bounds = L.latLngBounds(
+          [centerLat - latOffset, centerLng - lngOffset],
+          [centerLat + latOffset, centerLng + lngOffset],
+        );
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+      } else {
+        map.setView([centerLat, centerLng], 10);
+      }
+    } catch (e) {
+      // Si la map n'est pas dans un state stable (transitions du dialog),
+      // on ignore silencieusement plutôt que de crasher la page.
+      console.warn("FitToCircle: skipped fitBounds", e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.join(","), radiusKm]);
+  }, [map, centerLat, centerLng, radiusKm]);
   return null;
 }
 
@@ -130,15 +141,22 @@ export function AvailableEmployeesMap({
     );
   }
 
-  const clientPos: [number, number] = [data.client_address.lat, data.client_address.lng];
+  // Cast en number + stabilisation pour ne pas re-créer un nouveau tuple à
+  // chaque render (sinon MapContainer reçoit un nouveau `center` prop et peut
+  // re-initialiser la map).
+  const lat = Number(data.client_address.lat);
+  const lng = Number(data.client_address.lng);
+  const clientPos = useMemo<[number, number]>(() => [lat, lng], [lat, lng]);
   const candidates = data.candidates;
 
   // Filtre par rayon (côté frontend, sur les distances déjà calculées par le backend)
-  const filtered = candidates.filter((c: AvailableEmployee) => {
+  // ⚠️ distance_km arrive parfois en string (Laravel decimal cast) → cast Number()
+  const filtered = useMemo(() => candidates.filter((c: AvailableEmployee) => {
     if (radiusKm === null) return true;
-    if (c.distance_km === null) return false;  // pas de géo → exclu si filtre rayon actif
-    return c.distance_km <= radiusKm;
-  }).filter((c: AvailableEmployee) => !hideUnavailable || !c.has_conflict);
+    if (c.distance_km === null || c.distance_km === undefined) return false;
+    return Number(c.distance_km) <= radiusKm;
+  }).filter((c: AvailableEmployee) => !hideUnavailable || !c.has_conflict),
+  [candidates, radiusKm, hideUnavailable]);
 
   const availableCount = filtered.filter((c: AvailableEmployee) => !c.has_conflict).length;
   const conflictCount = filtered.filter((c: AvailableEmployee) => c.has_conflict).length;
@@ -149,7 +167,7 @@ export function AvailableEmployeesMap({
       <div className="rounded-xl overflow-hidden border bg-muted relative">
         <MapContainer center={clientPos} zoom={11} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
-          <FitToCircle center={clientPos} radiusKm={radiusKm} />
+          <FitToCircle centerLat={lat} centerLng={lng} radiusKm={radiusKm} />
 
           {/* Cercle de rayon autour du client */}
           {radiusKm && (
@@ -175,14 +193,17 @@ export function AvailableEmployeesMap({
             </Popup>
           </Marker>
 
-          {/* Intervenants */}
-          {filtered.filter((c) => c.employee_lat && c.employee_lng).map((c) => {
+          {/* Intervenants — cast Number() au cas où Laravel renvoie en string */}
+          {filtered.map((c) => {
+            const empLat = c.employee_lat !== null && c.employee_lat !== undefined ? Number(c.employee_lat) : null;
+            const empLng = c.employee_lng !== null && c.employee_lng !== undefined ? Number(c.employee_lng) : null;
+            if (empLat === null || empLng === null || isNaN(empLat) || isNaN(empLng)) return null;
             const isSelected = selected === c.employee_id || hovered === c.employee_id;
             const icon = isSelected ? SELECTED_ICON : (c.has_conflict ? CONFLICT_ICON : AVAILABLE_ICON);
             return (
               <Marker
                 key={c.employee_id}
-                position={[c.employee_lat!, c.employee_lng!]}
+                position={[empLat, empLng]}
                 icon={icon}
                 eventHandlers={{
                   click: () => setSelected(c.employee_id),
