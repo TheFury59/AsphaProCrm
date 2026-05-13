@@ -45,7 +45,7 @@ class ClientController extends Controller
             ])
             ->allowedSorts(['code', 'status', 'created_at'])
             ->defaultSort('-created_at')
-            ->with(['company', 'entity:id,name', 'ownerUser:id,name'])
+            ->with(['company', 'entity:id,name', 'ownerUser:id,name', 'addresses'])
             ->withCount(['missions', 'prestations', 'absences', 'keys', 'invoices', 'quotes']);
 
         return ClientResource::collection($query->paginate($perPage));

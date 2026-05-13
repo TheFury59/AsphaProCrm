@@ -32,7 +32,7 @@ class EmployeeController extends Controller
             ])
             ->allowedSorts(['name', 'classification', 'created_at'])
             ->defaultSort('name')
-            ->with(['user:id,name,email,status', 'entity:id,name', 'ownerUser:id,name', 'currentContract'])
+            ->with(['user:id,name,email,status', 'entity:id,name', 'ownerUser:id,name', 'currentContract', 'addresses'])
             ->withCount(['contracts', 'absences', 'trainings', 'interventions', 'salaryDeductions']);
 
         return EmployeeResource::collection($query->paginate($perPage));
