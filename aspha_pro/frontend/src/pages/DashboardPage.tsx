@@ -4,6 +4,7 @@ import {
   QrCode, Boxes, Sparkles, Map, MessageSquare, Car, LifeBuoy,
   Activity, Zap,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/stores/auth";
 import { useClients } from "@/hooks/use-clients";
 import { useEmployees } from "@/hooks/use-employees";
@@ -16,8 +17,8 @@ const fmt = (d: Date) => d.toISOString().slice(0, 10);
  */
 export function DashboardPage() {
   const { user } = useAuthStore();
-  const { data: clientsData } = useClients({ per_page: 1 });
-  const { data: employeesData } = useEmployees({ per_page: 1 });
+  const { data: clientsData, isLoading: clientsLoading } = useClients({ per_page: 1 });
+  const { data: employeesData, isLoading: empLoading } = useEmployees({ per_page: 1 });
   const today = fmt(new Date());
   const weekFromNow = fmt(new Date(Date.now() + 7 * 86400000));
   const interventions = useInterventions({ from: today, to: weekFromNow });
@@ -77,6 +78,7 @@ export function DashboardPage() {
           to="/clients"
           accent="primary"
           trend="+12% ce mois"
+          loading={clientsLoading}
         />
         <KpiCard
           label="Intervenants"
@@ -85,6 +87,7 @@ export function DashboardPage() {
           to="/intervenants"
           accent="sky"
           trend="3 nouveaux"
+          loading={empLoading}
         />
         <KpiCard
           label="Interventions 7 jours"
@@ -93,6 +96,7 @@ export function DashboardPage() {
           to="/planning"
           accent="orange"
           trend="Cette semaine"
+          loading={interventions.isLoading}
         />
         <KpiCard
           label="Factures ouvertes"
@@ -101,6 +105,7 @@ export function DashboardPage() {
           to="/factures"
           accent="violet"
           trend="En attente"
+          loading={false}
         />
       </div>
 
@@ -167,8 +172,8 @@ const ACCENT_ICON: Record<string, string> = {
   violet: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
 };
 
-function KpiCard({ label, value, icon: Icon, to, accent, trend }: {
-  label: string; value: string; icon: any; to: string; accent: keyof typeof ACCENT_BG; trend: string;
+function KpiCard({ label, value, icon: Icon, to, accent, trend, loading }: {
+  label: string; value: string; icon: any; to: string; accent: keyof typeof ACCENT_BG; trend: string; loading?: boolean;
 }) {
   return (
     <Link to={to} className="group block cursor-pointer">
@@ -181,7 +186,11 @@ function KpiCard({ label, value, icon: Icon, to, accent, trend }: {
         </div>
         <div className="space-y-1">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
-          <div className="text-4xl font-semibold tracking-tight leading-none">{value}</div>
+          {loading ? (
+            <Skeleton className="h-10 w-20 my-1" />
+          ) : (
+            <div className="text-4xl font-semibold tracking-tight leading-none">{value}</div>
+          )}
           <div className="text-xs text-muted-foreground pt-1">{trend}</div>
         </div>
       </div>
