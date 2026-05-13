@@ -88,10 +88,12 @@ class PlanningSummaryController extends Controller
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
 
-        // Absences employés qui chevauchent la fenêtre
+        // Absences employés qui chevauchent la fenêtre.
+        // NOTE : la FK s'appelle `reason_id` (pas `absence_reason_id`).
         $employeeAbsences = \DB::table('employee_absences')
             ->join('employees', 'employees.id', '=', 'employee_absences.employee_id')
-            ->leftJoin('absence_reasons', 'absence_reasons.id', '=', 'employee_absences.absence_reason_id')
+            ->leftJoin('absence_reasons', 'absence_reasons.id', '=', 'employee_absences.reason_id')
+            ->whereNotNull('employee_absences.start_date')
             ->whereDate('employee_absences.start_date', '<=', $to)
             ->where(function ($q) use ($from) {
                 $q->whereNull('employee_absences.end_date')

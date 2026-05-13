@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -44,15 +44,26 @@ const RADIUS_OPTIONS = [
 
 /**
  * Re-fitte la carte pour englober le cercle (client + rayon).
+ *
+ * ⚠️ On NE PAS appeler `L.circle(center).getBounds()` car ce calcul requiert
+ * que le circle soit attaché à une map active avec une projection initialisée
+ * (sinon `layerPointToLatLng undefined` → crash).
+ *
+ * On calcule donc les bounds manuellement : 1° de latitude ≈ 111 km, et 1° de
+ * longitude ≈ 111 km × cos(lat). Suffisant pour fitBounds approximatif.
  */
 function FitToCircle({ center, radiusKm }: { center: [number, number]; radiusKm: number | null }) {
   const map = useMap();
-  useMemo(() => {
+  useEffect(() => {
     if (radiusKm) {
-      // bounds = cercle de rayon km autour du point
-      const radiusM = radiusKm * 1000;
-      const circle = L.circle(center, { radius: radiusM });
-      map.fitBounds(circle.getBounds(), { padding: [40, 40], maxZoom: 13 });
+      const km = radiusKm;
+      const latOffset = km / 111;
+      const lngOffset = km / (111 * Math.cos((center[0] * Math.PI) / 180) || 1);
+      const bounds = L.latLngBounds(
+        [center[0] - latOffset, center[1] - lngOffset],
+        [center[0] + latOffset, center[1] + lngOffset],
+      );
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
     } else {
       map.setView(center, 10);
     }
