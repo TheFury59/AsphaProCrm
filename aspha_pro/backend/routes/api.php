@@ -115,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Phase 3 — Ventes
     Route::apiResource('quotes', QuoteController::class);
     Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);
+    Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice']);
     Route::apiResource('invoices', InvoiceController::class);
     Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
     Route::post('invoices/{invoice}/sync-pennylane', [InvoiceController::class, 'syncPennylane']);

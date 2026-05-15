@@ -76,8 +76,20 @@ export type Intervention = {
   client?: { id: number; code: string } | null;
 };
 
+export type QuoteItem = {
+  id: number;
+  quote_id: number;
+  label: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  item_type: string;
+  order: number;
+};
+
 export type Quote = {
   id: number;
+  reference: string | null;
   client_id: number;
   entity_id: number;
   quote_date: string;
@@ -85,7 +97,12 @@ export type Quote = {
   nature: string | null;
   status: "draft" | "sent" | "accepted" | "refused" | "expired";
   comment: string | null;
-  client?: { id: number; client_companies?: any[] } | null;
+  total: number;
+  success_rate?: number | null;
+  pennylane_id?: string | null;
+  pennylane_synced_at?: string | null;
+  items?: QuoteItem[];
+  client?: { id: number; company?: { company_name?: string | null } | null } | null;
 };
 
 export type Invoice = {
@@ -100,8 +117,11 @@ export type Invoice = {
   payment_status: string;
   total: number;
   comment: string | null;
+  pennylane_id?: string | null;
+  pennylane_synced_at?: string | null;
   invoice_items?: InvoiceItem[];
-  client?: { id: number; client_companies?: any[] } | null;
+  reglement_invoice_lines?: Array<{ id: number; reglement_id: number; allocated_amount: number; reglement?: { id: number; reference: string; operation_date: string; payment_method: string } | null }>;
+  client?: { id: number; company?: { company_name?: string | null } | null } | null;
 };
 
 export type InvoiceItem = {
@@ -343,12 +363,49 @@ export function useQuotes(params: { page?: number; per_page?: number; search?: s
   });
 }
 
+export function useQuote(id: number | null) {
+  return useQuery({
+    queryKey: ["quotes", id],
+    enabled: !!id,
+    queryFn: async () => (await api.get<Single<Quote>>(`/quotes/${id}`)).data.data,
+  });
+}
+
 export function useCreateQuote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: Partial<Quote>) =>
+    mutationFn: async (payload: any) =>
       (await api.post<Single<Quote>>("/quotes", payload)).data.data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["quotes"] }),
+  });
+}
+
+export function useUpdateQuote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: any }) =>
+      (await api.patch<Single<Quote>>(`/quotes/${id}`, patch)).data.data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["quotes"] }),
+  });
+}
+
+export function useDeleteQuote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/quotes/${id}`); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["quotes"] }),
+  });
+}
+
+export function useConvertQuoteToInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (quoteId: number) =>
+      (await api.post<Single<Invoice>>(`/quotes/${quoteId}/convert-to-invoice`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotes"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
   });
 }
 
@@ -356,7 +413,7 @@ export function useCreateQuote() {
 // INVOICES (Phase 3)
 // =========================================================================
 
-export function useInvoices(params: { page?: number; per_page?: number; search?: string; status?: string } = {}) {
+export function useInvoices(params: { page?: number; per_page?: number; search?: string; status?: string; payment_status?: string } = {}) {
   return useQuery({
     queryKey: ["invoices", params],
     queryFn: async () => {
@@ -365,8 +422,17 @@ export function useInvoices(params: { page?: number; per_page?: number; search?:
       if (params.per_page) qs.set("per_page", String(params.per_page));
       if (params.search) qs.set("filter[search]", params.search);
       if (params.status) qs.set("filter[status]", params.status);
+      if (params.payment_status) qs.set("filter[payment_status]", params.payment_status);
       return (await api.get<Paginated<Invoice>>(`/invoices?${qs}`)).data;
     },
+  });
+}
+
+export function useInvoice(id: number | null) {
+  return useQuery({
+    queryKey: ["invoices", id],
+    enabled: !!id,
+    queryFn: async () => (await api.get<Single<Invoice>>(`/invoices/${id}`)).data.data,
   });
 }
 
@@ -375,6 +441,14 @@ export function useCreateInvoice() {
   return useMutation({
     mutationFn: async (payload: any) =>
       (await api.post<Single<Invoice>>("/invoices", payload)).data.data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
+  });
+}
+
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/invoices/${id}`); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });
 }

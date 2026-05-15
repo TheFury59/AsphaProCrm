@@ -14,6 +14,8 @@ class Quote extends Model
     use SoftDeletes, LogsActivity;
 
     protected $fillable = [
+        'reference',
+        'total',
         'client_id',
         'quote_type_id',
         'address_id',
@@ -77,6 +79,7 @@ class Quote extends Model
             'has_night_surcharge' => 'boolean',
             'pennylane_synced_at' => 'datetime',
             'created_at' => 'datetime',
+            'total' => 'decimal:2',
         ];
     }
 
@@ -131,6 +134,11 @@ class Quote extends Model
     public function clientPrestations(): HasMany
     {
         return $this->hasMany(ClientPrestation::class, 'quote_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(QuoteItem::class, 'quote_id')->orderBy('order');
     }
 
 }

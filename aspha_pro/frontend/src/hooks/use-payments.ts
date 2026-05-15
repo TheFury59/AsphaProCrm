@@ -14,22 +14,45 @@ export type Reglement = {
   value_date: string | null;
   description: string | null;
   ventilation_status: "unallocated" | "partial" | "allocated";
-  client?: { id: number; client_companies?: any[] } | null;
-  reglement_invoice_lines?: { id: number; invoice_id: number; allocated_amount: number; invoice?: any }[];
+  client?: { id: number; company?: { company_name?: string | null } | null } | null;
+  reglement_invoice_lines?: { id: number; invoice_id: number; allocated_amount: number; invoice?: { id: number; reference: string; total: number; invoice_date?: string; status?: string; payment_status?: string } | null }[];
 };
 
 type ListResp<T> = { data: T[]; meta?: any };
 type Single<T> = { data: T };
 
-export function useReglements(params: { page?: number; per_page?: number } = {}) {
+export function useReglements(params: { page?: number; per_page?: number; search?: string; payment_method?: string; ventilation_status?: string } = {}) {
   return useQuery({
     queryKey: ["reglements", params],
     queryFn: async () => {
       const qs = new URLSearchParams();
       if (params.page) qs.set("page", String(params.page));
       if (params.per_page) qs.set("per_page", String(params.per_page));
+      if (params.search) qs.set("filter[search]", params.search);
+      if (params.payment_method) qs.set("filter[payment_method]", params.payment_method);
+      if (params.ventilation_status) qs.set("filter[ventilation_status]", params.ventilation_status);
       const res = await api.get<ListResp<Reglement>>(`/reglements?${qs}`);
       return res.data;
+    },
+  });
+}
+
+export function useReglement(id: number | null) {
+  return useQuery({
+    queryKey: ["reglements", id],
+    enabled: !!id,
+    queryFn: async () => (await api.get<Single<Reglement>>(`/reglements/${id}`)).data.data,
+  });
+}
+
+export function useAllocateReglement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ reglementId, invoice_id, amount }: { reglementId: number; invoice_id: number; amount: number }) =>
+      (await api.post(`/reglements/${reglementId}/allocate`, { invoice_id, amount })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reglements"] });
+      qc.invalidateQueries({ queryKey: ["invoices"] });
     },
   });
 }

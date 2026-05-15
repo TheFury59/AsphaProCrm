@@ -22,9 +22,12 @@ class InvoiceController extends Controller
         $query = QueryBuilder::for(Invoice::class)
             ->allowedFilters([
                 'status', 'payment_status', 'client_id', 'entity_id',
-                AllowedFilter::callback('search', fn ($q, $v) =>
-                    $q->where('reference', 'like', "%$v%")
-                ),
+                AllowedFilter::callback('search', function ($q, $v) {
+                    $q->where(function ($qq) use ($v) {
+                        $qq->where('reference', 'like', "%$v%")
+                            ->orWhereHas('client.company', fn ($c) => $c->where('company_name', 'like', "%$v%"));
+                    });
+                }),
             ])
             ->allowedSorts(['invoice_date', 'reference', 'total', 'status'])
             ->defaultSort('-invoice_date')
@@ -36,7 +39,7 @@ class InvoiceController extends Controller
     public function show(Request $request, Invoice $invoice)
     {
         abort_unless($request->user()?->can('sales.invoices.view'), 403);
-        $invoice->load(['client.company', 'invoiceItems']);
+        $invoice->load(['client.company', 'invoiceItems', 'reglementInvoiceLines.reglement']);
         return ['data' => $invoice];
     }
 
@@ -112,6 +115,13 @@ class InvoiceController extends Controller
     public function destroy(Request $request, Invoice $invoice)
     {
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);
+        // Une facture émise (sent) ne peut plus être supprimée — obligation comptable.
+        // On autorise seulement la suppression de brouillons ou annulées (draft / cancelled).
+        if (! in_array($invoice->status, ['draft', 'cancelled'], true)) {
+            return response()->json([
+                'message' => 'Facture émise — non supprimable. Annulez-la d\'abord.',
+            ], 422);
+        }
         $invoice->delete();
         return response()->noContent();
     }

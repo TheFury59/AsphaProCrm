@@ -27,12 +27,20 @@ class ReglementController extends Controller
 
         $query = QueryBuilder::for(Reglement::class)
             ->allowedFilters([
-                'status', 'payment_method', 'client_id', 'entity_id',
-                AllowedFilter::callback('search', fn ($q, $v) => $q->where('reference', 'like', "%$v%")),
+                'status', 'payment_method', 'ventilation_status', 'client_id', 'entity_id',
+                AllowedFilter::callback('search', function ($q, $v) {
+                    $q->where(function ($qq) use ($v) {
+                        $qq->where('reference', 'like', "%$v%")
+                            ->orWhereHas('client.company', fn ($c) => $c->where('company_name', 'like', "%$v%"));
+                    });
+                }),
             ])
             ->allowedSorts(['operation_date', 'amount', 'created_at'])
             ->defaultSort('-operation_date')
-            ->with(['client.company:id,client_id,company_name']);
+            ->with([
+                'client.company:id,client_id,company_name',
+                'reglementInvoiceLines.invoice:id,reference,total',
+            ]);
 
         return ['data' => $query->paginate($perPage)];
     }
@@ -40,7 +48,10 @@ class ReglementController extends Controller
     public function show(Request $request, Reglement $reglement)
     {
         abort_unless($request->user()?->can('sales.payments.record'), 403);
-        $reglement->load(['client.company', 'reglementInvoiceLines.invoice']);
+        $reglement->load([
+            'client.company',
+            'reglementInvoiceLines.invoice:id,reference,total,invoice_date,status,payment_status',
+        ]);
         return ['data' => $reglement];
     }
 
