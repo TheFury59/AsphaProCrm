@@ -67,6 +67,9 @@ class InterventionExpander
                     'client:id,code',
                     'client.company:id,client_id,company_name,phone_mobile,primary_email,manager_first_name,manager_last_name',
                     'client.addresses',
+                    // Eager-load les clés pour afficher un badge 🔑 sur le RDV
+                    // (le client a déjà donné sa clé, l'intervenant doit la récupérer)
+                    'client.keys:id,client_id,label,current_holder',
                     'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
                     'clientPrestation.product:id,name,price,default_duration_minutes',
                     'checkins:id,intervention_id,checkin_time,checkout_time',
@@ -263,6 +266,7 @@ class InterventionExpander
             $mainAddr = $iv->client->relationLoaded('addresses')
                 ? $iv->client->addresses->sortBy(fn ($a) => $a->type === 'intervention' ? 0 : ($a->type === 'main' ? 1 : 2))->first()
                 : null;
+            $keysCount = $iv->client->relationLoaded('keys') ? $iv->client->keys->count() : 0;
             $client = [
                 'id' => $iv->client->id,
                 'code' => $iv->client->code,
@@ -278,6 +282,9 @@ class InterventionExpander
                     'latitude' => $mainAddr->latitude,
                     'longitude' => $mainAddr->longitude,
                 ] : null,
+                // Pour le badge 🔑 sur le RDV planning
+                'keys_count' => $keysCount,
+                'has_keys' => $keysCount > 0,
             ];
         }
 

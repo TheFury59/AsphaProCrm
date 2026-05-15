@@ -12,6 +12,7 @@ import { EmployeeAbsencesTab } from "./tabs/EmployeeAbsencesTab";
 import { EmployeeTrainingsTab } from "./tabs/EmployeeTrainingsTab";
 import { SalaryDeductionsTab } from "./tabs/SalaryDeductionsTab";
 import { ContractFormDialog } from "./tabs/ContractFormDialog";
+import { EmployeePlanningTab } from "./tabs/EmployeePlanningTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -171,7 +172,7 @@ export function EmployeeFichePage() {
         </TabsContent>
 
         <TabsContent value="planning" className="mt-4">
-          <PlaceholderTab title="Planning (interventions assignées)" phase="Voir module Planning" />
+          <EmployeePlanningTab employeeId={employeeId} />
         </TabsContent>
         <TabsContent value="payroll" className="mt-4">
           <SalaryDeductionsTab employeeId={employeeId} />

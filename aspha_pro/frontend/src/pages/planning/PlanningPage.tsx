@@ -406,34 +406,80 @@ export function PlanningPage() {
             const iv = arg.event.extendedProps.intervention;
             const start = new Date(iv.start_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
             const end = new Date(iv.end_datetime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-            // Affichage badge "✓ Pointé" si checkin présent
+
+            // === BADGE BADGEAGE QR avec couleur progressive ===
+            // - Pas de checkin alors que start passé : ⚠ orange foncé (oubli)
+            // - Pas de checkin mais futur : juste icône grise neutre
+            // - Checkin à l'heure (± 5 min) : ✓ vert
+            // - Checkin en retard (5-15 min) : ⏰ orange (retard léger)
+            // - Checkin en très retard (>15 min) : ⏰ rouge
             let badgeNode: React.ReactNode = null;
+            const now = new Date();
+            const startDt = new Date(iv.start_datetime);
+            const isFuture = startDt > now;
+            const isCancelled = iv.status === "annulee";
+
             if (iv.checkin?.checkin_time) {
               const badged = new Date(iv.checkin.checkin_time);
-              const planned = new Date(iv.start_datetime);
-              const lateMin = Math.round((badged.getTime() - planned.getTime()) / 60000);
-              const lateOK = lateMin <= 5;
+              const lateMin = Math.round((badged.getTime() - startDt.getTime()) / 60000);
               const badgeTime = badged.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+              const color = lateMin <= 5 ? "bg-emerald-500/90"
+                : lateMin <= 15 ? "bg-orange-500/90"
+                : "bg-red-500/90";
               badgeNode = (
-                <div className={`text-[9px] mt-0.5 font-medium ${lateOK ? "text-emerald-200" : "text-orange-200"}`}>
-                  ✓ Pointé {badgeTime}
-                  {lateMin > 0 && ` (+${lateMin} min)`}
-                </div>
+                <span className={`inline-flex items-center gap-0.5 ${color} text-white text-[9px] px-1 py-px rounded-sm font-semibold`}>
+                  ✓ {badgeTime}{lateMin > 0 && ` +${lateMin}`}
+                </span>
+              );
+            } else if (!isFuture && !isCancelled) {
+              // RDV passé sans checkin → alerte oubli
+              badgeNode = (
+                <span className="inline-flex items-center gap-0.5 bg-orange-500/90 text-white text-[9px] px-1 py-px rounded-sm font-semibold">
+                  ⚠ Non pointé
+                </span>
               );
             }
+
+            // === BADGE CLÉ ===
+            const keyBadge = iv.client?.has_keys ? (
+              <span className="inline-flex items-center justify-center w-4 h-4 bg-amber-500/90 text-white rounded-sm text-[10px]" title={`${iv.client.keys_count} clé(s) chez ce client`}>
+                🔑
+              </span>
+            ) : null;
+
+            // === BADGE RÉCURRENT ===
+            const recurringBadge = iv.is_recurring ? (
+              <span className="inline-flex items-center justify-center w-4 h-4 bg-violet-500/90 text-white rounded-sm text-[10px]" title="Intervention récurrente">
+                🔁
+              </span>
+            ) : null;
+
+            const clientLabel = iv.client?.company_name ?? iv.client?.code ?? "?";
+            const employeeLabel = iv.employee?.name ?? "À pourvoir";
+
             return (
-              <div className="leading-tight overflow-hidden text-[11px] px-0.5 py-px">
-                <div className="flex items-center gap-1 font-semibold">
-                  {iv.is_recurring && <span>🔁</span>}
-                  <span className="truncate">
-                    {iv.client?.company_name ?? iv.client?.code ?? "?"}
-                  </span>
+              <div className="h-full w-full flex flex-col items-center justify-center text-center overflow-hidden px-1 py-1 gap-0.5">
+                {/* Ligne badges en haut à droite */}
+                {(keyBadge || recurringBadge) && (
+                  <div className="self-end flex items-center gap-0.5 absolute top-0.5 right-0.5">
+                    {recurringBadge}
+                    {keyBadge}
+                  </div>
+                )}
+                {/* Client en gros */}
+                <div className="font-bold text-[13px] leading-tight truncate w-full">
+                  {clientLabel}
                 </div>
-                <div className="truncate opacity-90 font-medium">
-                  {iv.employee?.name ?? "À pourvoir"}
+                {/* Intervenant */}
+                <div className="text-[11px] opacity-95 font-medium leading-tight truncate w-full">
+                  {employeeLabel}
                 </div>
-                <div className="opacity-75 text-[10px]">{start}–{end}</div>
-                {badgeNode}
+                {/* Horaires */}
+                <div className="text-[10px] opacity-80 leading-tight">
+                  {start}–{end}
+                </div>
+                {/* Badge checkin */}
+                {badgeNode && <div className="mt-0.5">{badgeNode}</div>}
               </div>
             );
           }}

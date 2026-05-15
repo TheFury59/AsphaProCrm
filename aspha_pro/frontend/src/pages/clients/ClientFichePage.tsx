@@ -12,6 +12,8 @@ import { ClientAddressesTab } from "./tabs/ClientAddressesTab";
 import { ClientAbsencesTab } from "./tabs/ClientAbsencesTab";
 import { ClientKeysTab } from "./tabs/ClientKeysTab";
 import { ClientPortalTab } from "./tabs/ClientPortalTab";
+import { ClientSalesTab } from "./tabs/ClientSalesTab";
+import { ClientMissionsTab } from "./tabs/ClientMissionsTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 
 export function ClientFichePage() {
@@ -137,10 +139,10 @@ export function ClientFichePage() {
         </TabsContent>
 
         <TabsContent value="missions" className="mt-4">
-          <PlaceholderTab title="Missions & prestations" phase="Phase 3" />
+          <ClientMissionsTab clientId={clientId} />
         </TabsContent>
         <TabsContent value="sales" className="mt-4">
-          <PlaceholderTab title="Devis & factures" phase="Phase 3" />
+          <ClientSalesTab clientId={clientId} />
         </TabsContent>
         <TabsContent value="requests" className="mt-4">
           <ClientPortalTab clientId={clientId} />

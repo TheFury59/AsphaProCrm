@@ -219,6 +219,8 @@ export type CalendarEvent = {
     phone?: string | null;
     email?: string | null;
     address?: { address: string | null; postal_code: string | null; city: string | null } | null;
+    keys_count?: number;
+    has_keys?: boolean;
   } | null;
   employee?: { id: number; name: string } | null;
   comment: string | null;
