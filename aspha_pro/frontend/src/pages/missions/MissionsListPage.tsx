@@ -1,17 +1,21 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Briefcase, Search, Package, FileText, ChevronRight } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Briefcase, Search, Package, FileText, ChevronRight, Plus, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { useClients } from "@/hooks/use-clients";
 import { useAllMissions, type MissionStatus } from "@/hooks/use-missions";
 
 /**
@@ -38,6 +42,7 @@ export function MissionsListPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<MissionStatus | "all">("all");
   const [page, setPage] = useState(1);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { data, isLoading } = useAllMissions({
     page,
@@ -54,7 +59,17 @@ export function MissionsListPage() {
       <PageHeader
         title="Missions"
         description="Vue cross-clients de tous les contrats de service en cours."
+        actions={
+          <Button
+            onClick={() => setPickerOpen(true)}
+            className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+          >
+            <Plus className="h-4 w-4 mr-1.5" /> Nouvelle mission
+          </Button>
+        }
       />
+
+      <ClientPickerDialog open={pickerOpen} onClose={() => setPickerOpen(false)} />
 
       {/* Filtres */}
       <div className="mb-5 px-4 py-3 rounded-2xl bg-card shadow-soft flex flex-wrap items-center gap-3">
@@ -205,5 +220,95 @@ export function MissionsListPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Picker minimal pour choisir le client avant d'ouvrir CreateMissionPage.
+ * Une mission est toujours rattachée à un client (FK client_id), donc on doit
+ * sélectionner ce client AVANT d'arriver sur le formulaire de création.
+ */
+function ClientPickerDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  // `useClients` fait déjà le filtre serveur sur search ; on délègue au backend
+  // plutôt que de paginer 25 clients en local — un grand fichier peut avoir 1000+ clients.
+  const { data, isLoading } = useClients({ per_page: 25, search: q, status: "active" });
+
+  const clients = useMemo(() => data?.data ?? [], [data]);
+
+  const pick = (clientId: number) => {
+    onClose();
+    setQ("");
+    navigate(`/clients/${clientId}/missions/new`);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setQ(""); } }}>
+      <DialogContent className="sm:!max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-primary" />
+            Nouvelle mission — Choisir le client
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Nom, code, SIRET, email…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="pl-9"
+              autoFocus
+            />
+          </div>
+
+          <div className="max-h-72 overflow-y-auto rounded-lg border divide-y">
+            {isLoading && (
+              <div className="p-4 text-xs text-muted-foreground italic">Recherche…</div>
+            )}
+            {!isLoading && clients.length === 0 && (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                Aucun client trouvé.
+              </div>
+            )}
+            {clients.map((c: any) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => pick(c.id)}
+                className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors flex items-center gap-2 group"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {c.company?.company_name ?? c.display_name ?? c.code}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">{c.code}</div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Une mission est toujours rattachée à un client. Choisis-le pour continuer.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => { onClose(); setQ(""); }}>
+            Annuler
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
