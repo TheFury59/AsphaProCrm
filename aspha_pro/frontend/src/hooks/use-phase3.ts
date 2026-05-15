@@ -349,6 +349,30 @@ export function useDeleteIntervention() {
 // QUOTES (Phase 3)
 // =========================================================================
 
+/**
+ * Normalise la réponse pagination Laravel qui arrive double-wrappée :
+ *   - axios body : { data: { current_page, data: [...], total, last_page, per_page, ... } }
+ *     (le wrap externe = `['data' => $paginate]` côté controller ;
+ *      le wrap interne = format paginate() Laravel)
+ * Retour normalisé : { data: T[], meta: { total, current_page, last_page, per_page } }
+ */
+function unwrapPaginated<T>(body: any): { data: T[]; meta: { total: number; current_page: number; last_page: number; per_page: number } } {
+  // Cas 1 : `['data' => paginate]` → body.data = pagination Laravel
+  // Cas 2 : `paginate` directement → body = pagination Laravel
+  const p = body?.data && typeof body.data === "object" && Array.isArray(body.data.data)
+    ? body.data
+    : body;
+  return {
+    data: Array.isArray(p?.data) ? p.data : [],
+    meta: {
+      total: p?.total ?? p?.meta?.total ?? 0,
+      current_page: p?.current_page ?? p?.meta?.current_page ?? 1,
+      last_page: p?.last_page ?? p?.meta?.last_page ?? 1,
+      per_page: p?.per_page ?? p?.meta?.per_page ?? 25,
+    },
+  };
+}
+
 export function useQuotes(params: { page?: number; per_page?: number; search?: string; status?: string } = {}) {
   return useQuery({
     queryKey: ["quotes", params],
@@ -358,7 +382,8 @@ export function useQuotes(params: { page?: number; per_page?: number; search?: s
       if (params.per_page) qs.set("per_page", String(params.per_page));
       if (params.search) qs.set("filter[search]", params.search);
       if (params.status) qs.set("filter[status]", params.status);
-      return (await api.get<Paginated<Quote>>(`/quotes?${qs}`)).data;
+      const res = await api.get<any>(`/quotes?${qs}`);
+      return unwrapPaginated<Quote>(res.data);
     },
   });
 }
@@ -423,7 +448,8 @@ export function useInvoices(params: { page?: number; per_page?: number; search?:
       if (params.search) qs.set("filter[search]", params.search);
       if (params.status) qs.set("filter[status]", params.status);
       if (params.payment_status) qs.set("filter[payment_status]", params.payment_status);
-      return (await api.get<Paginated<Invoice>>(`/invoices?${qs}`)).data;
+      const res = await api.get<any>(`/invoices?${qs}`);
+      return unwrapPaginated<Invoice>(res.data);
     },
   });
 }

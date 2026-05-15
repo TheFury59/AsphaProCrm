@@ -21,6 +21,24 @@ export type Reglement = {
 type ListResp<T> = { data: T[]; meta?: any };
 type Single<T> = { data: T };
 
+/**
+ * Cf. unwrapPaginated dans use-phase3 — même problème de double-wrap.
+ */
+function unwrapPaginated<T>(body: any): { data: T[]; meta: { total: number; current_page: number; last_page: number; per_page: number } } {
+  const p = body?.data && typeof body.data === "object" && Array.isArray(body.data.data)
+    ? body.data
+    : body;
+  return {
+    data: Array.isArray(p?.data) ? p.data : [],
+    meta: {
+      total: p?.total ?? p?.meta?.total ?? 0,
+      current_page: p?.current_page ?? p?.meta?.current_page ?? 1,
+      last_page: p?.last_page ?? p?.meta?.last_page ?? 1,
+      per_page: p?.per_page ?? p?.meta?.per_page ?? 25,
+    },
+  };
+}
+
 export function useReglements(params: { page?: number; per_page?: number; search?: string; payment_method?: string; ventilation_status?: string } = {}) {
   return useQuery({
     queryKey: ["reglements", params],
@@ -31,8 +49,8 @@ export function useReglements(params: { page?: number; per_page?: number; search
       if (params.search) qs.set("filter[search]", params.search);
       if (params.payment_method) qs.set("filter[payment_method]", params.payment_method);
       if (params.ventilation_status) qs.set("filter[ventilation_status]", params.ventilation_status);
-      const res = await api.get<ListResp<Reglement>>(`/reglements?${qs}`);
-      return res.data;
+      const res = await api.get<any>(`/reglements?${qs}`);
+      return unwrapPaginated<Reglement>(res.data);
     },
   });
 }
