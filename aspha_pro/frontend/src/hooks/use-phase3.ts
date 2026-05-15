@@ -245,6 +245,12 @@ export type CalendarEvent = {
     checkin_time: string | null;
     checkout_time: string | null;
   } | null;
+  key_id?: number | null;
+  assigned_key?: { id: number; label: string; current_holder: string | null } | null;
+  client_keys?: Array<{ id: number; label: string; current_holder: string | null }>;
+  internal_comment?: string | null;
+  transport_mode?: string | null;
+  vehicle_type?: string | null;
 };
 
 /**

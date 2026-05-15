@@ -16,6 +16,7 @@ class Intervention extends Model
         'client_id',
         'mission_id',
         'client_prestation_id',
+        'key_id',
         'employee_id',
         'is_recurring',
         'status',
@@ -110,6 +111,15 @@ class Intervention extends Model
     public function clientPrestation(): BelongsTo
     {
         return $this->belongsTo(ClientPrestation::class, 'client_prestation_id');
+    }
+
+    /**
+     * Clé du client utilisée pour cette intervention (nullable — la plupart
+     * des RDV n'en ont pas besoin).
+     */
+    public function key(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Key::class, 'key_id');
     }
 
     public function employee(): BelongsTo

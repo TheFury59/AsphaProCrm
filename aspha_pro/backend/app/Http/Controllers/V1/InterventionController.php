@@ -123,7 +123,7 @@ class InterventionController extends Controller
         abort_unless($request->user()?->can('planning.edit'), 403);
         $data = $this->validateIntervention($request, partial: true);
         $intervention->update($data);
-        $intervention->load(['employee:id,name', 'client:id,code']);
+        $intervention->load(['employee:id,name', 'client:id,code', 'key:id,label,current_holder']);
         return ['data' => $intervention];
     }
 
@@ -196,6 +196,7 @@ class InterventionController extends Controller
             'client_id' => [$req, 'nullable', 'exists:clients,id'],
             'mission_id' => ['nullable', 'exists:missions,id'],
             'client_prestation_id' => ['nullable', 'exists:client_prestations,id'],
+            'key_id' => ['nullable', 'exists:keys,id'],
             // `nullable` IMPÉRATIF : sans lui, envoyer `employee_id: null` (= "À pourvoir")
             // fait échouer la règle `exists` → validation.exists
             'employee_id' => [$opt, 'nullable', 'exists:employees,id'],

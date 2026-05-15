@@ -441,8 +441,14 @@ export function PlanningPage() {
             }
 
             // === BADGE CLÉ ===
-            const keyBadge = iv.client?.has_keys ? (
-              <span className="inline-flex items-center justify-center w-4 h-4 bg-amber-500/90 text-white rounded-sm text-[10px]" title={`${iv.client.keys_count} clé(s) chez ce client`}>
+            // Vert si clé ASSIGNÉE explicitement au RDV (l'intervenant sait laquelle)
+            // Ambre si le client a des clés mais aucune n'est assignée au RDV
+            const keyBadge = iv.assigned_key ? (
+              <span className="inline-flex items-center justify-center w-4 h-4 bg-emerald-500/90 text-white rounded-sm text-[10px]" title={`Clé assignée : ${iv.assigned_key.label}`}>
+                🔑
+              </span>
+            ) : iv.client?.has_keys ? (
+              <span className="inline-flex items-center justify-center w-4 h-4 bg-amber-500/90 text-white rounded-sm text-[10px]" title={`${iv.client.keys_count} clé(s) disponible(s) (aucune assignée)`}>
                 🔑
               </span>
             ) : null;

@@ -1,17 +1,18 @@
 import { useState } from "react";
-import { Sparkles, Trash2, Save } from "lucide-react";
+import { Sparkles, Trash2, Save, KeyRound, CheckCircle, Car } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { useUpdateIntervention, useDeleteIntervention } from "@/hooks/use-phase3";
 import { useCreateInterventionException } from "@/hooks/use-payments";
-import { apiErrorMessage } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 
 const STATUS_LABELS: Record<string, string> = {
   a_pourvoir: "À pourvoir",
@@ -23,31 +24,34 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Convertit une Date / string en valeur de champ datetime-local "YYYY-MM-DDTHH:mm".
+ * Splits une string ISO en {date, time} pour les inputs séparés.
  */
-function toDatetimeLocal(value: string | Date): string {
+function splitDateTime(value: string | Date): { date: string; time: string } {
   const d = value instanceof Date ? value : new Date(value);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 /**
- * Dialog d'ÉDITION d'un RDV existant.
+ * Dialog d'ÉDITION complet d'un RDV existant.
  *
  * Gère 3 cas :
- *  1. Intervention ponctuelle (non récurrente, non exception)
- *     → édition directe du record (PATCH /interventions/{id})
+ *  1. Intervention ponctuelle → PATCH direct
+ *  2. Occurrence virtuelle d'une récurrence → POST /exceptions
+ *  3. Exception déjà existante → PATCH direct
  *
- *  2. Occurrence virtuelle d'une récurrence (is_occurrence: true)
- *     → on ne peut pas modifier la "ligne" car elle n'existe pas en BDD,
- *       il faut créer une EXCEPTION sur la série parent pour cette date précise.
- *       L'exception devient un record concret avec ses propres horaires/statut.
+ * Champs éditables (organisation en 2 colonnes lg+) :
+ *  Col 1 : intervenant, statut, dates+heures séparées
+ *  Col 2 : clé client, transport, véhicule, flags facturation/paiement
+ *  Pleine largeur : commentaires (admin + interne)
  *
- *  3. Exception (is_exception: true, non récurrente, parent_id défini)
- *     → édition directe (PATCH du record exception)
- *
- * Dans tous les cas l'UI est la même : on édite intervenant, statut, horaires,
- * commentaire. Côté soumission on choisit la bonne route.
+ * Actions :
+ *  - Suggérer (matching auto)
+ *  - Supprimer / Supprimer la série
+ *  - Valider le badge manuellement (si RDV passé sans checkin)
  */
 export function EditInterventionDialog({
   intervention, employees, onClose, onSuggest, onDeleted,
@@ -62,37 +66,63 @@ export function EditInterventionDialog({
   const del = useDeleteIntervention();
   const createException = useCreateInterventionException();
 
+  const start = splitDateTime(intervention.start_datetime);
+  const end = splitDateTime(intervention.end_datetime);
+
   const [form, setForm] = useState({
     employee_id: intervention.employee?.id ? String(intervention.employee.id) : "",
     status: intervention.status ?? "planifiee",
-    start_datetime: toDatetimeLocal(intervention.start_datetime),
-    end_datetime: toDatetimeLocal(intervention.end_datetime),
+    start_date: start.date,
+    start_time: start.time,
+    end_date: end.date,
+    end_time: end.time,
+    key_id: intervention.key_id ? String(intervention.key_id) : "",
+    transport_mode: intervention.transport_mode ?? "",
+    vehicle_type: intervention.vehicle_type ?? "",
+    bill_client: intervention.bill_client ?? true,
+    is_paid: intervention.is_paid ?? true,
     comment: intervention.comment ?? "",
+    internal_comment: intervention.internal_comment ?? "",
   });
 
   const isOccurrence = !!intervention.is_occurrence;
   const isException = !!intervention.is_exception;
   const isRecurring = !!intervention.is_recurring;
+  const clientKeys: Array<{ id: number; label: string }> = intervention.client_keys ?? [];
+
+  // RDV passé sans checkin → permet de valider manuellement le badgeage
+  const startDt = new Date(intervention.start_datetime);
+  const isPast = startDt < new Date();
+  const hasCheckin = !!intervention.checkin?.checkin_time;
+  const canValidateBadge = isPast && !hasCheckin && !isOccurrence;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const startDatetime = `${form.start_date}T${form.start_time}:00`;
+    const endDatetime = `${form.end_date}T${form.end_time}:00`;
+
     const payload: any = {
       employee_id: form.employee_id ? parseInt(form.employee_id, 10) : null,
       status: form.status,
-      start_datetime: form.start_datetime + ":00",  // ajoute les secondes
-      end_datetime: form.end_datetime + ":00",
+      start_datetime: startDatetime,
+      end_datetime: endDatetime,
+      key_id: form.key_id ? parseInt(form.key_id, 10) : null,
+      transport_mode: form.transport_mode || null,
+      vehicle_type: form.vehicle_type || null,
+      bill_client: form.bill_client,
+      is_paid: form.is_paid,
       comment: form.comment || null,
+      internal_comment: form.internal_comment || null,
     };
 
     if (isOccurrence) {
-      // Cas 2 : on crée une exception sur la série
       createException.mutate({
         parentId: intervention.intervention_id,
         payload: {
           exception_date: intervention.occurrence_date,
-          start_datetime: form.start_datetime + ":00",
-          end_datetime: form.end_datetime + ":00",
+          start_datetime: startDatetime,
+          end_datetime: endDatetime,
           employee_id: payload.employee_id,
           status: form.status,
           comment: form.comment || null,
@@ -102,7 +132,6 @@ export function EditInterventionDialog({
         onError: (err) => toast.error(apiErrorMessage(err)),
       });
     } else {
-      // Cas 1 et 3 : update direct
       update.mutate({ id: intervention.intervention_id, patch: payload }, {
         onSuccess: () => { toast.success("Intervention modifiée"); onClose(); },
         onError: (err) => toast.error(apiErrorMessage(err)),
@@ -122,99 +151,264 @@ export function EditInterventionDialog({
     });
   };
 
+  const handleValidateBadge = async () => {
+    const reason = prompt(
+      "Motif de la saisie manuelle (obligatoire) :",
+      "Validation administrative — oubli badgeage",
+    );
+    if (!reason) return;
+    try {
+      await api.post("/telemanagement/manual-entry", {
+        intervention_id: intervention.intervention_id,
+        action: "in",
+        scanned_at: `${form.start_date}T${form.start_time}:00`,
+        reason,
+      });
+      toast.success("Badgeage validé manuellement");
+      onClose();  // ferme le dialog, la query sera invalidée par les observers
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e));
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="w-[96vw] sm:!max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="text-xl">
             Modifier le RDV — {intervention.client?.company_name ?? intervention.client?.code ?? "Client"}
           </DialogTitle>
-          <DialogDescription>
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {isRecurring && !isException && <Badge variant="secondary">Série récurrente</Badge>}
-              {isOccurrence && <Badge variant="outline">Occurrence virtuelle</Badge>}
-              {isException && <Badge variant="outline">Exception</Badge>}
-              <Badge>{STATUS_LABELS[intervention.status] ?? intervention.status}</Badge>
+          <DialogDescription asChild>
+            <div className="space-y-2 mt-2">
+              <div className="flex flex-wrap gap-1.5">
+                {isRecurring && !isException && <Badge variant="secondary">Série récurrente</Badge>}
+                {isOccurrence && <Badge variant="outline">Occurrence virtuelle</Badge>}
+                {isException && <Badge variant="outline">Exception</Badge>}
+                <Badge>{STATUS_LABELS[intervention.status] ?? intervention.status}</Badge>
+                {hasCheckin && (
+                  <Badge className="bg-emerald-500 text-white border-0">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Badgé
+                  </Badge>
+                )}
+              </div>
+              {isOccurrence && (
+                <p className="text-xs">
+                  ⚠️ Modifier cette occurrence créera une <strong>exception</strong> sur la série.
+                </p>
+              )}
+              {isRecurring && !isOccurrence && !isException && (
+                <p className="text-xs">
+                  ⚠️ Cette intervention est la <strong>règle de la série</strong>.
+                  Toute modification affectera toutes les futures occurrences.
+                </p>
+              )}
             </div>
-            {isOccurrence && (
-              <p className="mt-2 text-xs">
-                ⚠️ Modifier cette occurrence créera une <strong>exception</strong> sur la série.
-                Les autres occurrences resteront inchangées.
-              </p>
-            )}
-            {isRecurring && !isOccurrence && !isException && (
-              <p className="mt-2 text-xs">
-                ⚠️ Cette intervention est la <strong>règle de la série</strong>. Toute modification
-                affectera toutes les futures occurrences.
-              </p>
-            )}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Intervenant</Label>
-            <select
-              value={form.employee_id}
-              onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9"
-            >
-              <option value="">À pourvoir</option>
-              {employees.map((emp: any) => (
-                <option key={emp.id} value={emp.id}>{emp.full_name}</option>
-              ))}
-            </select>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* ===== COLONNE GAUCHE ===== */}
+            <div className="space-y-3">
+              {/* Intervenant */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Intervenant</Label>
+                <select
+                  value={form.employee_id}
+                  onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                >
+                  <option value="">À pourvoir</option>
+                  {employees.map((emp: any) => (
+                    <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Statut */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Statut</Label>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                >
+                  <option value="a_pourvoir">À pourvoir</option>
+                  <option value="planifiee">Planifiée</option>
+                  <option value="realisee">Terminée</option>
+                  <option value="annulee">Annulée</option>
+                </select>
+              </div>
+
+              {/* Début (date + heure séparées) */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Début</Label>
+                <div className="grid grid-cols-[1fr_110px] gap-2">
+                  <Input
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    required
+                  />
+                  <Input
+                    type="time"
+                    value={form.start_time}
+                    onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Fin (date + heure séparées) */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Fin</Label>
+                <div className="grid grid-cols-[1fr_110px] gap-2">
+                  <Input
+                    type="date"
+                    value={form.end_date}
+                    min={form.start_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    required
+                  />
+                  <Input
+                    type="time"
+                    value={form.end_time}
+                    onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ===== COLONNE DROITE ===== */}
+            <div className="space-y-3">
+              {/* Clé du client */}
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                  <KeyRound className="h-3 w-3" />
+                  Clé à utiliser
+                </Label>
+                {clientKeys.length === 0 ? (
+                  <div className="text-xs italic text-muted-foreground bg-muted/40 rounded-md p-2.5">
+                    Ce client n'a pas de clé enregistrée. Ajouter une clé depuis la fiche client → onglet Clés.
+                  </div>
+                ) : (
+                  <select
+                    value={form.key_id}
+                    onChange={(e) => setForm({ ...form, key_id: e.target.value })}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                  >
+                    <option value="">— Aucune clé —</option>
+                    {clientKeys.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        🔑 {k.label}{(k as any).current_holder ? ` (chez ${(k as any).current_holder})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Mode transport + Type véhicule */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                    <Car className="h-3 w-3" />
+                    Transport
+                  </Label>
+                  <select
+                    value={form.transport_mode}
+                    onChange={(e) => setForm({ ...form, transport_mode: e.target.value })}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                  >
+                    <option value="">—</option>
+                    <option value="car">Voiture</option>
+                    <option value="bike">Vélo</option>
+                    <option value="walk">À pied</option>
+                    <option value="transit">Transports</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Véhicule</Label>
+                  <select
+                    value={form.vehicle_type}
+                    onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
+                    disabled={form.transport_mode !== "car"}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">—</option>
+                    <option value="personal">Perso</option>
+                    <option value="company">Société</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Flags facturation / paiement */}
+              <div className="space-y-1.5 rounded-lg bg-muted/40 p-2.5">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Facturation</Label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <Checkbox
+                    checked={form.bill_client}
+                    onCheckedChange={(v) => setForm({ ...form, bill_client: v === true })}
+                  />
+                  <span className="font-medium">Facturer au client</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <Checkbox
+                    checked={form.is_paid}
+                    onCheckedChange={(v) => setForm({ ...form, is_paid: v === true })}
+                  />
+                  <span className="font-medium">Payer l'intervenant</span>
+                </label>
+                {intervention.is_billed && (
+                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400 pt-1">
+                    ✓ Déjà incluse dans une facture
+                  </div>
+                )}
+              </div>
+
+              {/* Valider badge manuellement */}
+              {canValidateBadge && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400"
+                  onClick={handleValidateBadge}
+                >
+                  <CheckCircle className="mr-1.5 h-3 w-3" />
+                  Valider le badgeage manuellement
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Statut</Label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9"
-            >
-              <option value="a_pourvoir">À pourvoir</option>
-              <option value="planifiee">Planifiée</option>
-              <option value="realisee">Terminée</option>
-              <option value="annulee">Annulée</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Début</Label>
-              <Input
-                type="datetime-local"
-                value={form.start_datetime}
-                onChange={(e) => setForm({ ...form, start_datetime: e.target.value })}
-                required
+          {/* Commentaires pleine largeur */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Commentaire admin</Label>
+              <Textarea
+                rows={2}
+                value={form.comment}
+                onChange={(e) => setForm({ ...form, comment: e.target.value })}
+                placeholder="Notes visibles par tous les admins…"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Fin</Label>
-              <Input
-                type="datetime-local"
-                value={form.end_datetime}
-                onChange={(e) => setForm({ ...form, end_datetime: e.target.value })}
-                required
+            <div className="space-y-1">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Note interne</Label>
+              <Textarea
+                rows={2}
+                value={form.internal_comment}
+                onChange={(e) => setForm({ ...form, internal_comment: e.target.value })}
+                placeholder="Note privée (non visible client/intervenant)…"
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Commentaire</Label>
-            <Textarea
-              rows={2}
-              value={form.comment}
-              onChange={(e) => setForm({ ...form, comment: e.target.value })}
-              placeholder="Observations administrateur…"
-            />
-          </div>
-
-          <DialogFooter className="flex-wrap gap-2">
+          <DialogFooter className="flex-wrap gap-2 pt-3 border-t">
             <Button type="button" variant="default" size="sm" onClick={onSuggest}>
               <Sparkles className="mr-1.5 h-3 w-3" />
-              Suggérer
+              Suggérer un intervenant
             </Button>
             <Button type="button" variant="destructive" size="sm" onClick={handleDelete}>
               <Trash2 className="mr-1.5 h-3 w-3" />
@@ -222,7 +416,11 @@ export function EditInterventionDialog({
             </Button>
             <div className="ml-auto flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-              <Button type="submit" disabled={update.isPending || createException.isPending}>
+              <Button
+                type="submit"
+                disabled={update.isPending || createException.isPending}
+                className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+              >
                 <Save className="mr-1.5 h-3 w-3" />
                 Enregistrer
               </Button>

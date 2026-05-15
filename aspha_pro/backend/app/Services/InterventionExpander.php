@@ -73,6 +73,8 @@ class InterventionExpander
                     'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
                     'clientPrestation.product:id,name,price,default_duration_minutes',
                     'checkins:id,intervention_id,checkin_time,checkout_time',
+                    // Clé assignée à ce RDV (peut différer des autres clés du client)
+                    'key:id,client_id,label,current_holder',
                 ])
                 ->where(function ($q) use ($from, $to) {
                     // Ponctuelles ET exceptions dans la fenêtre
@@ -321,6 +323,27 @@ class InterventionExpander
             ];
         }
 
+        // Clé assignée explicitement à cette intervention (différente de la liste
+        // des clés du client, qui sert au dropdown de sélection dans le dialog)
+        $assignedKey = null;
+        if ($iv->relationLoaded('key') && $iv->key) {
+            $assignedKey = [
+                'id' => $iv->key->id,
+                'label' => $iv->key->label,
+                'current_holder' => $iv->key->current_holder,
+            ];
+        }
+
+        // Liste des clés du client (pour le dropdown du dialog d'édition)
+        $clientKeys = [];
+        if ($iv->relationLoaded('client') && $iv->client && $iv->client->relationLoaded('keys')) {
+            $clientKeys = $iv->client->keys->map(fn ($k) => [
+                'id' => $k->id,
+                'label' => $k->label,
+                'current_holder' => $k->current_holder,
+            ])->values();
+        }
+
         return [
             'id' => $isOccurrence ? "{$iv->id}-{$dateKey}" : (string) $iv->id,
             'intervention_id' => $iv->id,
@@ -353,6 +376,12 @@ class InterventionExpander
 
             'prestation' => $prestation,
             'checkin' => $checkin,
+
+            // Clé assignée à cette intervention + liste des clés disponibles du client
+            'key_id' => $iv->key_id,
+            'assigned_key' => $assignedKey,
+            'client_keys' => $clientKeys,
+            'internal_comment' => $iv->internal_comment,
         ];
     }
 }
