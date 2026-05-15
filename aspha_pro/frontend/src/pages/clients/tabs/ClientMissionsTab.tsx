@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -22,7 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  useClientMissions, useCreateMission, useDeleteMission,
+  useClientMissions, useDeleteMission,
   useCreatePrestation, useDeletePrestation,
   type Mission, type Prestation, type MissionStatus,
 } from "@/hooks/use-missions";
@@ -37,7 +38,6 @@ import { useProducts } from "@/hooks/use-products";
  */
 export function ClientMissionsTab({ clientId }: { clientId: number }) {
   const { data: missions = [], isLoading } = useClientMissions(clientId);
-  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <Card>
@@ -46,15 +46,12 @@ export function ClientMissionsTab({ clientId }: { clientId: number }) {
           <Briefcase className="h-4 w-4 text-primary" />
           Missions du client ({missions.length})
         </CardTitle>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1">
-              <Plus className="h-3.5 w-3.5" />
-              Nouvelle mission
-            </Button>
-          </DialogTrigger>
-          <CreateMissionDialog clientId={clientId} onClose={() => setCreateOpen(false)} />
-        </Dialog>
+        <Link to={`/clients/${clientId}/missions/new`}>
+          <Button size="sm" className="gap-1">
+            <Plus className="h-3.5 w-3.5" />
+            Nouvelle mission
+          </Button>
+        </Link>
       </CardHeader>
 
       <CardContent className="p-3 space-y-2">
@@ -290,132 +287,9 @@ function PrestationRow({
   );
 }
 
-// =========================================================================
-// CREATE MISSION DIALOG
-// =========================================================================
-
-function CreateMissionDialog({
-  clientId,
-  onClose,
-}: {
-  clientId: number;
-  onClose: () => void;
-}) {
-  const createMission = useCreateMission(clientId);
-  const [form, setForm] = useState({
-    name: "",
-    status: "active" as MissionStatus,
-    billing_rhythm: "",
-    payment_methods: "",
-    no_intervention_no_bill: false,
-    online_payment_enabled: false,
-  });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    try {
-      await createMission.mutateAsync({
-        name: form.name.trim(),
-        status: form.status,
-        billing_rhythm: form.billing_rhythm || null,
-        payment_methods: form.payment_methods || null,
-        no_intervention_no_bill: form.no_intervention_no_bill,
-        online_payment_enabled: form.online_payment_enabled,
-      });
-      toast.success("Mission créée");
-      onClose();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message ?? "Création impossible");
-    }
-  };
-
-  return (
-    <DialogContent className="sm:!max-w-lg">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Briefcase className="h-4 w-4 text-primary" />
-          Nouvelle mission
-        </DialogTitle>
-      </DialogHeader>
-
-      <form onSubmit={handleSubmit} className="space-y-3 py-2">
-        <div>
-          <Label htmlFor="name" className="text-xs">Nom de la mission *</Label>
-          <Input
-            id="name"
-            placeholder="Ex: Ménage hebdomadaire — M. Dupont"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            autoFocus
-            required
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Statut</Label>
-            <Select
-              value={form.status}
-              onValueChange={(v) => setForm({ ...form, status: v as MissionStatus })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="suspended">Suspendue</SelectItem>
-                <SelectItem value="cancelled">Annulée</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label className="text-xs">Rythme de facturation</Label>
-            <Input
-              placeholder="Ex: mensuel"
-              value={form.billing_rhythm}
-              onChange={(e) => setForm({ ...form, billing_rhythm: e.target.value })}
-            />
-          </div>
-        </div>
-
-        <div>
-          <Label className="text-xs">Modes de paiement acceptés</Label>
-          <Input
-            placeholder="Ex: CB, SEPA, CESU"
-            value={form.payment_methods}
-            onChange={(e) => setForm({ ...form, payment_methods: e.target.value })}
-          />
-        </div>
-
-        <div className="flex items-center gap-4 text-xs">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={form.no_intervention_no_bill}
-              onChange={(e) => setForm({ ...form, no_intervention_no_bill: e.target.checked })}
-            />
-            Pas d'intervention = pas de facturation
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={form.online_payment_enabled}
-              onChange={(e) => setForm({ ...form, online_payment_enabled: e.target.checked })}
-            />
-            Paiement en ligne
-          </label>
-        </div>
-
-        <DialogFooter className="pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={createMission.isPending || !form.name.trim()}>
-            {createMission.isPending ? "Création…" : "Créer la mission"}
-          </Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
-  );
-}
+// Note : la création d'une mission a été extraite en page complète
+// (CreateMissionPage à /clients/:id/missions/new) pour coller au flow Xelya
+// — 1 page = mission + prestations en batch. Cf. lessons.md 2026-05-15.
 
 // =========================================================================
 // ADD PRESTATION DIALOG

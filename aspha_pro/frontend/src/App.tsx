@@ -9,6 +9,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { ClientsListPage } from "@/pages/clients/ClientsListPage";
 import { ClientFichePage } from "@/pages/clients/ClientFichePage";
+import { CreateMissionPage } from "@/pages/clients/CreateMissionPage";
 import { EmployeesListPage } from "@/pages/employees/EmployeesListPage";
 import { EmployeeFichePage } from "@/pages/employees/EmployeeFichePage";
 import { ProductsListPage } from "@/pages/products/ProductsListPage";
@@ -101,6 +102,7 @@ export default function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/clients" element={<ClientsListPage />} />
               <Route path="/clients/:id" element={<ClientFichePage />} />
+              <Route path="/clients/:id/missions/new" element={<CreateMissionPage />} />
               <Route path="/intervenants" element={<EmployeesListPage />} />
               <Route path="/intervenants/:id" element={<EmployeeFichePage />} />
               <Route path="/prestations" element={<ProductsListPage />} />

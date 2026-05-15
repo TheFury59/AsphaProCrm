@@ -78,12 +78,59 @@ export function useMission(missionId: number | null) {
   });
 }
 
+/**
+ * Payload de création d'une prestation dans le batch create d'une mission.
+ * Les champs IDs (mission_id, client_id) sont injectés côté serveur.
+ */
+export type PrestationDraft = {
+  product_id?: number | null;
+  label: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  billing_type?: "hourly" | "forfait" | "frais" | "remise" | "carte" | "exceptional" | null;
+  pricing_type?: "default" | "custom" | null;
+  custom_price?: number | null;
+  base_price?: number | null;
+  no_intervention_no_bill?: boolean;
+};
+
+/**
+ * Payload de création de mission complète (Xelya-style) :
+ * 1 page → 1 mission + N prestations contractualisées en une seule requête.
+ */
+export type CreateMissionPayload = Partial<Mission> & {
+  prestations?: PrestationDraft[];
+};
+
 export function useCreateMission(clientId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: Partial<Mission>) =>
+    mutationFn: async (payload: CreateMissionPayload) =>
       (await api.post<SingleResponse<Mission>>(`/clients/${clientId}/missions`, payload)).data.data,
     onSuccess: () => invalidateMissionCascade(qc, clientId),
+  });
+}
+
+/**
+ * Devis du client (pour les sélecteurs : rattacher une mission à un devis).
+ * Tape directement le filtre Spatie `filter[client_id]` sur /quotes.
+ */
+export function useClientQuotes(clientId: number) {
+  return useQuery({
+    queryKey: ["client", clientId, "quotes"],
+    queryFn: async () => {
+      const res = await api.get(`/quotes?filter[client_id]=${clientId}&per_page=100`);
+      // Le controller Quote renvoie ['data' => $paginate] → on dé-wrap
+      const body: any = res.data;
+      return (body?.data?.data ?? body?.data ?? []) as Array<{
+        id: number;
+        reference: string | null;
+        quote_date: string;
+        status: string;
+        total: number;
+      }>;
+    },
+    enabled: !!clientId,
   });
 }
 

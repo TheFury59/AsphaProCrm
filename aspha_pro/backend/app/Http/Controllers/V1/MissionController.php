@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\ClientPrestation;
 use App\Models\Mission;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Missions client + prestations contractualisées rattachées.
@@ -52,9 +53,41 @@ class MissionController extends Controller
             'payment_methods' => ['nullable', 'string', 'max:255'],
             'online_payment_enabled' => ['nullable', 'boolean'],
             'billing_rhythm' => ['nullable', 'string', 'max:64'],
+
+            // Création en batch : on accepte une liste de prestations à attacher
+            // à la mission dès sa création (flow Xelya : 1 page = 1 mission + N prestations)
+            'prestations' => ['nullable', 'array'],
+            'prestations.*.product_id' => ['nullable', 'exists:products,id'],
+            'prestations.*.label' => ['required_with:prestations', 'string', 'max:255'],
+            'prestations.*.start_date' => ['nullable', 'date'],
+            'prestations.*.end_date' => ['nullable', 'date', 'after_or_equal:prestations.*.start_date'],
+            'prestations.*.billing_type' => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
+            'prestations.*.pricing_type' => ['nullable', 'in:default,custom'],
+            'prestations.*.custom_price' => ['nullable', 'numeric', 'min:0'],
+            'prestations.*.base_price' => ['nullable', 'numeric', 'min:0'],
+            'prestations.*.no_intervention_no_bill' => ['nullable', 'boolean'],
         ]);
         $data['status'] = $data['status'] ?? 'active';
-        $mission = $client->missions()->create($data);
+        $prestations = $data['prestations'] ?? [];
+        unset($data['prestations']);
+
+        $mission = DB::transaction(function () use ($client, $data, $prestations) {
+            $mission = $client->missions()->create($data);
+
+            foreach ($prestations as $p) {
+                // Auto-fill base_price depuis le produit catalogue si pricing_type=default
+                if (($p['pricing_type'] ?? 'default') === 'default' && ! empty($p['product_id']) && empty($p['base_price'])) {
+                    $product = \App\Models\Product::find($p['product_id']);
+                    $p['base_price'] = $product?->price;
+                }
+                $p['mission_id'] = $mission->id;
+                $p['client_id'] = $client->id;
+                ClientPrestation::create($p);
+            }
+
+            return $mission;
+        });
+
         return response()->json(['data' => $mission->load('clientPrestations.product')], 201);
     }
 
