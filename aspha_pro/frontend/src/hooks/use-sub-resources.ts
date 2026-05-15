@@ -137,12 +137,25 @@ export function useClientContacts(clientId: number) {
   });
 }
 
+/**
+ * Helper d'invalidation : toute mutation contact/address d'un client doit
+ * aussi invalider le feed planning car le RDV embarque ces infos
+ * (téléphone, email, adresse géocodée…). Sinon le calendrier reste stale
+ * après une mise à jour client tant qu'on ne rafraîchit pas la page.
+ */
+function invalidateClientCascade(qc: ReturnType<typeof useQueryClient>, clientId: number, subKey: string) {
+  qc.invalidateQueries({ queryKey: ["client", clientId, subKey] });
+  qc.invalidateQueries({ queryKey: ["clients"] });
+  qc.invalidateQueries({ queryKey: ["interventions"] });
+  qc.invalidateQueries({ queryKey: ["planning"] });
+}
+
 export function useCreateClientContact(clientId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: Partial<Contact>) =>
       (await api.post<SingleResponse<Contact>>(`/clients/${clientId}/contacts`, payload)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "contacts"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "contacts"),
   });
 }
 
@@ -150,7 +163,7 @@ export function useDeleteClientContact(clientId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await api.delete(`/clients/${clientId}/contacts/${id}`); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "contacts"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "contacts"),
   });
 }
 
@@ -167,7 +180,7 @@ export function useCreateClientRelated(clientId: number) {
   return useMutation({
     mutationFn: async (payload: Partial<RelatedContact>) =>
       (await api.post<SingleResponse<RelatedContact>>(`/clients/${clientId}/related-contacts`, payload)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "related-contacts"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "related-contacts"),
   });
 }
 
@@ -175,7 +188,7 @@ export function useDeleteClientRelated(clientId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await api.delete(`/clients/${clientId}/related-contacts/${id}`); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "related-contacts"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "related-contacts"),
   });
 }
 
@@ -192,7 +205,7 @@ export function useCreateClientAddress(clientId: number) {
   return useMutation({
     mutationFn: async (payload: Partial<Address>) =>
       (await api.post<SingleResponse<Address>>(`/clients/${clientId}/addresses`, payload)).data.data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "addresses"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "addresses"),
   });
 }
 
@@ -200,7 +213,33 @@ export function useDeleteClientAddress(clientId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await api.delete(`/clients/${clientId}/addresses/${id}`); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "addresses"] }),
+    onSuccess: () => invalidateClientCascade(qc, clientId, "addresses"),
+  });
+}
+
+/**
+ * Update partiel d'une adresse client (manquait — utile pour les
+ * EditableField sur la fiche). Invalide aussi le planning car le calendar
+ * embarque les adresses géocodées.
+ */
+export function useUpdateClientAddress(clientId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<Address> }) =>
+      (await api.patch<SingleResponse<Address>>(`/clients/${clientId}/addresses/${id}`, patch)).data.data,
+    onSuccess: () => invalidateClientCascade(qc, clientId, "addresses"),
+  });
+}
+
+/**
+ * Update partiel d'un contact client. Idem cascade planning.
+ */
+export function useUpdateClientContact(clientId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<Contact> }) =>
+      (await api.patch<SingleResponse<Contact>>(`/clients/${clientId}/contacts/${id}`, patch)).data.data,
+    onSuccess: () => invalidateClientCascade(qc, clientId, "contacts"),
   });
 }
 

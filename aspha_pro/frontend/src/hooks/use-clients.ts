@@ -57,6 +57,10 @@ export function useUpdateClient() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.id] });
+      // Le calendar embarque company.phone_mobile / primary_email / manager_*
+      // → invalider pour refléter immédiatement les modifs dans les RDV
+      qc.invalidateQueries({ queryKey: ["interventions"] });
+      qc.invalidateQueries({ queryKey: ["planning"] });
     },
   });
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Trash2, Save, KeyRound, CheckCircle, Car } from "lucide-react";
+import { Sparkles, Trash2, Save, KeyRound, CheckCircle, Car, MapPin, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +77,8 @@ export function EditInterventionDialog({
     end_date: end.date,
     end_time: end.time,
     key_id: intervention.key_id ? String(intervention.key_id) : "",
+    address_id: intervention.address_id ? String(intervention.address_id) : "",
+    contact_id: intervention.contact_id ? String(intervention.contact_id) : "",
     transport_mode: intervention.transport_mode ?? "",
     vehicle_type: intervention.vehicle_type ?? "",
     bill_client: intervention.bill_client ?? true,
@@ -89,6 +91,10 @@ export function EditInterventionDialog({
   const isException = !!intervention.is_exception;
   const isRecurring = !!intervention.is_recurring;
   const clientKeys: Array<{ id: number; label: string }> = intervention.client_keys ?? [];
+  const clientAddresses: Array<{ id: number; type: string; address: string | null; city: string | null }> =
+    intervention.client?.all_addresses ?? [];
+  const clientContacts: Array<{ id: number; first_name: string | null; last_name: string | null; phone: string | null; email: string | null }> =
+    intervention.client?.all_contacts ?? [];
 
   // RDV passé sans checkin → permet de valider manuellement le badgeage
   const startDt = new Date(intervention.start_datetime);
@@ -108,6 +114,8 @@ export function EditInterventionDialog({
       start_datetime: startDatetime,
       end_datetime: endDatetime,
       key_id: form.key_id ? parseInt(form.key_id, 10) : null,
+      address_id: form.address_id ? parseInt(form.address_id, 10) : null,
+      contact_id: form.contact_id ? parseInt(form.contact_id, 10) : null,
       transport_mode: form.transport_mode || null,
       vehicle_type: form.vehicle_type || null,
       bill_client: form.bill_client,
@@ -308,6 +316,54 @@ export function EditInterventionDialog({
                   </select>
                 )}
               </div>
+
+              {/* Adresse spécifique (si client en a plusieurs) */}
+              {clientAddresses.length > 1 && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    Adresse d'intervention
+                  </Label>
+                  <select
+                    value={form.address_id}
+                    onChange={(e) => setForm({ ...form, address_id: e.target.value })}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                  >
+                    <option value="">Adresse par défaut du client</option>
+                    {clientAddresses.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        [{a.type}] {a.address}{a.city ? ` — ${a.city}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Contact spécifique (si client en a au moins 1) */}
+              {clientContacts.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    Contact à joindre
+                  </Label>
+                  <select
+                    value={form.contact_id}
+                    onChange={(e) => setForm({ ...form, contact_id: e.target.value })}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer"
+                  >
+                    <option value="">Contact société par défaut</option>
+                    {clientContacts.map((c) => {
+                      const name = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "(sans nom)";
+                      const info = [c.phone, c.email].filter(Boolean).join(" · ");
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {name}{info ? ` — ${info}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
 
               {/* Mode transport + Type véhicule */}
               <div className="grid grid-cols-2 gap-2">

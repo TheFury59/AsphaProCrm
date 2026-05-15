@@ -17,6 +17,8 @@ class Intervention extends Model
         'mission_id',
         'client_prestation_id',
         'key_id',
+        'address_id',
+        'contact_id',
         'employee_id',
         'is_recurring',
         'status',
@@ -120,6 +122,24 @@ class Intervention extends Model
     public function key(): BelongsTo
     {
         return $this->belongsTo(\App\Models\Key::class, 'key_id');
+    }
+
+    /**
+     * Adresse spécifique du client où se déroule cette intervention (utile
+     * quand le client a plusieurs adresses : siège, intervention secondaire…).
+     */
+    public function address(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Address::class, 'address_id');
+    }
+
+    /**
+     * Contact spécifique pour cette intervention (joint plutôt que le contact
+     * entreprise par défaut — pour ex. demander un proche, le tuteur, etc.).
+     */
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Contact::class, 'contact_id');
     }
 
     public function employee(): BelongsTo

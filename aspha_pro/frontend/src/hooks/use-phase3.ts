@@ -218,9 +218,11 @@ export type CalendarEvent = {
     last_name?: string | null;
     phone?: string | null;
     email?: string | null;
-    address?: { address: string | null; postal_code: string | null; city: string | null } | null;
+    address?: { id?: number; type?: string; address: string | null; postal_code: string | null; city: string | null; latitude?: number | null; longitude?: number | null } | null;
     keys_count?: number;
     has_keys?: boolean;
+    all_addresses?: Array<{ id: number; type: string; address: string | null; city: string | null; postal_code: string | null; latitude: number | null; longitude: number | null }>;
+    all_contacts?: Array<{ id: number; first_name: string | null; last_name: string | null; phone: string | null; email: string | null; role: string | null }>;
   } | null;
   employee?: { id: number; name: string } | null;
   comment: string | null;
@@ -248,6 +250,8 @@ export type CalendarEvent = {
   key_id?: number | null;
   assigned_key?: { id: number; label: string; current_holder: string | null } | null;
   client_keys?: Array<{ id: number; label: string; current_holder: string | null }>;
+  address_id?: number | null;
+  contact_id?: number | null;
   internal_comment?: string | null;
   transport_mode?: string | null;
   vehicle_type?: string | null;

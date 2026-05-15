@@ -67,14 +67,16 @@ class InterventionExpander
                     'client:id,code',
                     'client.company:id,client_id,company_name,phone_mobile,primary_email,manager_first_name,manager_last_name',
                     'client.addresses',
+                    'client.contacts',  // pour dropdown contact dans dialog
                     // Eager-load les clés pour afficher un badge 🔑 sur le RDV
-                    // (le client a déjà donné sa clé, l'intervenant doit la récupérer)
                     'client.keys:id,client_id,label,current_holder',
                     'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
                     'clientPrestation.product:id,name,price,default_duration_minutes',
                     'checkins:id,intervention_id,checkin_time,checkout_time',
-                    // Clé assignée à ce RDV (peut différer des autres clés du client)
+                    // Clé / adresse / contact ASSIGNÉS à ce RDV (peut différer du défaut)
                     'key:id,client_id,label,current_holder',
+                    'address',
+                    'contact',
                 ])
                 ->where(function ($q) use ($from, $to) {
                     // Ponctuelles ET exceptions dans la fenêtre
@@ -261,32 +263,79 @@ class InterventionExpander
         $endC = $end instanceof CarbonImmutable ? $end : Carbon::parse($end);
         $dateKey = $startC->format('Ymd');
 
-        // Client + entreprise + adresse principale
+        // Client + entreprise + adresse + contact (priorité aux assignés au RDV)
         $client = null;
         if ($iv->relationLoaded('client') && $iv->client) {
             $company = $iv->client->relationLoaded('company') ? $iv->client->company : null;
-            $mainAddr = $iv->client->relationLoaded('addresses')
-                ? $iv->client->addresses->sortBy(fn ($a) => $a->type === 'intervention' ? 0 : ($a->type === 'main' ? 1 : 2))->first()
-                : null;
+
+            // === ADRESSE EFFECTIVE ===
+            // Priorité 1 : adresse assignée explicitement à ce RDV (intervention.address_id)
+            // Priorité 2 : adresse "intervention" du client
+            // Priorité 3 : adresse "main" du client
+            // Priorité 4 : 1ère adresse trouvée
+            $effectiveAddr = $iv->relationLoaded('address') && $iv->address
+                ? $iv->address
+                : ($iv->client->relationLoaded('addresses')
+                    ? $iv->client->addresses->sortBy(fn ($a) => $a->type === 'intervention' ? 0 : ($a->type === 'main' ? 1 : 2))->first()
+                    : null);
+
+            // === CONTACT EFFECTIF ===
+            // Priorité 1 : contact assigné au RDV (intervention.contact_id)
+            // Priorité 2 : champs company (téléphone société, email, nom du gérant)
+            $effectiveContact = $iv->relationLoaded('contact') && $iv->contact ? $iv->contact : null;
+            $phone = $effectiveContact?->phone ?? $company?->phone_mobile;
+            $email = $effectiveContact?->email ?? $company?->primary_email;
+            $firstName = $effectiveContact?->first_name ?? $company?->manager_first_name;
+            $lastName = $effectiveContact?->last_name ?? $company?->manager_last_name;
+
             $keysCount = $iv->client->relationLoaded('keys') ? $iv->client->keys->count() : 0;
+
+            // Liste de toutes les adresses + tous les contacts du client (pour dropdowns dialog)
+            $allAddresses = $iv->client->relationLoaded('addresses')
+                ? $iv->client->addresses->map(fn ($a) => [
+                    'id' => $a->id,
+                    'type' => $a->type,
+                    'address' => $a->address,
+                    'city' => $a->city,
+                    'postal_code' => $a->postal_code,
+                    'latitude' => $a->latitude,
+                    'longitude' => $a->longitude,
+                ])->values()
+                : collect();
+            $allContacts = $iv->client->relationLoaded('contacts')
+                ? $iv->client->contacts->map(fn ($c) => [
+                    'id' => $c->id,
+                    'first_name' => $c->first_name,
+                    'last_name' => $c->last_name,
+                    'phone' => $c->phone,
+                    'email' => $c->email,
+                    'role' => $c->role ?? null,
+                ])->values()
+                : collect();
+
             $client = [
                 'id' => $iv->client->id,
                 'code' => $iv->client->code,
                 'company_name' => $company?->company_name,
-                'first_name' => $company?->manager_first_name,
-                'last_name' => $company?->manager_last_name,
-                'phone' => $company?->phone_mobile,
-                'email' => $company?->primary_email,
-                'address' => $mainAddr ? [
-                    'address' => $mainAddr->address,
-                    'postal_code' => $mainAddr->postal_code,
-                    'city' => $mainAddr->city,
-                    'latitude' => $mainAddr->latitude,
-                    'longitude' => $mainAddr->longitude,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'phone' => $phone,
+                'email' => $email,
+                'address' => $effectiveAddr ? [
+                    'id' => $effectiveAddr->id,
+                    'type' => $effectiveAddr->type,
+                    'address' => $effectiveAddr->address,
+                    'postal_code' => $effectiveAddr->postal_code,
+                    'city' => $effectiveAddr->city,
+                    'latitude' => $effectiveAddr->latitude,
+                    'longitude' => $effectiveAddr->longitude,
                 ] : null,
                 // Pour le badge 🔑 sur le RDV planning
                 'keys_count' => $keysCount,
                 'has_keys' => $keysCount > 0,
+                // Tous les choix possibles pour les dropdowns de modification
+                'all_addresses' => $allAddresses,
+                'all_contacts' => $allContacts,
             ];
         }
 
@@ -377,10 +426,12 @@ class InterventionExpander
             'prestation' => $prestation,
             'checkin' => $checkin,
 
-            // Clé assignée à cette intervention + liste des clés disponibles du client
+            // Clé / adresse / contact assignés au RDV
             'key_id' => $iv->key_id,
             'assigned_key' => $assignedKey,
             'client_keys' => $clientKeys,
+            'address_id' => $iv->address_id,
+            'contact_id' => $iv->contact_id,
             'internal_comment' => $iv->internal_comment,
         ];
     }
