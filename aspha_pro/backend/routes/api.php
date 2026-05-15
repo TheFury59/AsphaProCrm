@@ -15,6 +15,7 @@ use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
+use App\Http\Controllers\V1\MissionController;
 use App\Http\Controllers\V1\NotificationController;
 use App\Http\Controllers\V1\PermissionsController;
 use App\Http\Controllers\V1\PlanningSummaryController;
@@ -66,6 +67,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('keys/{keyId}', 'updateKey'); Route::delete('keys/{keyId}', 'destroyKey');
         Route::get('keys/{keyId}/movements', 'listKeyMovements'); Route::post('keys/{keyId}/movements', 'storeKeyMovement');
     });
+
+    // === Missions client + Prestations contractualisées ===
+    // Hiérarchie : Client → Missions → Prestations → Devis/Factures
+    Route::get('clients/{client}/missions', [MissionController::class, 'index']);
+    Route::post('clients/{client}/missions', [MissionController::class, 'store']);
+    Route::get('missions/{mission}', [MissionController::class, 'show']);
+    Route::patch('missions/{mission}', [MissionController::class, 'update']);
+    Route::delete('missions/{mission}', [MissionController::class, 'destroy']);
+    Route::get('missions/{mission}/prestations', [MissionController::class, 'listPrestations']);
+    Route::post('missions/{mission}/prestations', [MissionController::class, 'storePrestation']);
+    Route::patch('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'updatePrestation']);
+    Route::delete('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'destroyPrestation']);
 
     // Intervenants
     Route::apiResource('employees', EmployeeController::class);
