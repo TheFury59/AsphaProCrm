@@ -13,6 +13,7 @@ import { useCreateInterventionException } from "@/hooks/use-payments";
 import { toast } from "sonner";
 import { useEmployees } from "@/hooks/use-employees";
 import { useClients } from "@/hooks/use-clients";
+import { useClientMissions } from "@/hooks/use-missions";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -593,6 +594,11 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
   const isIndispo = mode === "indispo";
   const [form, setForm] = useState<any>({
     client_id: "",
+    // Rattachement : 'mission' = lié à une mission/prestation existante,
+    // 'standalone' = intervention ponctuelle one-shot sans contrat.
+    link_type: "mission",
+    mission_id: "",
+    client_prestation_id: "",
     employee_id: "",
     status: "planifiee",
     // ⚠️ date et heure séparés pour la lisibilité (recomposés à la soumission)
@@ -658,8 +664,14 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
       return;
     }
 
+    // Si rattaché à une mission, on transmet mission_id + client_prestation_id
+    // (sinon null = intervention ponctuelle one-shot). Le backend les a en nullable.
+    const linkedToMission = form.link_type === "mission";
     const payload: any = {
       client_id: parseInt(form.client_id, 10),
+      mission_id: linkedToMission && form.mission_id ? parseInt(form.mission_id, 10) : null,
+      client_prestation_id: linkedToMission && form.client_prestation_id
+        ? parseInt(form.client_prestation_id, 10) : null,
       employee_id: form.employee_id ? parseInt(form.employee_id, 10) : null,
       is_recurring: isRecurring,
       status: form.status,
@@ -750,11 +762,14 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
 
   // Étapes pour le wizard (mode ponctuel ou récurrent)
   const step1Done = !!form.client_id;
-  const step2Done = isRecurring
+  // Étape 2 = rattachement : standalone toujours OK,
+  // mission requiert au moins le choix d'une mission (prestation optionnelle).
+  const step2Done = form.link_type === "standalone" || !!form.mission_id;
+  const step3Done = isRecurring
     ? !!form.recurrence_start_date && !!form.start_time && !!form.end_time
     : !!form.start_date && !!form.start_time_h && !!form.end_date && !!form.end_time_h;
   // Le picker map ne fonctionne que pour les ponctuelles (besoin de start/end datetime concrets)
-  const showMapPicker = !isRecurring && step1Done && step2Done;
+  const showMapPicker = !isRecurring && step1Done && step3Done;
 
   const selectedClient = clients.find((c: any) => String(c.id) === form.client_id);
 
@@ -783,15 +798,45 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
             <div className="overflow-y-auto p-5 lg:p-6 space-y-4 lg:border-r">
               {/* ÉTAPE 1 : Client */}
               <WizardStep n={1} title="Client" done={step1Done}>
-                <select value={form.client_id} onChange={(e) => setForm((f: any) => ({ ...f, client_id: e.target.value }))}
+                <select value={form.client_id} onChange={(e) => setForm((f: any) => ({
+                  ...f,
+                  client_id: e.target.value,
+                  // Reset rattachement quand on change de client
+                  mission_id: "",
+                  client_prestation_id: "",
+                }))}
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-10 cursor-pointer hover:border-primary/40 transition-colors" required>
                   <option value="">— Choisir un client —</option>
                   {clients.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
                 </select>
               </WizardStep>
 
-              {/* ÉTAPE 2 : Date + Heure SÉPARÉS */}
-              <WizardStep n={2} title="Date et horaires" done={step2Done} disabled={!step1Done}>
+              {/* ÉTAPE 2 : Rattachement Mission/Ponctuel */}
+              <WizardStep n={2} title="Rattachement" done={step2Done} disabled={!step1Done}>
+                <MissionLinkStep
+                  clientId={form.client_id ? parseInt(form.client_id, 10) : null}
+                  linkType={form.link_type}
+                  missionId={form.mission_id}
+                  prestationId={form.client_prestation_id}
+                  onLinkTypeChange={(t) => setForm((f: any) => ({
+                    ...f,
+                    link_type: t,
+                    // Si on bascule en ponctuel, on efface mission + prestation
+                    mission_id: t === "standalone" ? "" : f.mission_id,
+                    client_prestation_id: t === "standalone" ? "" : f.client_prestation_id,
+                  }))}
+                  onMissionChange={(id) => setForm((f: any) => ({
+                    ...f,
+                    mission_id: id,
+                    // Reset prestation quand on change de mission
+                    client_prestation_id: "",
+                  }))}
+                  onPrestationChange={(id) => setForm((f: any) => ({ ...f, client_prestation_id: id }))}
+                />
+              </WizardStep>
+
+              {/* ÉTAPE 3 : Date + Heure SÉPARÉS */}
+              <WizardStep n={3} title="Date et horaires" done={step3Done} disabled={!step1Done || !step2Done}>
                 {!isRecurring ? (
                   <div className="space-y-3">
                     {/* Début */}
@@ -847,9 +892,9 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
                 )}
               </WizardStep>
 
-              {/* ÉTAPE 3 : Intervenant */}
-              <WizardStep n={3} title="Intervenant" done={!!form.employee_id} disabled={!step1Done || !step2Done}>
-                {!step1Done || !step2Done ? (
+              {/* ÉTAPE 4 : Intervenant */}
+              <WizardStep n={4} title="Intervenant" done={!!form.employee_id} disabled={!step1Done || !step2Done || !step3Done}>
+                {!step1Done || !step3Done ? (
                   <div className="text-xs italic text-muted-foreground bg-muted/40 rounded-md p-3 flex items-center gap-2">
                     <MapIcon className="h-3.5 w-3.5" />
                     Sélectionne le client et les horaires pour voir les intervenants disponibles.
@@ -885,8 +930,8 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
                 )}
               </WizardStep>
 
-              {/* ÉTAPE 4 : Détails */}
-              <WizardStep n={4} title="Détails (facultatif)" done={false} disabled={!step1Done || !step2Done}>
+              {/* ÉTAPE 5 : Détails */}
+              <WizardStep n={5} title="Détails (facultatif)" done={false} disabled={!step1Done || !step3Done}>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
@@ -985,7 +1030,7 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
             <Button
               type="submit"
-              disabled={create.isPending || !step1Done || !step2Done}
+              disabled={create.isPending || !step1Done || !step2Done || !step3Done}
               className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
             >
               {create.isPending ? "Création…" : "Créer l'intervention"}
@@ -1027,6 +1072,183 @@ function WizardStep({
       <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Étape "Rattachement" du wizard de création RDV.
+ *
+ * Choix métier (cf. flow Xelya/Ximi) :
+ *  - "mission"     : l'intervention est rattachée à une mission existante
+ *                    du client → on choisit la mission + la prestation
+ *                    (la prestation dicte le type de facturation et le prix).
+ *  - "standalone"  : intervention ponctuelle one-shot, pas de contrat.
+ *                    Utile pour les RDV exceptionnels, devis de présentation,
+ *                    interventions facturées directement à la prestation.
+ *
+ * Si le client n'a aucune mission active, on bascule automatiquement en
+ * "standalone" et on propose un lien vers la création de mission.
+ */
+function MissionLinkStep({
+  clientId,
+  linkType,
+  missionId,
+  prestationId,
+  onLinkTypeChange,
+  onMissionChange,
+  onPrestationChange,
+}: {
+  clientId: number | null;
+  linkType: "mission" | "standalone";
+  missionId: string;
+  prestationId: string;
+  onLinkTypeChange: (t: "mission" | "standalone") => void;
+  onMissionChange: (id: string) => void;
+  onPrestationChange: (id: string) => void;
+}) {
+  const { data: missions = [], isLoading } = useClientMissions(clientId ?? 0);
+  const activeMissions = missions.filter((m) => m.status === "active");
+  const selectedMission = missions.find((m) => String(m.id) === missionId);
+  const prestations = selectedMission?.client_prestations ?? [];
+
+  return (
+    <div className="space-y-3">
+      {/* Toggle Mission vs Ponctuel */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onLinkTypeChange("mission")}
+          className={
+            "text-left rounded-lg border-2 px-3 py-2.5 transition-all " +
+            (linkType === "mission"
+              ? "border-primary bg-primary/5 shadow-soft"
+              : "border-border hover:border-primary/40")
+          }
+        >
+          <div className="text-sm font-semibold">📋 Rattaché à une mission</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            RDV contractualisé · prestation facturable
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => onLinkTypeChange("standalone")}
+          className={
+            "text-left rounded-lg border-2 px-3 py-2.5 transition-all " +
+            (linkType === "standalone"
+              ? "border-primary bg-primary/5 shadow-soft"
+              : "border-border hover:border-primary/40")
+          }
+        >
+          <div className="text-sm font-semibold">⚡ Intervention ponctuelle</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            One-shot · pas de contrat
+          </div>
+        </button>
+      </div>
+
+      {/* Sélecteurs Mission + Prestation (si linkType=mission) */}
+      {linkType === "mission" && (
+        <div className="space-y-2">
+          {isLoading && (
+            <div className="text-xs text-muted-foreground italic">Chargement des missions…</div>
+          )}
+
+          {!isLoading && activeMissions.length === 0 && (
+            <div className="text-xs rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 p-2.5 space-y-1">
+              <div className="font-medium text-amber-900 dark:text-amber-100">
+                Ce client n'a aucune mission active.
+              </div>
+              <div className="text-amber-700 dark:text-amber-300 text-[11px]">
+                Crée une mission depuis sa fiche, ou bascule en "Intervention ponctuelle".
+              </div>
+              {clientId && (
+                <a
+                  href={`/clients/${clientId}/missions/new`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block mt-1 text-[11px] text-amber-900 dark:text-amber-100 underline hover:no-underline"
+                >
+                  → Créer une mission (nouvel onglet)
+                </a>
+              )}
+            </div>
+          )}
+
+          {!isLoading && activeMissions.length > 0 && (
+            <>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Mission *
+                </Label>
+                <select
+                  value={missionId}
+                  onChange={(e) => onMissionChange(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer hover:border-primary/40"
+                  required
+                >
+                  <option value="">— Choisir une mission —</option>
+                  {activeMissions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                      {m.billing_rhythm ? ` (${m.billing_rhythm})` : ""}
+                    </option>
+                  ))}
+                  {missions.length > activeMissions.length && (
+                    <optgroup label="Missions inactives">
+                      {missions
+                        .filter((m) => m.status !== "active")
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} — {m.status}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              {selectedMission && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Prestation contractualisée
+                  </Label>
+                  {prestations.length === 0 ? (
+                    <div className="text-[11px] text-muted-foreground italic bg-muted/40 rounded-md p-2">
+                      Cette mission n'a aucune prestation. Ajoute-en une depuis la fiche client.
+                    </div>
+                  ) : (
+                    <select
+                      value={prestationId}
+                      onChange={(e) => onPrestationChange(e.target.value)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer hover:border-primary/40"
+                    >
+                      <option value="">— Aucune (sera précisé plus tard) —</option>
+                      {prestations.map((p) => {
+                        const price = Number(p.custom_price ?? p.base_price ?? 0);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.label} · {price.toFixed(2)} €
+                            {p.billing_type ? ` · ${p.billing_type}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {linkType === "standalone" && (
+        <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md p-2.5">
+          ⚡ Intervention <strong>ponctuelle</strong> : aucune mission/prestation associée.
+          Tu pourras la facturer manuellement ou la rattacher à une mission plus tard.
+        </div>
+      )}
     </div>
   );
 }
