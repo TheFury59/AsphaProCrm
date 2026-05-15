@@ -4,6 +4,7 @@ import {
   Users,
   UserCog,
   Package,
+  Briefcase,
   Calendar,
   FileText,
   Receipt,
@@ -43,6 +44,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/clients", label: "Clients", icon: Users },
       { to: "/intervenants", label: "Intervenants", icon: UserCog },
+      { to: "/missions", label: "Missions", icon: Briefcase },
       { to: "/prestations", label: "Prestations", icon: Package },
       { to: "/planning", label: "Planning", icon: Calendar },
       { to: "/carte", label: "Carte", icon: Map },

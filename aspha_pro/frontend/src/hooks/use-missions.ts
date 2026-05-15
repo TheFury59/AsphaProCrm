@@ -60,6 +60,45 @@ function invalidateMissionCascade(qc: ReturnType<typeof useQueryClient>, clientI
 // MISSIONS
 // =========================================================================
 
+/**
+ * Liste GLOBALE paginée des missions (pour la page menu /missions).
+ * Filtres : status, client_id, search (sur nom mission OU raison sociale).
+ */
+export type AllMissionsParams = {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: MissionStatus | "";
+  client_id?: number;
+};
+
+export function useAllMissions(params: AllMissionsParams = {}) {
+  return useQuery({
+    queryKey: ["missions", params],
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set("page", String(params.page));
+      if (params.per_page) qs.set("per_page", String(params.per_page));
+      if (params.search) qs.set("filter[search]", params.search);
+      if (params.status) qs.set("filter[status]", params.status);
+      if (params.client_id) qs.set("filter[client_id]", String(params.client_id));
+      const res = await api.get<any>(`/missions?${qs}`);
+      // Le controller renvoie ['data' => $paginate] → on dé-wrap comme ailleurs
+      const body = res.data;
+      const p = body?.data ?? body;
+      return {
+        data: (p?.data ?? []) as Mission[],
+        meta: {
+          total: p?.total ?? 0,
+          current_page: p?.current_page ?? 1,
+          last_page: p?.last_page ?? 1,
+          per_page: p?.per_page ?? 25,
+        },
+      };
+    },
+  });
+}
+
 export function useClientMissions(clientId: number) {
   return useQuery({
     queryKey: ["client", clientId, "missions"],

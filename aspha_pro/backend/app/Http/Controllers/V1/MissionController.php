@@ -21,6 +21,42 @@ use Illuminate\Support\Facades\DB;
  */
 class MissionController extends Controller
 {
+    /**
+     * GET /api/v1/missions
+     *
+     * Liste globale paginée de toutes les missions (page menu "Missions").
+     * Filtres : status, client_id, search (sur nom mission OU raison sociale client).
+     */
+    public function indexAll(Request $request)
+    {
+        abort_unless($request->user()?->can('clients.view'), 403);
+        $perPage = min((int) $request->query('per_page', 25), 100);
+
+        $query = Mission::query()
+            ->with([
+                'client:id,code',
+                'client.company:id,client_id,company_name',
+                'clientPrestations.product:id,name,code,price',
+                'quote:id,reference',
+            ])
+            ->withCount('clientPrestations');
+
+        if ($status = $request->query('filter.status')) {
+            $query->where('status', $status);
+        }
+        if ($clientId = $request->integer('filter.client_id')) {
+            $query->where('client_id', $clientId);
+        }
+        if ($search = $request->query('filter.search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%$search%")
+                  ->orWhereHas('client.company', fn ($c) => $c->where('company_name', 'like', "%$search%"));
+            });
+        }
+
+        return ['data' => $query->orderByDesc('id')->paginate($perPage)];
+    }
+
     public function index(Request $request, Client $client)
     {
         abort_unless($request->user()?->can('clients.view'), 403);

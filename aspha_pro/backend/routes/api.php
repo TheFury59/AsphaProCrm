@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // === Missions client + Prestations contractualisées ===
     // Hiérarchie : Client → Missions → Prestations → Devis/Factures
+    Route::get('missions', [MissionController::class, 'indexAll']);
     Route::get('clients/{client}/missions', [MissionController::class, 'index']);
     Route::post('clients/{client}/missions', [MissionController::class, 'store']);
     Route::get('missions/{mission}', [MissionController::class, 'show']);
