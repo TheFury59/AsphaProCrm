@@ -186,7 +186,25 @@ export function PlanningPage() {
           status: ev.status ?? "planifiee",
         },
       }, {
-        onSuccess: () => toast.success("Occurrence déplacée (exception créée sur la série)"),
+        onSuccess: () => {
+          toast.success("Occurrence déplacée (exception créée sur la série)");
+          // Idem ponctuelle : check conflits après le déplacement
+          const empId = ev.employee?.id;
+          const cliId = ev.client?.id;
+          if (empId && cliId) {
+            checkConflictAfterDrop({
+              employee_id: empId,
+              client_id: cliId,
+              start_datetime: startLocal,
+              end_datetime: endLocal,
+              // Note : pour une nouvelle exception, on ne peut pas ignorer
+              // l'ID car elle vient d'être créée. Mais on a son parent_id.
+              // L'exception aura un nouvel id, donc pas de doublon avec
+              // l'occurrence virtuelle (le check se fait au datetime).
+              intervention_id: ev.intervention_id,
+            });
+          }
+        },
         onError: (e: any) => {
           toast.error(e?.response?.data?.message ?? "Impossible de déplacer cette occurrence");
           arg.revert();
@@ -203,7 +221,26 @@ export function PlanningPage() {
         end_datetime: endLocal as any,
       },
     }, {
-      onSuccess: () => toast.success(ev.is_exception ? "Exception déplacée" : "Intervention déplacée"),
+      onSuccess: () => {
+        toast.success(ev.is_exception ? "Exception déplacée" : "Intervention déplacée");
+        // Check conflits horaires APRÈS le déplacement.
+        // Cf. session 2026-05-18 : un drag-drop sans avertissement quand
+        // les RDV consécutifs ne laissent pas assez de temps de trajet
+        // était silencieux. Maintenant on toast un warning détaillé.
+        // L'expander expose `ev.client.id` et `ev.employee.id` (objets),
+        // pas `ev.client_id` direct — utiliser le bon chemin.
+        const empId = ev.employee?.id;
+        const cliId = ev.client?.id;
+        if (empId && cliId) {
+          checkConflictAfterDrop({
+            employee_id: empId,
+            client_id: cliId,
+            start_datetime: startLocal,
+            end_datetime: endLocal,
+            intervention_id: ev.intervention_id,
+          });
+        }
+      },
       onError: (err: any) => {
         // Avant : arg.revert() silencieux -> impression "le drag-drop ne marche pas".
         // On affiche maintenant l'erreur backend pour debug.
@@ -216,6 +253,46 @@ export function PlanningPage() {
         arg.revert();
       },
     });
+  };
+
+  /**
+   * Appelle /interventions/check-conflict en mode "post-mortem" après un
+   * déplacement réussi. Affiche les conflits détectés sous forme de toast
+   * non bloquant (le user a déjà confirmé son intention via le drag).
+   *
+   * On utilise un appel direct api.post plutôt que le hook useConflictCheck
+   * car on est dans un handler, pas dans un composant. Pas de debounce
+   * nécessaire (un seul drag = un seul check).
+   */
+  const checkConflictAfterDrop = async (params: {
+    employee_id: number;
+    client_id: number;
+    start_datetime: string;
+    end_datetime: string;
+    intervention_id: number;
+  }) => {
+    try {
+      const { api } = await import("@/lib/api");
+      const { data } = await api.post<{
+        data: { conflicts: Array<{ type: string; severity: string; message: string }>; has_conflict: boolean };
+      }>("/interventions/check-conflict", params);
+      const conflicts = data.data.conflicts;
+      if (conflicts.length === 0) return;
+
+      // Toast warning détaillé : un toast par conflit (overlap = error, trajet = warning).
+      conflicts.forEach((c) => {
+        const isError = c.severity === "error";
+        (isError ? toast.error : toast.warning)(
+          isError ? "⚠ Conflit horaire" : "⏱ Temps de trajet insuffisant",
+          {
+            description: c.message,
+            duration: 8000,
+          },
+        );
+      });
+    } catch {
+      // Silent fail — le drag est déjà committé, ce check est informatif.
+    }
   };
 
   // Toggle facturation/paiement depuis le hover popover
