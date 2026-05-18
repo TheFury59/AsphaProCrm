@@ -1,7 +1,7 @@
 import {
   Calendar, CalendarX, RotateCw, Users as UsersIcon,
   Briefcase, GraduationCap, PackageOpen, AlertCircle,
-  MessageSquare, FileSignature, Clock, AlarmClockOff, Wallet,
+  MessageSquare, Clock, AlarmClockOff, Wallet,
   Receipt, Sparkles, Bell,
 } from "lucide-react";
 
@@ -93,13 +93,6 @@ const STYLES: Record<string, NotificationStyle> = {
     bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300",
     border: "border-l-sky-500",
     module: "Réassort",
-  },
-  signature_requested: {
-    icon: FileSignature,
-    color: "text-fuchsia-600",
-    bg: "bg-fuchsia-100 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300",
-    border: "border-l-fuchsia-500",
-    module: "Signature",
   },
 
   // === Télégestion ===

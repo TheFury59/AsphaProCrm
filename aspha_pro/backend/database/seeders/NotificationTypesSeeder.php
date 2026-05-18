@@ -17,8 +17,8 @@ class NotificationTypesSeeder extends Seeder
             // Planning
             ['code' => 'intervention_assigned', 'label' => 'Intervention assignée', 'module' => 'planning', 'default_channels' => 'push,email'],
             ['code' => 'intervention_modified', 'label' => 'Intervention modifiée', 'module' => 'planning', 'default_channels' => 'push'],
-            ['code' => 'intervention_cancelled', 'label' => 'Intervention annulée', 'module' => 'planning', 'default_channels' => 'push,email,sms'],
-            ['code' => 'replacement_requested', 'label' => 'Remplacement demandé', 'module' => 'planning', 'default_channels' => 'push,sms'],
+            ['code' => 'intervention_cancelled', 'label' => 'Intervention annulée', 'module' => 'planning', 'default_channels' => 'push,email'],
+            ['code' => 'replacement_requested', 'label' => 'Remplacement demandé', 'module' => 'planning', 'default_channels' => 'push,email'],
 
             // RH
             ['code' => 'absence_created', 'label' => 'Absence enregistrée', 'module' => 'rh', 'default_channels' => 'push'],
@@ -30,11 +30,11 @@ class NotificationTypesSeeder extends Seeder
             // Portail
             ['code' => 'client_request_new', 'label' => 'Nouvelle réclamation client', 'module' => 'portal', 'default_channels' => 'push,email'],
             ['code' => 'client_reorder_new', 'label' => 'Nouveau réassort client', 'module' => 'portal', 'default_channels' => 'push'],
-            ['code' => 'signature_requested', 'label' => 'Signature demandée', 'module' => 'portal', 'default_channels' => 'email'],
+            // 'signature_requested' retire le 2026-05-18 (Pennylane gere les signatures).
 
             // Télégestion
             ['code' => 'checkin_late', 'label' => 'Retard de badgeage', 'module' => 'telemanagement', 'default_channels' => 'push'],
-            ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,sms'],
+            ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
 
             // Ventes
             ['code' => 'invoice_paid', 'label' => 'Facture réglée', 'module' => 'sales', 'default_channels' => 'push'],

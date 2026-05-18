@@ -6,10 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientRequest;
 use App\Models\ConsumableReorder;
-use App\Models\ElectronicSignature;
 use App\Models\QualityControl;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 /**
  * Portail client — endpoints lus/écrits depuis l'extranet du client final ET
@@ -92,48 +90,9 @@ class ClientPortalController extends Controller
         return ['data' => $r->fresh()];
     }
 
-    // ========== ELECTRONIC SIGNATURES ==========
-
-    public function listSignatures(Request $request, int $documentId)
-    {
-        abort_unless($request->user()?->can('clients.view'), 403);
-        return ['data' => ElectronicSignature::where('document_id', $documentId)->orderByDesc('id')->get()];
-    }
-
-    /**
-     * Génère un lien de signature unique (token) à envoyer au signataire.
-     */
-    public function requestSignature(Request $request)
-    {
-        abort_unless($request->user()?->can('clients.edit'), 403);
-        $data = $request->validate([
-            'document_id' => ['required', 'exists:documents,id'],
-            'signer_type' => ['required', 'in:client,employee'],
-            'signer_id' => ['required', 'integer'],
-        ]);
-        $sig = ElectronicSignature::create($data + [
-            'signature_token' => Str::random(40),
-            'status' => 'pending',
-        ]);
-        return response()->json(['data' => $sig], 201);
-    }
-
-    /**
-     * POST /api/v1/portal/signatures/{token}/sign
-     * Endpoint public (token uniquement) appelé depuis le portail signataire.
-     */
-    public function sign(Request $request, string $token)
-    {
-        $sig = ElectronicSignature::where('signature_token', $token)
-            ->where('status', 'pending')
-            ->firstOrFail();
-        $sig->update([
-            'signed_at' => now(),
-            'ip_address' => $request->ip(),
-            'status' => 'signed',
-        ]);
-        return ['data' => ['status' => 'signed', 'signed_at' => $sig->signed_at]];
-    }
+    // Signatures électroniques retirées le 2026-05-18 : Pennylane gère les
+    // signatures côté devis/factures, pas besoin d'un module séparé. La table
+    // `electronic_signatures` reste en BDD (non utilisée) pour rollback safe.
 
     // ========== CONTRÔLES QUALITÉ ==========
 

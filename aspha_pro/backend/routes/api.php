@@ -178,10 +178,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('quality-controls', 'listQualityControls');
         Route::post('quality-controls', 'storeQualityControl');
     });
-    Route::get('documents/{documentId}/signatures', [ClientPortalController::class, 'listSignatures']);
-    Route::post('signatures/request', [ClientPortalController::class, 'requestSignature']);
-    // Endpoint public pour signer (token uniquement)
-    Route::post('portal/signatures/{token}/sign', [ClientPortalController::class, 'sign'])->withoutMiddleware('auth:sanctum');
+    // Endpoints de signature électronique retirés le 2026-05-18 : décision
+    // produit "pas de Yousign/DocuSign". Pennylane gère les signatures
+    // côté devis/factures, on s'appuiera sur leur flow via PennylaneSyncService.
+    // La table `electronic_signatures` reste en BDD (rollback safe) mais n'est
+    // plus exposée via API.
 
     // === Phase 6 — Stock par entité ===
     Route::prefix('stock')->controller(StockController::class)->group(function () {

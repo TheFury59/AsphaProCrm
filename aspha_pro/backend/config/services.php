@@ -40,14 +40,7 @@ return [
         'server_key' => env('FCM_SERVER_KEY'),
     ],
 
-    'sms' => [
-        'driver' => env('SMS_DRIVER', 'mock'),  // twilio | ovh | mock
-        'twilio_sid' => env('TWILIO_ACCOUNT_SID'),
-        'twilio_token' => env('TWILIO_AUTH_TOKEN'),
-        'twilio_from' => env('TWILIO_FROM'),
-        'ovh_app_key' => env('OVH_APP_KEY'),
-        'ovh_app_secret' => env('OVH_APP_SECRET'),
-        'ovh_consumer_key' => env('OVH_CONSUMER_KEY'),
-    ],
+    // Bloc SMS retiré le 2026-05-18 : décision produit "uniquement notifs
+    // in-app + push + email", aucun canal SMS prévu côté métier.
 
 ];

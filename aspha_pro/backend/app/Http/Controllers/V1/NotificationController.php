@@ -61,7 +61,6 @@ class NotificationController extends Controller
                     'is_enabled' => true,
                     'via_push' => in_array('push', $defaults ?? [], true),
                     'via_email' => in_array('email', $defaults ?? [], true),
-                    'via_sms' => in_array('sms', $defaults ?? [], true),
                 ],
             ];
         })];
@@ -73,7 +72,6 @@ class NotificationController extends Controller
             'is_enabled' => ['boolean'],
             'via_push' => ['boolean'],
             'via_email' => ['boolean'],
-            'via_sms' => ['boolean'],
         ]);
         $pref = NotificationPreference::updateOrCreate(
             ['user_id' => $request->user()->id, 'notification_type_id' => $typeId],

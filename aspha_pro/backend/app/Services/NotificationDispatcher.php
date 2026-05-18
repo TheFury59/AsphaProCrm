@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\SendPushNotificationJob;
-use App\Jobs\SendSmsNotificationJob;
 use App\Models\Notification;
 use App\Models\NotificationPreference;
 use App\Models\NotificationType;
@@ -19,8 +18,11 @@ use Illuminate\Support\Facades\Log;
  *   3. Consulte les préférences user pour ce type
  *      - via_push → dispatch SendPushNotificationJob
  *      - via_email → dispatch SendEmailNotificationJob
- *      - via_sms → dispatch SendSmsNotificationJob
  *   4. Si aucune préférence : utilise default_channels du type
+ *
+ * Canaux disponibles : `in-app` (toujours, via la BDD) + `push` (FCM, gratuit
+ * illimité) + `email` (SMTP). Le canal SMS a été retiré : décision produit
+ * du 2026-05-18 — uniquement notifs in-app/push/email.
  *
  * Les jobs sont en file (queue: notifications) pour ne pas bloquer la requête HTTP.
  * En dev (queue=sync) ils s'exécutent immédiatement.
@@ -84,16 +86,19 @@ class NotificationDispatcher
                 ? array_filter([
                     $pref->via_push ? 'push' : null,
                     $pref->via_email ? 'email' : null,
-                    $pref->via_sms ? 'sms' : null,
                 ])
-                : array_map('trim', explode(',', $type->default_channels ?? 'push'));
+                : array_filter(
+                    array_map('trim', explode(',', $type->default_channels ?? 'push')),
+                    // Filtre defensif : si un seeder/migration legacy contient
+                    // encore 'sms', on l'ignore (le job n'existe plus).
+                    fn ($c) => in_array($c, ['push', 'email'], true),
+                );
 
             // 3. Dispatch jobs par canal
             foreach ($channels as $channel) {
                 match ($channel) {
                     'push' => SendPushNotificationJob::dispatch($notification->id),
                     'email' => SendEmailNotificationJob::dispatch($notification->id),
-                    'sms' => SendSmsNotificationJob::dispatch($notification->id),
                     default => null,
                 };
             }

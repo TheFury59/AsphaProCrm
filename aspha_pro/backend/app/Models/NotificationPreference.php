@@ -14,7 +14,6 @@ class NotificationPreference extends Model
         'notification_type_id',
         'via_push',
         'via_email',
-        'via_sms',
         'is_enabled',
     ];
 
@@ -23,7 +22,6 @@ class NotificationPreference extends Model
         return [
             'via_push' => 'boolean',
             'via_email' => 'boolean',
-            'via_sms' => 'boolean',
             'is_enabled' => 'boolean',
         ];
     }

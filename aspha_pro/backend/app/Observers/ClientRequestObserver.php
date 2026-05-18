@@ -20,8 +20,9 @@ use App\Services\NotificationDispatcher;
  *      body  = sujet du ticket
  *      target = le ticket lui-même → permet le deep-link côté UI
  *
- * Note : la priorité du ticket peut un jour conditionner les canaux (urgent
- * → SMS), mais on s'appuie pour l'instant sur les préférences utilisateur.
+ * Note : la priorité du ticket peut un jour conditionner les canaux (ex:
+ * urgent → email + push systématique), mais on s'appuie pour l'instant sur
+ * les préférences utilisateur.
  */
 class ClientRequestObserver
 {
