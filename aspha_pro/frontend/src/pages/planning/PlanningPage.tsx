@@ -14,7 +14,8 @@ import { toast } from "sonner";
 import { useEmployees } from "@/hooks/use-employees";
 import { useClients } from "@/hooks/use-clients";
 import { useClientMissions } from "@/hooks/use-missions";
-import { useConflictCheck } from "@/hooks/use-conflict-check";
+import { useConflictCheck, type ConflictItem } from "@/hooks/use-conflict-check";
+import { ConflictWarningDialog } from "./ConflictWarningDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,13 @@ export function PlanningPage() {
   // selectedEndDate : si le user a fait un drag sur le calendar, on récupère
   // aussi l'heure de fin pour la pré-remplir (sinon par défaut + 2h).
   const [selectedEndDate, setSelectedEndDate] = useState<Date | undefined>();
+  // Dialog warning quand un drag-drop crée des conflits horaires.
+  // Stocke aussi le callback `revert` de FullCalendar pour permettre à
+  // l'utilisateur d'annuler son déplacement depuis la pop-up.
+  const [conflictDialog, setConflictDialog] = useState<{
+    conflicts: ConflictItem[];
+    onRevert: () => void;
+  } | null>(null);
   const [selected, setSelected] = useState<any>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
   // État pour le tooltip hover sur les events
@@ -191,18 +199,21 @@ export function PlanningPage() {
           // Idem ponctuelle : check conflits après le déplacement
           const empId = ev.employee?.id;
           const cliId = ev.client?.id;
-          if (empId && cliId) {
-            checkConflictAfterDrop({
-              employee_id: empId,
-              client_id: cliId,
-              start_datetime: startLocal,
-              end_datetime: endLocal,
-              // Note : pour une nouvelle exception, on ne peut pas ignorer
-              // l'ID car elle vient d'être créée. Mais on a son parent_id.
-              // L'exception aura un nouvel id, donc pas de doublon avec
-              // l'occurrence virtuelle (le check se fait au datetime).
-              intervention_id: ev.intervention_id,
-            });
+          if (empId && cliId && arg.oldEvent.start && arg.oldEvent.end) {
+            const oldStart = localISO(arg.oldEvent.start);
+            const oldEnd = localISO(arg.oldEvent.end);
+            checkConflictAfterDrop(
+              {
+                employee_id: empId,
+                client_id: cliId,
+                start_datetime: startLocal,
+                end_datetime: endLocal,
+                intervention_id: ev.intervention_id,
+              },
+              oldStart,
+              oldEnd,
+              () => arg.revert(),
+            );
           }
         },
         onError: (e: any) => {
@@ -231,14 +242,21 @@ export function PlanningPage() {
         // pas `ev.client_id` direct — utiliser le bon chemin.
         const empId = ev.employee?.id;
         const cliId = ev.client?.id;
-        if (empId && cliId) {
-          checkConflictAfterDrop({
-            employee_id: empId,
-            client_id: cliId,
-            start_datetime: startLocal,
-            end_datetime: endLocal,
-            intervention_id: ev.intervention_id,
-          });
+        if (empId && cliId && arg.oldEvent.start && arg.oldEvent.end) {
+          const oldStart = localISO(arg.oldEvent.start);
+          const oldEnd = localISO(arg.oldEvent.end);
+          checkConflictAfterDrop(
+            {
+              employee_id: empId,
+              client_id: cliId,
+              start_datetime: startLocal,
+              end_datetime: endLocal,
+              intervention_id: ev.intervention_id,
+            },
+            oldStart,
+            oldEnd,
+            () => arg.revert(),
+          );
         }
       },
       onError: (err: any) => {
@@ -257,38 +275,62 @@ export function PlanningPage() {
 
   /**
    * Appelle /interventions/check-conflict en mode "post-mortem" après un
-   * déplacement réussi. Affiche les conflits détectés sous forme de toast
-   * non bloquant (le user a déjà confirmé son intention via le drag).
+   * déplacement réussi. Affiche les conflits détectés dans un dialog
+   * pop-up modal (plus visible qu'un toast pour quelque chose d'important
+   * — décision UX 2026-05-18).
+   *
+   * Le dialog propose 2 actions :
+   *  - "Annuler le déplacement" → appelle arg.revert() de FullCalendar
+   *  - "Garder le déplacement" → ferme juste le dialog
    *
    * On utilise un appel direct api.post plutôt que le hook useConflictCheck
    * car on est dans un handler, pas dans un composant. Pas de debounce
    * nécessaire (un seul drag = un seul check).
    */
-  const checkConflictAfterDrop = async (params: {
-    employee_id: number;
-    client_id: number;
-    start_datetime: string;
-    end_datetime: string;
-    intervention_id: number;
-  }) => {
+  const checkConflictAfterDrop = async (
+    params: {
+      employee_id: number;
+      client_id: number;
+      start_datetime: string;
+      end_datetime: string;
+      intervention_id: number;
+    },
+    /** Datetimes AVANT le drag, pour vrai revert via PATCH inverse. */
+    oldStart: string,
+    oldEnd: string,
+    /** Callback FullCalendar pour le revert visuel synchrone. */
+    fcRevert: () => void,
+  ) => {
     try {
       const { api } = await import("@/lib/api");
       const { data } = await api.post<{
-        data: { conflicts: Array<{ type: string; severity: string; message: string }>; has_conflict: boolean };
+        data: { conflicts: ConflictItem[]; has_conflict: boolean };
       }>("/interventions/check-conflict", params);
       const conflicts = data.data.conflicts;
       if (conflicts.length === 0) return;
 
-      // Toast warning détaillé : un toast par conflit (overlap = error, trajet = warning).
-      conflicts.forEach((c) => {
-        const isError = c.severity === "error";
-        (isError ? toast.error : toast.warning)(
-          isError ? "⚠ Conflit horaire" : "⏱ Temps de trajet insuffisant",
-          {
-            description: c.message,
-            duration: 8000,
-          },
-        );
+      // Pop-up modal au lieu d'un toast — bien plus visible
+      setConflictDialog({
+        conflicts,
+        onRevert: () => {
+          // Vrai revert : PATCH avec les anciennes datetimes, puis revert
+          // visuel de FullCalendar pour cohérence immédiate.
+          update.mutate({
+            id: params.intervention_id,
+            patch: {
+              start_datetime: oldStart as any,
+              end_datetime: oldEnd as any,
+            },
+          }, {
+            onSuccess: () => {
+              fcRevert();
+              toast.success("Déplacement annulé — RDV remis à sa position d'origine");
+            },
+            onError: (err: any) => {
+              toast.error(err?.response?.data?.message ?? "Impossible d'annuler le déplacement");
+            },
+          });
+        },
       });
     } catch {
       // Silent fail — le drag est déjà committé, ce check est informatif.
@@ -671,6 +713,16 @@ export function PlanningPage() {
         onClose={() => setMatchingOpen(false)}
         onAssigned={() => { setSelected(null); interventions.refetch(); }}
       />
+
+      {/* Pop-up de warning conflits horaires apres drag-drop */}
+      {conflictDialog && (
+        <ConflictWarningDialog
+          open={true}
+          conflicts={conflictDialog.conflicts}
+          onClose={() => setConflictDialog(null)}
+          onRevert={conflictDialog.onRevert}
+        />
+      )}
 
       {hover && (
         <EventTooltip
