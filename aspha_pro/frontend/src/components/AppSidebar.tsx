@@ -14,7 +14,6 @@ import {
   Map,
   QrCode,
   Boxes,
-  LifeBuoy,
   MessageSquare,
   Car,
   HelpCircle,
@@ -56,7 +55,6 @@ const NAV_GROUPS = [
     items: [
       { to: "/telegestion", label: "Télégestion", icon: QrCode },
       { to: "/stock", label: "Stock", icon: Boxes },
-      { to: "/portail-client", label: "Portail client", icon: LifeBuoy },
       { to: "/tickets", label: "Tickets clients", icon: Ticket },
       { to: "/messagerie", label: "Messagerie", icon: MessageSquare },
       { to: "/flotte", label: "Flotte véhicule", icon: Car },

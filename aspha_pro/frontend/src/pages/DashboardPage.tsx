@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   Users, UserCog, Calendar, FileText, Receipt, ArrowUpRight,
-  QrCode, Boxes, Sparkles, Map, MessageSquare, Car, LifeBuoy,
+  QrCode, Boxes, Sparkles, Map, MessageSquare, Car, Ticket,
   Activity, Zap,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -128,7 +128,7 @@ export function DashboardPage() {
             <QuickLink to="/carte" icon={Map} label="Carte" desc="Géolocalisation" />
             <QuickLink to="/telegestion" icon={QrCode} label="Télégestion" desc="QR + badge" />
             <QuickLink to="/stock" icon={Boxes} label="Stock" desc="Inventaire" />
-            <QuickLink to="/portail-client" icon={LifeBuoy} label="Portail" desc="Demandes" />
+            <QuickLink to="/tickets" icon={Ticket} label="Tickets" desc="Demandes clients" />
             <QuickLink to="/messagerie" icon={MessageSquare} label="Messages" desc="Conversations" />
             <QuickLink to="/flotte" icon={Car} label="Flotte" desc="Véhicules" />
             <QuickLink to="/devis" icon={FileText} label="Devis" desc="Propositions" />
