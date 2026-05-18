@@ -301,7 +301,14 @@ export function AvailableEmployeesMap({
               <button
                 key={c.employee_id}
                 type="button"
-                onClick={() => setSelected(c.employee_id)}
+                onClick={() => {
+                  // Auto-assign au clic : le user n'a plus besoin de cliquer
+                  // un bouton "Affecter" séparé. Le clic suffit. C'est plus
+                  // intuitif et évite le bug "j'ai cliqué l'intervenant mais
+                  // pas affecté donc form.employee_id reste vide".
+                  setSelected(c.employee_id);
+                  onAssign(c.employee_id);
+                }}
                 onMouseEnter={() => setHovered(c.employee_id)}
                 onMouseLeave={() => setHovered(null)}
                 className={`w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors cursor-pointer ${
@@ -359,18 +366,13 @@ export function AvailableEmployeesMap({
           )}
         </div>
 
-        {/* CTA Affecter */}
+        {/* Confirmation visuelle : l'affectation est automatique au clic */}
         {selected && (
-          <div className="border-t p-2.5 bg-muted/30">
-            <Button
-              type="button"
-              size="sm"
-              className="w-full bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
-              onClick={() => onAssign(selected)}
-            >
-              <Check className="h-3.5 w-3.5 mr-1.5" />
-              Affecter cet intervenant
-            </Button>
+          <div className="border-t p-2.5 bg-emerald-50 dark:bg-emerald-950/30 flex items-center gap-2 text-xs">
+            <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span className="text-emerald-900 dark:text-emerald-100 font-medium">
+              Intervenant affecté à ce RDV
+            </span>
           </div>
         )}
       </div>

@@ -626,6 +626,10 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   employees: any[];
 }) {
   const create = useCreateIntervention();
+  // Flag qui passe à true dès la 1ère tentative de submit avec erreurs.
+  // Permet d'afficher les anneaux rouges sur les WizardStep concernés
+  // SANS surcharger l'UI tant que l'utilisateur n'a pas encore essayé.
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   // Pour la date : on prend le local (yyyy-MM-dd) plutôt que toISOString
   // qui converti en UTC et peut donner une date différente près de minuit.
   const localDateStr = (d: Date) => {
@@ -689,8 +693,77 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   // eslint-disable-next-line react-hooks/exhaustive-deps
   // → on garde simple : le user clique soit "ponctuel" soit "recurrent" et ça refait un render
 
+  /**
+   * Valide le form AVANT submit. Retourne la liste des erreurs explicites
+   * (champs manquants ou invalides). Vide = OK pour soumettre.
+   *
+   * Décision UX du 2026-05-18 : on n'autorise PAS le submit silencieux
+   * quand un champ requis manque. À la place on affiche un toast clair
+   * listant tout ce qui manque + on ne ferme PAS le dialog.
+   */
+  // Si l'utilisateur a déjà essayé de submit et qu'il corrige des champs,
+  // on retire le flag dès que la validation passe → l'UI se "déstresse"
+  // automatiquement (anneaux rouges disparaissent).
+  // Pas besoin de useEffect : on check juste à chaque render.
+
+  const validateForm = (): string[] => {
+    const errors: string[] = [];
+
+    if (isAbsence) {
+      if (!form.employee_id) errors.push("Choisis un intervenant");
+      if (!form.absence_start_date) errors.push("Date de début manquante");
+      if (!form.absence_end_date) errors.push("Date de fin manquante");
+      return errors;
+    }
+    if (isIndispo) {
+      if (!form.client_id) errors.push("Choisis un client");
+      if (!form.absence_start_date) errors.push("Date de début manquante");
+      if (!form.absence_end_date) errors.push("Date de fin manquante");
+      return errors;
+    }
+
+    // Cas RDV (ponctuel ou récurrent)
+    if (!form.client_id) errors.push("Sélectionne un client");
+
+    // Rattachement : mission requiert mission_id, standalone OK
+    if (form.link_type === "mission" && !form.mission_id) {
+      errors.push("Choisis une mission OU passe en « Intervention ponctuelle »");
+    }
+
+    // Date/horaires
+    if (isRecurring) {
+      if (!form.recurrence_start_date) errors.push("Date de début de la récurrence manquante");
+      if (!form.start_time) errors.push("Heure de début manquante");
+      if (!form.end_time) errors.push("Heure de fin manquante");
+    } else {
+      if (!form.start_date || !form.start_time_h) errors.push("Date/heure de début manquante");
+      if (!form.end_date || !form.end_time_h) errors.push("Date/heure de fin manquante");
+      // Cohérence début < fin
+      if (form.start_date && form.end_date && form.start_time_h && form.end_time_h) {
+        const s = new Date(`${form.start_date}T${form.start_time_h}:00`);
+        const e = new Date(`${form.end_date}T${form.end_time_h}:00`);
+        if (e <= s) errors.push("L'heure de fin doit être après l'heure de début");
+      }
+    }
+
+    return errors;
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation centralisée : on ne soumet rien tant que tous les champs
+    // requis ne sont pas remplis. Le toast liste explicitement ce qui manque
+    // pour éviter le "rien ne se passe" silencieux.
+    const errors = validateForm();
+    if (errors.length > 0) {
+      setAttemptedSubmit(true);
+      toast.error(`Impossible de créer le RDV — ${errors.length} info(s) à compléter`, {
+        description: errors.map((e) => `• ${e}`).join("\n"),
+        duration: 6000,
+      });
+      return;
+    }
 
     if (isAbsence) {
       if (!form.employee_id) { toast.error("Choisis un intervenant"); return; }
@@ -873,7 +946,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
             {/* === COLONNE GAUCHE : formulaire en étapes (scrollable) === */}
             <div className="overflow-y-auto p-5 lg:p-6 space-y-4 lg:border-r">
               {/* ÉTAPE 1 : Client */}
-              <WizardStep n={1} title="Client" done={step1Done}>
+              <WizardStep n={1} title="Client" done={step1Done} error={attemptedSubmit && !step1Done}>
                 <select value={form.client_id} onChange={(e) => setForm((f: any) => ({
                   ...f,
                   client_id: e.target.value,
@@ -888,7 +961,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
               </WizardStep>
 
               {/* ÉTAPE 2 : Rattachement Mission/Ponctuel */}
-              <WizardStep n={2} title="Rattachement" done={step2Done} disabled={!step1Done}>
+              <WizardStep n={2} title="Rattachement" done={step2Done} disabled={!step1Done} error={attemptedSubmit && step1Done && !step2Done}>
                 <MissionLinkStep
                   clientId={form.client_id ? parseInt(form.client_id, 10) : null}
                   linkType={form.link_type}
@@ -912,7 +985,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
               </WizardStep>
 
               {/* ÉTAPE 3 : Date + Heure SÉPARÉS */}
-              <WizardStep n={3} title="Date et horaires" done={step3Done} disabled={!step1Done || !step2Done}>
+              <WizardStep n={3} title="Date et horaires" done={step3Done} disabled={!step1Done || !step2Done} error={attemptedSubmit && step1Done && step2Done && !step3Done}>
                 {!isRecurring ? (
                   <div className="space-y-3">
                     {/* Début */}
@@ -1101,12 +1174,17 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
             )}
           </div>
 
-          {/* === FOOTER fixe === */}
+          {/*
+            FOOTER fixe — le bouton submit n'est plus disabled tant qu'un
+            step n'est pas "done" : on laisse le user cliquer pour qu'il
+            VOIE la liste précise de ce qui manque (via validateForm +
+            toast). Seul `create.isPending` désactive (éviter double-submit).
+          */}
           <DialogFooter className="px-6 py-4 border-t bg-card shrink-0 flex-row gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
             <Button
               type="submit"
-              disabled={create.isPending || !step1Done || !step2Done || !step3Done}
+              disabled={create.isPending}
               className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
             >
               {create.isPending ? "Création…" : "Créer l'intervention"}
@@ -1122,28 +1200,37 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
  * Étape du wizard : numéro dans rond + titre + état (done/disabled/active).
  */
 function WizardStep({
-  n, title, done, disabled, children,
+  n, title, done, disabled, error, children,
 }: {
   n: number;
   title: string;
   done: boolean;
   disabled?: boolean;
+  /** Affiche un anneau rouge + chiffre rouge quand l'étape est en erreur après tentative submit. */
+  error?: boolean;
   children: React.ReactNode;
 }) {
-  const state = disabled ? "disabled" : done ? "done" : "active";
+  // L'état "error" prime sur les autres pour attirer l'attention.
+  const state = error ? "error" : disabled ? "disabled" : done ? "done" : "active";
   const styles = {
     done: { ring: "ring-emerald-500/40", bg: "bg-emerald-500 text-white", text: "text-foreground" },
     active: { ring: "ring-primary/40", bg: "bg-gradient-aspha text-white", text: "text-foreground" },
     disabled: { ring: "ring-border", bg: "bg-muted text-muted-foreground", text: "text-muted-foreground" },
+    error: { ring: "ring-rose-500", bg: "bg-rose-500 text-white", text: "text-rose-700 dark:text-rose-300" },
   }[state];
 
   return (
-    <div className={`rounded-xl bg-card shadow-soft ring-1 ${styles.ring} p-4 transition-all`}>
+    <div className={`rounded-xl bg-card shadow-soft ring-2 ${styles.ring} p-4 transition-all`}>
       <div className="flex items-center gap-2.5 mb-3">
         <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold shrink-0 ${styles.bg}`}>
-          {done && !disabled ? "✓" : n}
+          {error ? "!" : done && !disabled ? "✓" : n}
         </div>
         <div className={`text-sm font-semibold tracking-tight ${styles.text}`}>{title}</div>
+        {error && (
+          <span className="ml-auto text-[10px] uppercase tracking-wider font-semibold text-rose-600">
+            À compléter
+          </span>
+        )}
       </div>
       <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
         {children}
