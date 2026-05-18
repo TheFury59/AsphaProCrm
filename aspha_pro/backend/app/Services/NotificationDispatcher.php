@@ -51,12 +51,20 @@ class NotificationDispatcher
 
         foreach (array_unique($userIds) as $userId) {
             // 1. Créer la notif in-app (toujours)
+            // Utilise getMorphClass() pour respecter la morph map de
+            // AppServiceProvider — retourne 'client_request' au lieu de
+            // 'App\Models\ClientRequest', ce qui permet au frontend de mapper
+            // facilement target_type → route (deep-link cloche → fiche).
+            $targetType = $target
+                ? (method_exists($target, 'getMorphClass') ? $target->getMorphClass() : $target::class)
+                : null;
+
             $notification = Notification::create([
                 'user_id' => $userId,
                 'notification_type_id' => $type->id,
                 'title' => $title,
                 'body' => $body,
-                'target_type' => $target ? $target::class : null,
+                'target_type' => $targetType,
                 'target_id' => $target?->id ?? 0,
                 'channel' => 'push',
                 'is_read' => false,

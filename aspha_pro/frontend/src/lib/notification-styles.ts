@@ -169,20 +169,31 @@ export function getNotificationStyle(code?: string | null): NotificationStyle {
 /**
  * Lien profond optionnel selon le target_type.
  * Permet de cliquer sur une notif → ouvrir la fiche correspondante.
+ *
+ * Le backend stocke `target_type` via Eloquent `getMorphClass()` :
+ *  - "client_request" si le model est dans la morphMap (recommandé)
+ *  - "App\\Models\\ClientRequest" en fallback (legacy)
+ * On gère les deux pour être tolérant aux notifs déjà en BDD.
  */
 export function getNotificationLink(
   targetType: string | null,
   targetId: number | null,
 ): string | null {
   if (!targetType || !targetId) return null;
-  switch (targetType) {
-    case "intervention": return "/planning";
-    case "client_request": return "/tickets";
-    case "message_thread": return "/messagerie";
+
+  // Normalise FQN → short code : "App\\Models\\ClientRequest" → "client_request"
+  const short = targetType.includes("\\")
+    ? targetType.split("\\").pop()!.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()
+    : targetType;
+
+  switch (short) {
+    case "intervention": return `/planning?focus=${targetId}`;
+    case "client_request": return `/tickets/${targetId}`;
+    case "message_thread": return `/messagerie?thread=${targetId}`;
     case "client": return `/clients/${targetId}`;
     case "employee": return `/intervenants/${targetId}`;
-    case "invoice": return "/factures";
-    case "quote": return "/devis";
+    case "invoice": return `/factures?focus=${targetId}`;
+    case "quote": return `/devis?focus=${targetId}`;
     default: return null;
   }
 }

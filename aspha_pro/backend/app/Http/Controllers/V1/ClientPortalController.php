@@ -39,28 +39,11 @@ class ClientPortalController extends Controller
             'body' => ['nullable', 'string'],
             'priority' => ['nullable', 'in:low,normal,high,urgent'],
         ]);
+        // La notif est émise par ClientRequestObserver::created (DRY).
         $req = $client->clientRequests()->create($data + [
             'status' => 'open',
             'priority' => $data['priority'] ?? 'normal',
         ]);
-
-        // Notification typée — même flow que ClientRequestController::store
-        // pour garantir que tous les chemins de création émettent la notif.
-        // Cible : owner_user_id du client (gestionnaire du dossier), sinon créateur.
-        $typeId = \App\Models\NotificationType::where('code', 'client_request_new')->value('id');
-        if ($typeId) {
-            \App\Models\Notification::create([
-                'notification_type_id' => $typeId,
-                'user_id' => $client->owner_user_id ?? $request->user()->id,
-                'title' => "Nouveau ticket client",
-                'body' => $req->subject,
-                'target_type' => 'client_request',
-                'target_id' => $req->id,
-                'channel' => 'push',
-                'is_read' => false,
-                'sent_at' => now(),
-            ]);
-        }
 
         return response()->json(['data' => $req], 201);
     }

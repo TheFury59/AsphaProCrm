@@ -75,25 +75,9 @@ class ClientRequestController extends Controller
         $data['status'] = $data['status'] ?? 'open';
         $data['priority'] = $data['priority'] ?? 'normal';
 
+        // La notification est émise par ClientRequestObserver::created
+        // → pas de duplication ici (cf. AppServiceProvider).
         $ticket = ClientRequest::create($data);
-
-        // Émettre une notification typée pour les gestionnaires.
-        // On la rattache au user "assigned_to" si présent, sinon au créateur.
-        $typeId = \App\Models\NotificationType::where('code', 'client_request_new')->value('id');
-        if ($typeId) {
-            \App\Models\Notification::create([
-                'notification_type_id' => $typeId,
-                'user_id' => $data['assigned_to'] ?? $request->user()->id,
-                'title' => "Nouveau ticket client",
-                'body' => $data['subject'] ?? "Nouveau {$data['type']}",
-                'target_type' => 'client_request',
-                'target_id' => $ticket->id,
-                'channel' => 'push',
-                'is_read' => false,
-                'sent_at' => now(),
-            ]);
-        }
-
         $ticket->load(['client.company:id,client_id,company_name,photo,updated_at', 'assignedTo:id,name']);
         return response()->json(['data' => $ticket], 201);
     }

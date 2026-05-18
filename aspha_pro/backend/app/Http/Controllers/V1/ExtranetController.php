@@ -134,30 +134,15 @@ class ExtranetController extends Controller
             'priority' => ['nullable', 'in:low,normal,high,urgent'],
         ]);
 
+        // La notif est émise par ClientRequestObserver::created (DRY) :
+        // title = raison sociale + body = subject + target = ticket
+        // → permet le deep-link côté UI admin.
         $ticket = \App\Models\ClientRequest::create([
             ...$data,
             'client_id' => $client->id,
             'status' => 'open',
             'priority' => $data['priority'] ?? 'normal',
         ]);
-
-        // Notifier le gestionnaire du dossier client (owner_user_id) — c'est lui
-        // qui doit prendre en charge. Si pas d'owner_user_id, on notifie le user lié.
-        $assignTo = $client->owner_user_id ?? $request->user()->id;
-        $typeId = \App\Models\NotificationType::where('code', 'client_request_new')->value('id');
-        if ($typeId) {
-            \App\Models\Notification::create([
-                'notification_type_id' => $typeId,
-                'user_id' => $assignTo,
-                'title' => "Nouveau ticket de {$client->code}",
-                'body' => $data['subject'],
-                'target_type' => 'client_request',
-                'target_id' => $ticket->id,
-                'channel' => 'push',
-                'is_read' => false,
-                'sent_at' => now(),
-            ]);
-        }
 
         return response()->json(['data' => $ticket], 201);
     }

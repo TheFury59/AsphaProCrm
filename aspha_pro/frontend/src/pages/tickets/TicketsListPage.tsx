@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Ticket as TicketIcon, Search, Plus, AlertCircle, MessageSquare,
   PackageOpen, ChevronRight, ArrowRight,
@@ -59,6 +59,7 @@ const PRIORITY_META: Record<TicketPriority, { label: string; bg: string }> = {
 // =========================================================================
 
 export function TicketsListPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<TicketStatus | "all">("all");
   const [type, setType] = useState<TicketType | "all">("all");
@@ -168,7 +169,15 @@ export function TicketsListPage() {
               const TypeIcon = TYPE_META[t.type].icon;
               const companyName = t.client?.company?.company_name ?? `Client #${t.client_id}`;
               return (
-                <TableRow key={t.id} className="group">
+                <TableRow
+                  key={t.id}
+                  className="group cursor-pointer hover:bg-muted/40"
+                  onClick={(e) => {
+                    // Évite de re-naviguer quand on clique sur un lien interne (client / chevron)
+                    if ((e.target as HTMLElement).closest("a,button")) return;
+                    navigate(`/tickets/${t.id}`);
+                  }}
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <TypeIcon className={`h-4 w-4 ${TYPE_META[t.type].color}`} />
@@ -206,9 +215,11 @@ export function TicketsListPage() {
                     {formatDistanceToNow(new Date(t.created_at), { locale: fr, addSuffix: true })}
                   </TableCell>
                   <TableCell>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 opacity-60 group-hover:opacity-100">
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <Link to={`/tickets/${t.id}`}>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 opacity-60 group-hover:opacity-100">
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </TableCell>
                 </TableRow>
               );

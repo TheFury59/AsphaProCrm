@@ -7,10 +7,12 @@ use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Entity;
+use App\Models\ClientRequest;
 use App\Models\Intervention;
 use App\Models\Invoice;
 use App\Models\Quote;
 use App\Models\StockProduct;
+use App\Observers\ClientRequestObserver;
 use App\Observers\InterventionObserver;
 use App\Observers\StockProductObserver;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -40,10 +42,16 @@ class AppServiceProvider extends ServiceProvider
             'contract' => Contract::class,
             'invoice' => Invoice::class,
             'quote' => Quote::class,
+            // Ajout pour target_type des notifications → permet le deep-link
+            // côté frontend via `client_request` au lieu du FQCN.
+            'client_request' => ClientRequest::class,
+            'intervention' => Intervention::class,
+            'message_thread' => \App\Models\MessageThread::class,
         ]);
 
         // Observers pour déclencher les notifications applicatives
         Intervention::observe(InterventionObserver::class);
+        ClientRequest::observe(ClientRequestObserver::class);
         StockProduct::observe(StockProductObserver::class);
     }
 }
