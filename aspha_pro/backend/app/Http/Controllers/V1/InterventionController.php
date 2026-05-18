@@ -73,8 +73,25 @@ class InterventionController extends Controller
         $from = Carbon::parse($request->query('from'))->startOfDay();
         $to = Carbon::parse($request->query('to'))->endOfDay();
 
+        // Eager-loads CRITIQUES : InterventionExpander utilise relationLoaded()
+        // pour résoudre adresse + contact + clés du client. Sans ces eager-loads,
+        // le tooltip affiche "Adresse non renseignée" même si le client en a
+        // (cf. session du 2026-05-18 19:00).
         $query = Intervention::query()
-            ->with(['employee:id,name', 'client:id,code'])
+            ->with([
+                'employee:id,name',
+                'client:id,code',
+                'client.company:id,client_id,company_name,phone_mobile,primary_email,manager_first_name,manager_last_name,photo,updated_at',
+                'client.addresses',
+                'client.contacts',
+                'client.keys:id,client_id,label,current_holder',
+                'clientPrestation:id,label,product_id,custom_price,base_price,billing_type,pricing_type',
+                'clientPrestation.product:id,name,price,default_duration_minutes',
+                'checkins:id,intervention_id,checkin_time,checkout_time',
+                'key:id,client_id,label,current_holder',
+                'address',
+                'contact',
+            ])
             ->where(function ($q) use ($from, $to) {
                 $q->whereBetween('start_datetime', [$from, $to]);
                 $q->orWhere(function ($q2) use ($from, $to) {

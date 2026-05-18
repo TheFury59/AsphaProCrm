@@ -314,9 +314,15 @@ export function useInterventions(params: InterventionParams = {}) {
  * sans rafraîchir la page.
  */
 function invalidatePlanningRelated(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ["interventions"] });
-  qc.invalidateQueries({ queryKey: ["planning"] });
-  qc.invalidateQueries({ queryKey: ["matching"] });
+  // refetchType: 'active' force le re-fetch IMMÉDIAT des queries actuellement
+  // mountées (= visibles à l'écran). Sans ce paramètre, les queries sont
+  // juste marquées "stale" et ne refetchent qu'au prochain mount/focus,
+  // donnant l'impression que le calendar ne se rafraîchit pas après création.
+  qc.invalidateQueries({ queryKey: ["interventions"], refetchType: "active" });
+  qc.invalidateQueries({ queryKey: ["planning"], refetchType: "active" });
+  qc.invalidateQueries({ queryKey: ["matching"], refetchType: "active" });
+  // TripSummaryPanel + ContractSummaryPanel s'appuient sur les mêmes
+  // données ; ils utilisent leur propre query mais via les mêmes hooks.
 }
 
 export function useCreateIntervention() {
