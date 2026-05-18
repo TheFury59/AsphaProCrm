@@ -138,6 +138,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Phase 3 — Planning
     Route::get('interventions/calendar', [InterventionController::class, 'calendar']);
+    Route::post('interventions/check-conflict', [InterventionController::class, 'checkConflict']);
     Route::get('planning/contract-summary', [PlanningSummaryController::class, 'contractSummary']);
     Route::get('planning/long-absences', [PlanningSummaryController::class, 'longAbsences']);
     Route::get('planning/trips', [PlanningSummaryController::class, 'trips']);

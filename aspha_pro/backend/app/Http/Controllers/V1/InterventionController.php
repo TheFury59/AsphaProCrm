@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Intervention;
+use App\Services\InterventionConflictDetector;
 use App\Services\InterventionExpander;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -209,6 +211,64 @@ class InterventionController extends Controller
         abort_unless($request->user()?->can('planning.edit'), 403);
         $intervention->delete();
         return response()->noContent();
+    }
+
+    /**
+     * POST /api/v1/interventions/check-conflict
+     *
+     * Vérifie si un RDV en projet (ou en cours de modification) crée un conflit
+     * avec les autres RDV de l'intervenant le même jour :
+     *  - Chevauchement de créneaux
+     *  - Temps de trajet trop court avant/après
+     *
+     * Retourne un array de conflits (vide si aucun). Ne crée rien, c'est juste
+     * un check de validation.
+     */
+    public function checkConflict(Request $request, InterventionConflictDetector $detector)
+    {
+        abort_unless($request->user()?->can('planning.view'), 403);
+
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'start_datetime' => ['required', 'date'],
+            'end_datetime' => ['required', 'date', 'after:start_datetime'],
+            'address_id' => ['nullable', 'integer', 'exists:addresses,id'],
+            'intervention_id' => ['nullable', 'integer', 'exists:interventions,id'],
+        ]);
+
+        // Résout l'adresse du nouveau RDV : address_id en priorité, sinon
+        // 1ère adresse du client. Si rien → on ne peut pas calculer les
+        // trajets (mais on peut quand même détecter les overlap).
+        $newAddress = null;
+        if (! empty($data['address_id'])) {
+            $addr = \App\Models\Address::find($data['address_id']);
+            if ($addr) {
+                $newAddress = ['latitude' => (float) $addr->latitude, 'longitude' => (float) $addr->longitude];
+            }
+        } elseif (! empty($data['client_id'])) {
+            $client = Client::with('addresses')->find($data['client_id']);
+            $addr = $client?->addresses->first();
+            if ($addr && $addr->latitude && $addr->longitude) {
+                $newAddress = ['latitude' => (float) $addr->latitude, 'longitude' => (float) $addr->longitude];
+            }
+        }
+
+        $conflicts = $detector->check(
+            employeeId: (int) $data['employee_id'],
+            start: Carbon::parse($data['start_datetime']),
+            end: Carbon::parse($data['end_datetime']),
+            newClientAddress: $newAddress,
+            ignoreInterventionId: isset($data['intervention_id']) ? (int) $data['intervention_id'] : null,
+        );
+
+        return [
+            'data' => [
+                'conflicts' => $conflicts,
+                'has_conflict' => count($conflicts) > 0,
+                'has_error' => collect($conflicts)->contains('severity', 'error'),
+            ],
+        ];
     }
 
     private function validateIntervention(Request $request, bool $partial = false): array

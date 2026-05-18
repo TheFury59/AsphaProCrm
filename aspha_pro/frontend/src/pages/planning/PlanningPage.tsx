@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useEmployees } from "@/hooks/use-employees";
 import { useClients } from "@/hooks/use-clients";
 import { useClientMissions } from "@/hooks/use-missions";
+import { useConflictCheck } from "@/hooks/use-conflict-check";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -765,6 +766,17 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
       return;
     }
 
+    // Si conflit BLOQUANT (overlap), on demande confirmation explicite avant
+    // de créer. Les warnings (trajet trop court) ne bloquent pas — déjà
+    // affichés dans le bandeau au-dessus du bouton, le user voit avant submit.
+    if (hasConflictError) {
+      const overlapMsg = conflicts.find((c) => c.severity === "error")?.message
+        ?? "Ce RDV chevauche un autre RDV.";
+      if (!confirm(`⚠ ${overlapMsg}\n\nCréer quand même ?`)) {
+        return;
+      }
+    }
+
     if (isAbsence) {
       if (!form.employee_id) { toast.error("Choisis un intervenant"); return; }
       // POST /employees/{id}/absences
@@ -921,6 +933,21 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   const showMapPicker = !isRecurring && step1Done && step3Done;
 
   const selectedClient = clients.find((c: any) => String(c.id) === form.client_id);
+
+  // Détection de conflits horaires en temps réel (RDV qui se chevauchent,
+  // temps de trajet trop court entre 2 RDV consécutifs). Pas bloquant : le
+  // user peut quand même créer s'il accepte le risque. Désactivé pour les
+  // récurrents (pas pertinent — pas de "RDV avant/après" sur une série).
+  const { conflicts, hasError: hasConflictError } = useConflictCheck({
+    employee_id: form.employee_id && !isRecurring ? parseInt(form.employee_id, 10) : null,
+    client_id: form.client_id ? parseInt(form.client_id, 10) : null,
+    start_datetime: !isRecurring && form.start_date && form.start_time_h
+      ? `${form.start_date}T${form.start_time_h}:00`
+      : null,
+    end_datetime: !isRecurring && form.end_date && form.end_time_h
+      ? `${form.end_date}T${form.end_time_h}:00`
+      : null,
+  });
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -1173,6 +1200,44 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
               </div>
             )}
           </div>
+
+          {/* Bandeau conflits horaires — affiché juste au-dessus du footer */}
+          {conflicts.length > 0 && (
+            <div
+              className={
+                "px-6 py-3 border-t shrink-0 space-y-1.5 " +
+                (hasConflictError
+                  ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800"
+                  : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800")
+              }
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <span
+                  className={hasConflictError ? "text-rose-700 dark:text-rose-300" : "text-amber-700 dark:text-amber-300"}
+                >
+                  ⚠ {conflicts.length === 1 ? "Conflit détecté" : `${conflicts.length} conflits détectés`}
+                </span>
+                {!hasConflictError && (
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    (non bloquant — tu peux créer quand même)
+                  </span>
+                )}
+              </div>
+              {conflicts.map((c, i) => (
+                <div
+                  key={i}
+                  className={
+                    "text-[11px] leading-snug pl-4 " +
+                    (c.severity === "error"
+                      ? "text-rose-900 dark:text-rose-100"
+                      : "text-amber-900 dark:text-amber-100")
+                  }
+                >
+                  • {c.message}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/*
             FOOTER fixe — le bouton submit n'est plus disabled tant qu'un
