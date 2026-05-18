@@ -107,6 +107,13 @@ export function PlanningPage() {
     conflicts: ConflictItem[];
     onRevert: () => void;
   } | null>(null);
+  // Verrou pendant le check-conflict async + tant que la modal est ouverte :
+  // sans ça, l'utilisateur peut commencer un nouveau drag pendant qu'on
+  // attend la réponse API, ce qui crée un état FullCalendar incohérent
+  // (le drag suivant reste "stuck", impossible de bouger quoi que ce soit).
+  // Cf. session 2026-05-18 19:30.
+  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+  const calendarLocked = isCheckingConflict || conflictDialog !== null;
   const [selected, setSelected] = useState<any>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
   // État pour le tooltip hover sur les events
@@ -301,6 +308,9 @@ export function PlanningPage() {
     /** Callback FullCalendar pour le revert visuel synchrone. */
     fcRevert: () => void,
   ) => {
+    // Lock IMMÉDIATEMENT le calendar avant l'appel async — sinon l'utilisateur
+    // peut commencer un autre drag pendant qu'on attend la réponse API.
+    setIsCheckingConflict(true);
     try {
       const { api } = await import("@/lib/api");
       const { data } = await api.post<{
@@ -334,6 +344,10 @@ export function PlanningPage() {
       });
     } catch {
       // Silent fail — le drag est déjà committé, ce check est informatif.
+    } finally {
+      // Toujours déverrouiller : si conflit, le dialog prend le relais
+      // via sa propre condition `conflictDialog !== null`.
+      setIsCheckingConflict(false);
     }
   };
 
@@ -512,7 +526,13 @@ export function PlanningPage() {
         />
       ) : (
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
-      <div className="rounded-2xl bg-card shadow-soft p-4 lg:p-5" onContextMenu={handleContextMenu}>
+      <div
+        className={
+          "rounded-2xl bg-card shadow-soft p-4 lg:p-5 transition-opacity " +
+          (calendarLocked ? "opacity-70 pointer-events-none" : "")
+        }
+        onContextMenu={handleContextMenu}
+      >
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView="timeGridWeek"
@@ -528,8 +548,8 @@ export function PlanningPage() {
             today: "Aujourd'hui", day: "Jour", week: "Semaine", month: "Mois", list: "Liste",
           }}
           events={events}
-          editable
-          selectable
+          editable={!calendarLocked}
+          selectable={!calendarLocked}
           slotMinTime="06:00:00"
           slotMaxTime="22:00:00"
           slotDuration="00:15:00"
