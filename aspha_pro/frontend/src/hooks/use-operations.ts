@@ -234,7 +234,15 @@ export function useCreateClientRequest() {
       const { data } = await api.post(`/clients/${clientId}/portal/requests`, payload);
       return data.data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portal"] }),
+    // Cascade : on touche au même table `client_requests` que le module Tickets
+    // global → invalider toutes les vues qui en dépendent pour éviter les caches
+    // incohérents (cf. learnings 2026-05-15 sur cascade invalidation).
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portal"] });
+      qc.invalidateQueries({ queryKey: ["client-requests"] });
+      qc.invalidateQueries({ queryKey: ["extranet", "client", "tickets"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
   });
 }
 

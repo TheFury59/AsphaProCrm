@@ -38,22 +38,43 @@ export function ClientPortalTab({ clientId }: { clientId: number }) {
   );
 }
 
+/**
+ * Sous-onglet "Réclamations" — connecté à la table `client_requests`
+ * via `/clients/{id}/portal/requests` (ClientPortalController).
+ *
+ * IMPORTANT : c'est la MÊME table que la page admin globale `/tickets`
+ * (ClientRequestController). Une création ici apparaît automatiquement
+ * dans la liste cross-clients et dans l'extranet client, grâce à la
+ * cascade d'invalidation dans `useCreateClientRequest`.
+ *
+ * Types alignés sur le DBML : complaint / problem_report.
+ * (consumable_reorder a son propre onglet "Réassorts" qui pointe vers
+ * une autre table — différence de modèle historique).
+ */
 function RequestsTab({ clientId }: { clientId: number }) {
   const { data } = useClientRequests(clientId);
   const create = useCreateClientRequest();
   const [form, setForm] = useState({
-    type: "complaint" as "complaint" | "request" | "feedback",
+    type: "complaint" as "complaint" | "problem_report",
     subject: "",
-    message: "",
+    body: "",
     priority: "normal" as "low" | "normal" | "high" | "urgent",
   });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    create.mutate({ clientId, payload: form }, {
-      onSuccess: () => { toast.success("Réclamation créée"); setForm({ ...form, subject: "", message: "" }); },
-      onError: (e) => toast.error(apiErrorMessage(e)),
-    });
+    create.mutate(
+      // Cast nécessaire : le payload backend a un schéma plus large
+      // (status/assigned_to/resolved_at) que les champs du form ici.
+      { clientId, payload: form as any },
+      {
+        onSuccess: () => {
+          toast.success("Demande enregistrée — notification envoyée");
+          setForm({ ...form, subject: "", body: "" });
+        },
+        onError: (e) => toast.error(apiErrorMessage(e)),
+      },
+    );
   };
 
   return (
@@ -68,8 +89,7 @@ function RequestsTab({ clientId }: { clientId: number }) {
                 <select className="rounded-md border bg-background px-3 py-2 text-sm"
                   value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as any })}>
                   <option value="complaint">Réclamation</option>
-                  <option value="request">Demande</option>
-                  <option value="feedback">Retour</option>
+                  <option value="problem_report">Signalement de problème</option>
                 </select>
               </div>
               <div className="grid gap-1">
@@ -85,13 +105,30 @@ function RequestsTab({ clientId }: { clientId: number }) {
             </div>
             <div className="grid gap-1">
               <Label>Sujet *</Label>
-              <Input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+              <Input
+                required
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                placeholder="Ex: Fuite d'eau dans la cuisine"
+              />
             </div>
             <div className="grid gap-1">
               <Label>Message *</Label>
-              <Textarea required rows={4} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
+              <Textarea
+                required
+                rows={4}
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+                placeholder="Détails de la demande…"
+              />
             </div>
-            <Button type="submit" disabled={create.isPending}>{create.isPending ? "…" : "Créer"}</Button>
+            <Button
+              type="submit"
+              disabled={create.isPending}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+            >
+              {create.isPending ? "Création…" : "Créer"}
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -107,14 +144,19 @@ function RequestsTab({ clientId }: { clientId: number }) {
             <TableBody>
               {data?.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="text-sm">{r.subject}</TableCell>
-                  <TableCell><Badge variant="outline">{r.type}</Badge></TableCell>
-                  <TableCell><Badge>{r.status}</Badge></TableCell>
+                  <TableCell className="text-sm">
+                    <div className="font-medium">{r.subject}</div>
+                    {r.body && (
+                      <div className="text-[10px] text-muted-foreground line-clamp-1">{r.body}</div>
+                    )}
+                  </TableCell>
+                  <TableCell><Badge variant="outline">{TYPE_LABEL(r.type)}</Badge></TableCell>
+                  <TableCell><Badge>{STATUS_LABEL(r.status)}</Badge></TableCell>
                   <TableCell className="text-xs">{format(new Date(r.created_at), "dd/MM/yy", { locale: fr })}</TableCell>
                 </TableRow>
               ))}
               {data?.length === 0 && (
-                <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">Aucune réclamation.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">Aucune demande.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -123,6 +165,20 @@ function RequestsTab({ clientId }: { clientId: number }) {
     </div>
   );
 }
+
+// Libellés courts : mapping enums BDD → français
+const TYPE_LABEL = (t: string) => ({
+  complaint: "Réclamation",
+  problem_report: "Signalement",
+  consumable_reorder: "Réassort",
+} as Record<string, string>)[t] ?? t;
+
+const STATUS_LABEL = (s: string) => ({
+  open: "Ouverte",
+  in_progress: "En cours",
+  resolved: "Résolue",
+  closed: "Fermée",
+} as Record<string, string>)[s] ?? s;
 
 function ReordersTab({ clientId }: { clientId: number }) {
   const { data } = useClientReorders(clientId);
