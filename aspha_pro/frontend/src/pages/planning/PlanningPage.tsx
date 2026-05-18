@@ -696,8 +696,27 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
         end_datetime,
       });
     }
-    await create.mutateAsync(payload);
-    onClose();
+
+    // IMPORTANT : try/catch obligatoire — sans lui, mutateAsync rejette
+    // silencieusement et le dialog reste ouvert, donnant l'impression que
+    // "rien ne se passe" alors qu'une 422 a été retournée par le backend.
+    try {
+      await create.mutateAsync(payload);
+      toast.success("Intervention créée");
+      onClose();
+    } catch (err: any) {
+      const data = err?.response?.data;
+      // Affiche le premier message de validation Laravel s'il existe,
+      // sinon le message générique. La console garde le détail complet.
+      const firstFieldError = data?.errors
+        ? Object.values(data.errors).flat()[0]
+        : null;
+      const message = (firstFieldError as string | undefined)
+        ?? data?.message
+        ?? "Création impossible — vérifie les champs requis.";
+      console.error("Création intervention échouée", { payload, response: data });
+      toast.error(message);
+    }
   };
 
   const title = isAbsence ? "Nouvelle absence intervenant"

@@ -205,7 +205,7 @@ class InterventionController extends Controller
             'client_prestation_id' => ['nullable', 'exists:client_prestations,id'],
             'key_id' => ['nullable', 'exists:keys,id'],
             'address_id' => ['nullable', 'exists:addresses,id'],
-            'contact_id' => ['nullable', 'exists:contacts,id'],
+            'contact_id' => ['nullable', 'exists:client_contacts,id'],
             // `nullable` IMPÉRATIF : sans lui, envoyer `employee_id: null` (= "À pourvoir")
             // fait échouer la règle `exists` → validation.exists
             'employee_id' => [$opt, 'nullable', 'exists:employees,id'],
