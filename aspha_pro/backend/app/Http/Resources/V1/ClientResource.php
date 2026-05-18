@@ -33,6 +33,7 @@ class ClientResource extends JsonResource
                 'phone_mobile' => $this->company->phone_mobile,
                 'primary_email' => $this->company->primary_email,
                 'photo' => $this->company->photo,
+                'logo_url' => $this->company->logo_url,
                 'allow_duplicate' => (bool) $this->company->allow_duplicate,
             ] : null),
 
@@ -52,6 +53,16 @@ class ClientResource extends JsonResource
             'owner_user' => $this->whenLoaded('ownerUser', fn () => $this->ownerUser ? [
                 'id' => $this->ownerUser->id,
                 'name' => $this->ownerUser->name,
+            ] : null),
+
+            // Acces extranet client (User dedie au portail).
+            // null = pas d'acces cree, objet = acces actif/inactif
+            'portal_user' => $this->whenLoaded('portalUser', fn () => $this->portalUser ? [
+                'id' => $this->portalUser->id,
+                'name' => $this->portalUser->name,
+                'email' => $this->portalUser->email,
+                'status' => $this->portalUser->status,
+                'last_login_at' => $this->portalUser->last_login_at?->toIso8601String(),
             ] : null),
 
             'addresses' => $this->whenLoaded('addresses', fn () => $this->addresses->map(fn ($a) => [

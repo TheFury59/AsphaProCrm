@@ -77,6 +77,7 @@ export type Client = {
   status: ClientStatus;
   entity_id: number;
   owner_user_id: number | null;
+  portal_user_id: number | null;
   print_intervention_detail: string | null;
   display_name: string;
   created_at: string | null;
@@ -84,6 +85,17 @@ export type Client = {
   billing_contact?: ClientBillingContact | null;
   entity?: { id: number; name: string } | null;
   owner_user?: { id: number; name: string } | null;
+  /**
+   * Acces extranet client. null = pas d'acces cree.
+   * Cf. ClientPortalAccessController et ClientResource.
+   */
+  portal_user?: {
+    id: number;
+    name: string;
+    email: string;
+    status: "active" | "inactive";
+    last_login_at: string | null;
+  } | null;
   addresses?: ClientAddress[];
   contacts?: ClientContact[];
   related_contacts?: ClientRelatedContact[];

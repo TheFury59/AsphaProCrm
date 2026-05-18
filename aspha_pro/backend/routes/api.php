@@ -15,6 +15,7 @@ use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
+use App\Http\Controllers\V1\ClientPortalAccessController;
 use App\Http\Controllers\V1\ClientRequestController;
 use App\Http\Controllers\V1\MediaUploadController;
 use App\Http\Controllers\V1\MissionController;
@@ -86,6 +87,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // === Tickets clients (réclamations, signalements, commandes consommables) ===
     Route::apiResource('client-requests', ClientRequestController::class)
         ->parameters(['client-requests' => 'clientRequest']);
+
+    // === Accès extranet client (création / reset / email / révocation) ===
+    Route::post('clients/{client}/portal-access', [ClientPortalAccessController::class, 'create']);
+    Route::post('clients/{client}/portal-access/reset', [ClientPortalAccessController::class, 'reset']);
+    Route::post('clients/{client}/portal-access/email', [ClientPortalAccessController::class, 'sendEmail']);
+    Route::delete('clients/{client}/portal-access', [ClientPortalAccessController::class, 'revoke']);
 
     // === Uploads médias (avatars intervenants + logos clients) ===
     Route::post('employees/{employee}/avatar', [MediaUploadController::class, 'uploadEmployeeAvatar']);

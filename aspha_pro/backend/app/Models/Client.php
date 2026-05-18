@@ -24,6 +24,7 @@ class Client extends Model
         'status',
         'entity_id',
         'owner_user_id',
+        'portal_user_id',
         'print_intervention_detail',
     ];
 
@@ -59,6 +60,15 @@ class Client extends Model
     public function ownerUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    /**
+     * User dédié à l'extranet client. Distinct de ownerUser (qui est le
+     * gestionnaire Aspha). Créé via POST /clients/{id}/portal-access.
+     */
+    public function portalUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'portal_user_id');
     }
 
     public function contacts(): HasMany

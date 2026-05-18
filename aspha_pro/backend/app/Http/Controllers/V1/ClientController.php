@@ -63,6 +63,7 @@ class ClientController extends Controller
             'billingContact',
             'entity',
             'ownerUser:id,name,email',
+            'portalUser:id,name,email,status,last_login_at',
             'addresses',
             'contacts',
             'relatedContacts',

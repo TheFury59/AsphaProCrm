@@ -72,7 +72,7 @@ class ExtranetController extends Controller
     {
         $user = $request->user();
         $client = Client::with(['company', 'addresses', 'contacts'])
-            ->where('owner_user_id', $user->id)
+            ->where('portal_user_id', $user->id)
             ->first();
         abort_unless($client, 404, 'Profil client introuvable');
         return ['data' => $client];
@@ -80,7 +80,7 @@ class ExtranetController extends Controller
 
     public function clientInvoices(Request $request)
     {
-        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
         $invoices = \App\Models\Invoice::where('client_id', $client->id)
             ->orderByDesc('invoice_date')
@@ -90,14 +90,14 @@ class ExtranetController extends Controller
 
     public function clientQuotes(Request $request)
     {
-        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
         return ['data' => \App\Models\Quote::where('client_id', $client->id)->orderByDesc('id')->get()];
     }
 
     public function clientPrestations(Request $request)
     {
-        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
         return ['data' => $client->clientPrestations()->with('product')->get()];
     }
@@ -108,7 +108,7 @@ class ExtranetController extends Controller
      */
     public function clientTickets(Request $request)
     {
-        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
         $tickets = \App\Models\ClientRequest::where('client_id', $client->id)
             ->with('assignedTo:id,name')
@@ -124,7 +124,7 @@ class ExtranetController extends Controller
      */
     public function createClientTicket(Request $request)
     {
-        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
 
         $data = $request->validate([
