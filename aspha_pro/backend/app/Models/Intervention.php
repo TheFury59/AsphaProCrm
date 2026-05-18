@@ -139,7 +139,10 @@ class Intervention extends Model
      */
     public function contact(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Contact::class, 'contact_id');
+        // ClientContact, pas Contact : la table s'appelle `client_contacts`
+        // et le model correspondant est App\Models\ClientContact (cf. fix FK
+        // du 2026-05-18 — même bug de nommage propagé sur la relation).
+        return $this->belongsTo(\App\Models\ClientContact::class, 'contact_id');
     }
 
     public function employee(): BelongsTo

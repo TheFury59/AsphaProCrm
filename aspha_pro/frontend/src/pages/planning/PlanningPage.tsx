@@ -200,7 +200,17 @@ export function PlanningPage() {
       },
     }, {
       onSuccess: () => toast.success(ev.is_exception ? "Exception déplacée" : "Intervention déplacée"),
-      onError: () => arg.revert(),
+      onError: (err: any) => {
+        // Avant : arg.revert() silencieux -> impression "le drag-drop ne marche pas".
+        // On affiche maintenant l'erreur backend pour debug.
+        const msg = err?.response?.data?.message
+          ?? err?.response?.data?.errors
+            ? Object.values(err.response.data.errors)[0]?.[0]
+            : null;
+        toast.error(msg ?? "Impossible de déplacer cette intervention");
+        console.error("Drag-drop intervention KO", err?.response?.data);
+        arg.revert();
+      },
     });
   };
 
