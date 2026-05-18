@@ -35,7 +35,7 @@ class MissionController extends Controller
         $query = Mission::query()
             ->with([
                 'client:id,code',
-                'client.company:id,client_id,company_name',
+                'client.company:id,client_id,company_name,photo,updated_at',
                 'clientPrestations.product:id,name,code,price',
                 'quote:id,reference',
             ])
@@ -71,7 +71,7 @@ class MissionController extends Controller
         abort_unless($request->user()?->can('clients.view'), 403);
         $mission->load([
             'client:id,code',
-            'client.company:id,client_id,company_name',
+            'client.company:id,client_id,company_name,photo,updated_at',
             'clientPrestations.product',
             'quote:id,reference',
         ]);

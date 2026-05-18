@@ -38,7 +38,7 @@ class ReglementController extends Controller
             ->allowedSorts(['operation_date', 'amount', 'created_at'])
             ->defaultSort('-operation_date')
             ->with([
-                'client.company:id,client_id,company_name',
+                'client.company:id,client_id,company_name,photo,updated_at',
                 'reglementInvoiceLines.invoice:id,reference,total',
             ]);
 

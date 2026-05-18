@@ -32,7 +32,7 @@ class QuoteController extends Controller
             ])
             ->allowedSorts(['quote_date', 'created_at', 'status', 'reference', 'total'])
             ->defaultSort('-quote_date')
-            ->with(['client.company:id,client_id,company_name']);
+            ->with(['client.company:id,client_id,company_name,photo,updated_at']);
 
         return ['data' => $query->paginate($perPage)];
     }

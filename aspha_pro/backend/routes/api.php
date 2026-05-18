@@ -15,6 +15,7 @@ use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
+use App\Http\Controllers\V1\MediaUploadController;
 use App\Http\Controllers\V1\MissionController;
 use App\Http\Controllers\V1\NotificationController;
 use App\Http\Controllers\V1\PermissionsController;
@@ -80,6 +81,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('missions/{mission}/prestations', [MissionController::class, 'storePrestation']);
     Route::patch('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'updatePrestation']);
     Route::delete('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'destroyPrestation']);
+
+    // === Uploads médias (avatars intervenants + logos clients) ===
+    Route::post('employees/{employee}/avatar', [MediaUploadController::class, 'uploadEmployeeAvatar']);
+    Route::delete('employees/{employee}/avatar', [MediaUploadController::class, 'deleteEmployeeAvatar']);
+    Route::post('clients/{client}/logo', [MediaUploadController::class, 'uploadClientLogo']);
+    Route::delete('clients/{client}/logo', [MediaUploadController::class, 'deleteClientLogo']);
 
     // Intervenants
     Route::apiResource('employees', EmployeeController::class);

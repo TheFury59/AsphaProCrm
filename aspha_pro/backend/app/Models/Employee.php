@@ -24,6 +24,7 @@ class Employee extends Model
         'entity_id',
         'owner_user_id',
         'name',
+        'avatar_path',
         'phone',
         'classification',
         'transport_mode',
@@ -32,12 +33,26 @@ class Employee extends Model
         'job_reference_free',
     ];
 
+    protected $appends = ['avatar_url'];
+
     protected function casts(): array
     {
         return [
             'has_company_vehicle' => 'boolean',
             'created_at' => 'datetime',
         ];
+    }
+
+    /**
+     * URL absolue de l'avatar (null si non uploadé).
+     * Le `?v=` cache-bust force le refresh quand on remplace une photo.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (! $this->avatar_path) return null;
+        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
+        $bust = $this->updated_at?->timestamp ?? 0;
+        return "{$base}?v={$bust}";
     }
 
     public function getActivitylogOptions(): LogOptions

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useClients } from "@/hooks/use-clients";
 import { useAllMissions, type MissionStatus } from "@/hooks/use-missions";
+import { EntityAvatar } from "@/components/EntityAvatar";
 
 /**
  * Page menu "Missions" — vue cross-clients de toutes les missions.
@@ -147,13 +148,21 @@ export function MissionsListPage() {
                   <TableCell>
                     <Link
                       to={`/clients/${m.client_id}`}
-                      className="text-sm hover:text-primary transition-colors"
+                      className="flex items-center gap-2 hover:text-primary transition-colors"
                     >
-                      {companyName}
+                      <EntityAvatar
+                        src={m.client?.company?.logo_url}
+                        name={companyName}
+                        variant="client"
+                        size="xs"
+                      />
+                      <div>
+                        <div className="text-sm">{companyName}</div>
+                        {m.client?.code && (
+                          <div className="text-[10px] text-muted-foreground font-mono">{m.client.code}</div>
+                        )}
+                      </div>
                     </Link>
-                    {m.client?.code && (
-                      <div className="text-[10px] text-muted-foreground font-mono">{m.client.code}</div>
-                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1 text-sm">
@@ -285,8 +294,14 @@ function ClientPickerDialog({
                 key={c.id}
                 type="button"
                 onClick={() => pick(c.id)}
-                className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors flex items-center gap-2 group"
+                className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors flex items-center gap-3 group"
               >
+                <EntityAvatar
+                  src={c.company?.logo_url}
+                  name={c.company?.company_name ?? c.display_name ?? c.code}
+                  variant="client"
+                  size="sm"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">
                     {c.company?.company_name ?? c.display_name ?? c.code}

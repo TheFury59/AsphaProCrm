@@ -31,7 +31,7 @@ class InvoiceController extends Controller
             ])
             ->allowedSorts(['invoice_date', 'reference', 'total', 'status'])
             ->defaultSort('-invoice_date')
-            ->with(['client.company:id,client_id,company_name']);
+            ->with(['client.company:id,client_id,company_name,photo,updated_at']);
 
         return ['data' => $query->paginate($perPage)];
     }

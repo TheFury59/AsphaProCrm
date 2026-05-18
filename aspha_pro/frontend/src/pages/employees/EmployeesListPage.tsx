@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { CreateEmployeeDialog } from "./CreateEmployeeDialog";
+import { EntityAvatar } from "@/components/EntityAvatar";
 
 export function EmployeesListPage() {
   const [search, setSearch] = useState("");
@@ -70,7 +71,12 @@ export function EmployeesListPage() {
             )}
             {data?.data.map((e) => (
               <TableRow key={e.id}>
-                <TableCell className="font-medium">{e.full_name}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <EntityAvatar src={e.avatar_url} name={e.full_name} variant="employee" size="sm" />
+                    <span className="font-medium">{e.full_name}</span>
+                  </div>
+                </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.phone ?? "—"}</TableCell>
                 <TableCell>
                   <Badge variant={e.classification === "cadre" ? "default" : "secondary"}>

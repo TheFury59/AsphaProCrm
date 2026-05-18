@@ -17,6 +17,8 @@ import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { EntityAvatar } from "@/components/EntityAvatar";
+import { AvatarUpload } from "@/components/AvatarUpload";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
@@ -41,17 +43,22 @@ export function EmployeeFichePage() {
 
   return (
     <div>
-      <PageHeader
-        title={e.full_name}
-        description={`${e.classification === "cadre" ? "Cadre" : "Non-cadre"}${e.current_contract?.position ? ` · ${e.current_contract.position}` : ""}`}
-        backTo="/intervenants"
-        actions={
-          <>
-            {e.has_company_vehicle && <Badge>Véhicule service</Badge>}
-            {e.entity && <Badge variant="outline">{e.entity.name}</Badge>}
-          </>
-        }
-      />
+      <div className="flex items-center gap-4 mb-6">
+        <EntityAvatar src={e.avatar_url} name={e.full_name} variant="employee" size="lg" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={e.full_name}
+            description={`${e.classification === "cadre" ? "Cadre" : "Non-cadre"}${e.current_contract?.position ? ` · ${e.current_contract.position}` : ""}`}
+            backTo="/intervenants"
+            actions={
+              <>
+                {e.has_company_vehicle && <Badge>Véhicule service</Badge>}
+                {e.entity && <Badge variant="outline">{e.entity.name}</Badge>}
+              </>
+            }
+          />
+        </div>
+      </div>
 
       <Tabs defaultValue="general">
         <TabsList className="flex-wrap h-auto">
@@ -66,6 +73,21 @@ export function EmployeeFichePage() {
         </TabsList>
 
         <TabsContent value="general" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Photo de profil</CardTitle>
+              <CardDescription>S'affiche sur le planning, la messagerie et le portail intervenant.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AvatarUpload
+                type="employee"
+                id={employeeId}
+                src={e.avatar_url}
+                name={e.full_name}
+              />
+            </CardContent>
+          </Card>
+
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardHeader>

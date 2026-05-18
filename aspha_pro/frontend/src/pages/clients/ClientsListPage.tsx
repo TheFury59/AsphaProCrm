@@ -11,6 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { CreateClientDialog } from "./CreateClientDialog";
+import { EntityAvatar } from "@/components/EntityAvatar";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
@@ -91,7 +92,17 @@ export function ClientsListPage() {
             {data?.data.map((c) => (
               <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-mono text-xs">{c.code}</TableCell>
-                <TableCell className="font-medium">{c.company?.company_name ?? c.display_name}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2.5">
+                    <EntityAvatar
+                      src={c.company?.logo_url}
+                      name={c.company?.company_name ?? c.display_name}
+                      variant="client"
+                      size="sm"
+                    />
+                    <span className="font-medium">{c.company?.company_name ?? c.display_name}</span>
+                  </div>
+                </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{c.company?.siret ?? "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{c.company?.primary_email ?? "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{c.company?.phone_landline ?? c.company?.phone_mobile ?? "—"}</TableCell>

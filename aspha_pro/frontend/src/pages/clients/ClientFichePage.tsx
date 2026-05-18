@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, FileText, Key, Receipt, Users, Calendar, MessageSquare, MapPin } from "lucide-react";
+import { EntityAvatar } from "@/components/EntityAvatar";
+import { AvatarUpload } from "@/components/AvatarUpload";
 import { ClientContactsTab } from "./tabs/ClientContactsTab";
 import { ClientAddressesTab } from "./tabs/ClientAddressesTab";
 import { ClientAbsencesTab } from "./tabs/ClientAbsencesTab";
@@ -44,17 +46,27 @@ export function ClientFichePage() {
 
   return (
     <div>
-      <PageHeader
-        title={c.company?.company_name ?? c.display_name}
-        description={`Code ${c.code} · ${c.company?.siret ? `SIRET ${c.company.siret}` : "Pas de SIRET"}`}
-        backTo="/clients"
-        actions={
-          <>
-            <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
-            {c.entity && <Badge variant="outline">{c.entity.name}</Badge>}
-          </>
-        }
-      />
+      <div className="flex items-center gap-4 mb-6">
+        <EntityAvatar
+          src={c.company?.logo_url}
+          name={c.company?.company_name ?? c.display_name}
+          variant="client"
+          size="lg"
+        />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={c.company?.company_name ?? c.display_name}
+            description={`Code ${c.code} · ${c.company?.siret ? `SIRET ${c.company.siret}` : "Pas de SIRET"}`}
+            backTo="/clients"
+            actions={
+              <>
+                <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
+                {c.entity && <Badge variant="outline">{c.entity.name}</Badge>}
+              </>
+            }
+          />
+        </div>
+      </div>
 
       <Tabs defaultValue="general">
         <TabsList className="flex-wrap h-auto">
@@ -70,6 +82,21 @@ export function ClientFichePage() {
         </TabsList>
 
         <TabsContent value="general" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Logo de l'entreprise</CardTitle>
+              <CardDescription>S'affiche dans les listes, devis, factures et extranet client.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AvatarUpload
+                type="client"
+                id={clientId}
+                src={c.company?.logo_url}
+                name={c.company?.company_name ?? c.display_name}
+              />
+            </CardContent>
+          </Card>
+
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardHeader>

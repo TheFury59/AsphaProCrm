@@ -24,12 +24,26 @@ class ClientCompany extends Model
         'allow_duplicate',
     ];
 
+    protected $appends = ['logo_url'];
+
     protected function casts(): array
     {
         return [
             'allow_duplicate' => 'boolean',
             'created_at' => 'datetime',
         ];
+    }
+
+    /**
+     * URL absolue du logo (alias de `photo` côté API).
+     * Stockée dans Storage::disk('public'), nommée `logo_url` pour le frontend.
+     */
+    public function getLogoUrlAttribute(): ?string
+    {
+        if (! $this->photo) return null;
+        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo);
+        $bust = $this->updated_at?->timestamp ?? 0;
+        return "{$base}?v={$bust}";
     }
 
     public function client(): BelongsTo

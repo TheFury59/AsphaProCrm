@@ -34,6 +34,8 @@ export type ClientCompany = {
   phone_mobile: string | null;
   primary_email: string | null;
   photo: string | null;
+  /** URL absolue calculée par l'accessor ClientCompany::logo_url (alias de photo). */
+  logo_url: string | null;
   allow_duplicate: boolean;
 };
 
@@ -121,6 +123,9 @@ export type Employee = {
   owner_user_id: number | null;
   name: string;
   full_name: string;
+  avatar_path: string | null;
+  /** URL absolue calculée par l'accessor Employee::avatar_url. */
+  avatar_url: string | null;
   phone: string | null;
   classification: EmployeeClassification;
   transport_mode: string | null;
