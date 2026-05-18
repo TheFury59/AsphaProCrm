@@ -11,6 +11,7 @@ import { ClientsListPage } from "@/pages/clients/ClientsListPage";
 import { ClientFichePage } from "@/pages/clients/ClientFichePage";
 import { CreateMissionPage } from "@/pages/clients/CreateMissionPage";
 import { MissionsListPage } from "@/pages/missions/MissionsListPage";
+import { TicketsListPage } from "@/pages/tickets/TicketsListPage";
 import { EmployeesListPage } from "@/pages/employees/EmployeesListPage";
 import { EmployeeFichePage } from "@/pages/employees/EmployeeFichePage";
 import { ProductsListPage } from "@/pages/products/ProductsListPage";
@@ -29,7 +30,7 @@ import { RoleRouter } from "@/components/RoleRouter";
 import { IntervenantHome } from "@/pages/extranet/IntervenantHome";
 import { IntervenantPlanning } from "@/pages/extranet/IntervenantPlanning";
 import { ClientHome } from "@/pages/extranet/ClientHome";
-import { Home, CalendarDays, Receipt, Briefcase } from "lucide-react";
+import { Home, CalendarDays, Receipt, Briefcase, Ticket } from "lucide-react";
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { HelpPage } from "@/pages/help/HelpPage";
 
@@ -80,6 +81,7 @@ export default function App() {
                         { to: "/extranet/client", label: "Accueil", icon: Home },
                         { to: "/extranet/client/factures", label: "Factures", icon: Receipt },
                         { to: "/extranet/client/prestations", label: "Prestations", icon: Briefcase },
+                        { to: "/extranet/client/demandes", label: "Mes demandes", icon: Ticket },
                       ]}
                     />
                   </RoleRouter>
@@ -89,6 +91,7 @@ export default function App() {
               <Route path="/extranet/client" element={<ClientHome />} />
               <Route path="/extranet/client/factures" element={<ClientHome />} />
               <Route path="/extranet/client/prestations" element={<ClientHome />} />
+              <Route path="/extranet/client/demandes" element={<ClientHome />} />
             </Route>
 
             <Route
@@ -105,6 +108,7 @@ export default function App() {
               <Route path="/clients/:id" element={<ClientFichePage />} />
               <Route path="/clients/:id/missions/new" element={<CreateMissionPage />} />
               <Route path="/missions" element={<MissionsListPage />} />
+              <Route path="/tickets" element={<TicketsListPage />} />
               <Route path="/intervenants" element={<EmployeesListPage />} />
               <Route path="/intervenants/:id" element={<EmployeeFichePage />} />
               <Route path="/prestations" element={<ProductsListPage />} />

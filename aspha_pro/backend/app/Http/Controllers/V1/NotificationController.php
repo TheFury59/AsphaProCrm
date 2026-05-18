@@ -13,6 +13,7 @@ class NotificationController extends Controller
     public function index(Request $request)
     {
         return ['data' => Notification::where('user_id', $request->user()->id)
+            ->with('notificationType:id,code,label,module')
             ->orderByDesc('id')
             ->limit(50)
             ->get()];

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 export function useIntervenantProfile() {
@@ -57,5 +57,29 @@ export function useClientPrestations() {
   return useQuery({
     queryKey: ["extranet", "client", "prestations"],
     queryFn: async () => (await api.get("/extranet/client/prestations")).data.data,
+  });
+}
+
+// === Tickets (vue extranet client) ===
+
+export function useClientTickets() {
+  return useQuery({
+    queryKey: ["extranet", "client", "tickets"],
+    queryFn: async () => (await api.get("/extranet/client/tickets")).data.data,
+  });
+}
+
+export function useCreateClientTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      type: "complaint" | "problem_report" | "consumable_reorder";
+      subject: string;
+      body?: string;
+      priority?: "low" | "normal" | "high" | "urgent";
+    }) => (await api.post("/extranet/client/tickets", payload)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "client", "tickets"] });
+    },
   });
 }

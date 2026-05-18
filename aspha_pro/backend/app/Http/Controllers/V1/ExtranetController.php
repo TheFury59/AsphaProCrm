@@ -101,4 +101,64 @@ class ExtranetController extends Controller
         abort_unless($client, 404);
         return ['data' => $client->clientPrestations()->with('product')->get()];
     }
+
+    /**
+     * GET /api/v1/extranet/client/tickets
+     * Liste les tickets du client connecté (ses propres demandes).
+     */
+    public function clientTickets(Request $request)
+    {
+        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        abort_unless($client, 404);
+        $tickets = \App\Models\ClientRequest::where('client_id', $client->id)
+            ->with('assignedTo:id,name')
+            ->orderByDesc('created_at')
+            ->get();
+        return ['data' => $tickets];
+    }
+
+    /**
+     * POST /api/v1/extranet/client/tickets
+     * Crée un ticket depuis l'extranet client. Le client_id est forcé
+     * au client lié à l'utilisateur connecté (pas de spoofing possible).
+     */
+    public function createClientTicket(Request $request)
+    {
+        $client = Client::where('owner_user_id', $request->user()->id)->first();
+        abort_unless($client, 404);
+
+        $data = $request->validate([
+            'type' => ['required', 'in:complaint,problem_report,consumable_reorder'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['nullable', 'string'],
+            'priority' => ['nullable', 'in:low,normal,high,urgent'],
+        ]);
+
+        $ticket = \App\Models\ClientRequest::create([
+            ...$data,
+            'client_id' => $client->id,
+            'status' => 'open',
+            'priority' => $data['priority'] ?? 'normal',
+        ]);
+
+        // Notifier le gestionnaire du dossier client (owner_user_id) — c'est lui
+        // qui doit prendre en charge. Si pas d'owner_user_id, on notifie le user lié.
+        $assignTo = $client->owner_user_id ?? $request->user()->id;
+        $typeId = \App\Models\NotificationType::where('code', 'client_request_new')->value('id');
+        if ($typeId) {
+            \App\Models\Notification::create([
+                'notification_type_id' => $typeId,
+                'user_id' => $assignTo,
+                'title' => "Nouveau ticket de {$client->code}",
+                'body' => $data['subject'],
+                'target_type' => 'client_request',
+                'target_id' => $ticket->id,
+                'channel' => 'push',
+                'is_read' => false,
+                'sent_at' => now(),
+            ]);
+        }
+
+        return response()->json(['data' => $ticket], 201);
+    }
 }

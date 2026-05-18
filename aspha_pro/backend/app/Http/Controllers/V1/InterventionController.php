@@ -115,6 +115,28 @@ class InterventionController extends Controller
         $data = $this->validateIntervention($request);
         $intervention = Intervention::create($data);
         $intervention->load(['employee:id,name', 'client:id,code']);
+
+        // Notification typée "intervention_assigned" pour l'intervenant.
+        // (la notif "réservation" côté client est gérée côté extranet —
+        //  cf. la création depuis le portail client / wizard admin)
+        if ($intervention->employee_id) {
+            $typeId = \App\Models\NotificationType::where('code', 'intervention_assigned')->value('id');
+            $userId = \App\Models\Employee::where('id', $intervention->employee_id)->value('user_id');
+            if ($typeId && $userId) {
+                \App\Models\Notification::create([
+                    'notification_type_id' => $typeId,
+                    'user_id' => $userId,
+                    'title' => 'Nouvelle intervention assignée',
+                    'body' => 'Le '.($intervention->start_datetime?->format('d/m/Y à H:i') ?? '(à planifier)'),
+                    'target_type' => 'intervention',
+                    'target_id' => $intervention->id,
+                    'channel' => 'push',
+                    'is_read' => false,
+                    'sent_at' => now(),
+                ]);
+            }
+        }
+
         return response()->json(['data' => $intervention], 201);
     }
 

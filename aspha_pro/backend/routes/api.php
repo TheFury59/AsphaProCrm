@@ -15,6 +15,7 @@ use App\Http\Controllers\V1\InterventionController;
 use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
+use App\Http\Controllers\V1\ClientRequestController;
 use App\Http\Controllers\V1\MediaUploadController;
 use App\Http\Controllers\V1\MissionController;
 use App\Http\Controllers\V1\NotificationController;
@@ -81,6 +82,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('missions/{mission}/prestations', [MissionController::class, 'storePrestation']);
     Route::patch('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'updatePrestation']);
     Route::delete('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'destroyPrestation']);
+
+    // === Tickets clients (réclamations, signalements, commandes consommables) ===
+    Route::apiResource('client-requests', ClientRequestController::class)
+        ->parameters(['client-requests' => 'clientRequest']);
 
     // === Uploads médias (avatars intervenants + logos clients) ===
     Route::post('employees/{employee}/avatar', [MediaUploadController::class, 'uploadEmployeeAvatar']);
@@ -237,6 +242,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('invoices', 'clientInvoices');
         Route::get('quotes', 'clientQuotes');
         Route::get('prestations', 'clientPrestations');
+        Route::get('tickets', 'clientTickets');
+        Route::post('tickets', 'createClientTicket');
     });
 
     // === Settings ===
