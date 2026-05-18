@@ -270,6 +270,7 @@ export function AvailableEmployeesMap({
             {RADIUS_OPTIONS.map((opt) => (
               <button
                 key={opt.km ?? "all"}
+                type="button"
                 onClick={() => setRadiusKm(opt.km)}
                 className={`text-[11px] px-2 py-1 rounded-md transition-colors cursor-pointer ${
                   radiusKm === opt.km
@@ -299,6 +300,7 @@ export function AvailableEmployeesMap({
             filtered.map((c, i) => (
               <button
                 key={c.employee_id}
+                type="button"
                 onClick={() => setSelected(c.employee_id)}
                 onMouseEnter={() => setHovered(c.employee_id)}
                 onMouseLeave={() => setHovered(null)}
@@ -361,6 +363,7 @@ export function AvailableEmployeesMap({
         {selected && (
           <div className="border-t p-2.5 bg-muted/30">
             <Button
+              type="button"
               size="sm"
               className="w-full bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
               onClick={() => onAssign(selected)}

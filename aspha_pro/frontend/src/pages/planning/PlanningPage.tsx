@@ -231,11 +231,17 @@ export function PlanningPage() {
 
   const handleSelect = (arg: DateSelectArg) => {
     // FullCalendar émet `select` au clic sur un slot vide OU au drag de selection.
-    // arg.start = début du slot (heure exacte de click ou drag-start).
-    // arg.end = fin (slot suivant ou drag-end). On capture les 2 pour pré-remplir
-    // début ET fin du wizard.
+    // - Clic simple → arg.end = arg.start + slotDuration (ex: 5 min en zoom serré)
+    //   → on FORCE 1h par défaut, sinon l'UX est terrible (RDV ridiculement courts)
+    // - Drag → arg.end > arg.start + 15 min → on respecte la durée choisie
+    const durationMs = arg.end.getTime() - arg.start.getTime();
+    const isJustAClick = durationMs <= 15 * 60 * 1000;  // ≤ 15 min = clic
+    const finalEnd = isJustAClick
+      ? new Date(arg.start.getTime() + 60 * 60 * 1000)  // +1h par défaut
+      : arg.end;
+
     setSelectedDate(arg.start);
-    setSelectedEndDate(arg.end);
+    setSelectedEndDate(finalEnd);
     setCreateMode("ponctuel");
     setCreateOpen(true);
     arg.view.calendar.unselect();
