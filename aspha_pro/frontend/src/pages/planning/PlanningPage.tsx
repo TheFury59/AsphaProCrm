@@ -95,6 +95,9 @@ export function PlanningPage() {
   const [clientFilter, setClientFilter] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  // selectedEndDate : si le user a fait un drag sur le calendar, on récupère
+  // aussi l'heure de fin pour la pré-remplir (sinon par défaut + 2h).
+  const [selectedEndDate, setSelectedEndDate] = useState<Date | undefined>();
   const [selected, setSelected] = useState<any>(null);
   const [matchingOpen, setMatchingOpen] = useState(false);
   // État pour le tooltip hover sur les events
@@ -227,7 +230,12 @@ export function PlanningPage() {
   };
 
   const handleSelect = (arg: DateSelectArg) => {
+    // FullCalendar émet `select` au clic sur un slot vide OU au drag de selection.
+    // arg.start = début du slot (heure exacte de click ou drag-start).
+    // arg.end = fin (slot suivant ou drag-end). On capture les 2 pour pré-remplir
+    // début ET fin du wizard.
     setSelectedDate(arg.start);
+    setSelectedEndDate(arg.end);
     setCreateMode("ponctuel");
     setCreateOpen(true);
     arg.view.calendar.unselect();
@@ -520,11 +528,24 @@ export function PlanningPage() {
       )}
 
       {/* Création */}
+      {/*
+        `key` force le remount du dialog quand selectedDate change, ce qui
+        ré-initialise le useState interne du form avec les nouvelles valeurs.
+        Sans cette key, useState ne re-run pas son initializer et le form
+        garde les anciennes date/heure -> impression "le click sur le slot
+        n'est pas détecté".
+      */}
       <CreateInterventionDialog
+        key={`create-${selectedDate?.getTime() ?? "manual"}-${createMode}`}
         open={createOpen}
         defaultDate={selectedDate}
+        defaultEndDate={selectedEndDate}
         mode={createMode}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setSelectedDate(undefined);
+          setSelectedEndDate(undefined);
+        }}
         clients={clients}
         employees={employees}
       />
@@ -588,17 +609,37 @@ function addHours(time: string, h: number): string {
   return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
 }
 
-function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, employees }: {
+function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onClose, clients, employees }: {
   open: boolean;
   defaultDate?: Date;
+  /** Heure de fin pré-remplie (passée par FullCalendar `select` event). */
+  defaultEndDate?: Date;
   mode: "ponctuel" | "recurrent" | "absence" | "indispo";
   onClose: () => void;
   clients: any[];
   employees: any[];
 }) {
   const create = useCreateIntervention();
-  const initialDate = (defaultDate ?? new Date()).toISOString().slice(0, 10);
-  const initialTime = (defaultDate ?? new Date()).toTimeString().slice(0, 5);
+  // Pour la date : on prend le local (yyyy-MM-dd) plutôt que toISOString
+  // qui converti en UTC et peut donner une date différente près de minuit.
+  const localDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const localTimeStr = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  const startD = defaultDate ?? new Date();
+  // Si pas de defaultEndDate (clic simple sans drag), on garde la convention
+  // +2h sur l'heure de début.
+  const endD = defaultEndDate ?? new Date(startD.getTime() + 2 * 60 * 60 * 1000);
+
+  const initialDate = localDateStr(startD);
+  const initialTime = localTimeStr(startD);
+  const initialEndDate = localDateStr(endD);
+  const initialEndTime = localTimeStr(endD);
   const isRecurring = mode === "recurrent";
   const isAbsence = mode === "absence";
   const isIndispo = mode === "indispo";
@@ -614,11 +655,11 @@ function CreateInterventionDialog({ open, defaultDate, mode, onClose, clients, e
     // ⚠️ date et heure séparés pour la lisibilité (recomposés à la soumission)
     start_date: initialDate,
     start_time_h: initialTime,
-    end_date: initialDate,
-    end_time_h: addHours(initialTime, 2),
+    end_date: initialEndDate,
+    end_time_h: initialEndTime,
     recurrence_start_date: initialDate,
     start_time: initialTime,
-    end_time: "12:00",
+    end_time: initialEndTime,
     frequency: "weekly",
     days_of_week: "mon",
     // Détails (étape 4)

@@ -59,12 +59,25 @@ export type PublicSettings = {
   google_maps_enabled: boolean;
 };
 
+export type TripWaypoint = {
+  label: string;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type Trip = {
   employee_id: number;
   employee_name: string | null;
-  from_event_id: string;
+  /** true = trajet "domicile → 1er RDV de la journée", jamais payé */
+  is_home_origin: boolean;
+  from_event_id: string | null;
   to_event_id: string;
-  from_end: string;
+  from_address: TripWaypoint;
+  to_address: TripWaypoint;
+  from_end: string | null;
   to_start: string;
   gap_minutes: number;
   distance_km: number | null;

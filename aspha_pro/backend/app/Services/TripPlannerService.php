@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Address;
 use App\Models\AppSetting;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -51,6 +52,77 @@ class TripPlannerService
 
         foreach ($byEmployee as $employeeId => $list) {
             $sorted = $list->sortBy('start_datetime')->values();
+
+            // ============================================================
+            // Trajet "domicile → premier RDV du jour" (jamais payé)
+            // ============================================================
+            // Règle métier : le déplacement domicile → 1er client de chaque
+            // journée est un trajet visible (affiché sur la map et la timeline)
+            // mais JAMAIS payé (c'est un trajet personnel non remboursé).
+            // Implémentation : pour chaque journée travaillée, on insère un
+            // segment artificiel avant le 1er RDV avec is_paid=false +
+            // is_home_origin=true.
+            $homeAddr = $this->getEmployeeHomeAddress($employeeId);
+            if ($homeAddr && $homeAddr->latitude && $homeAddr->longitude) {
+                // Identifier les "premiers RDV de chaque jour"
+                $firstByDay = $sorted->groupBy(
+                    fn ($e) => Carbon::parse($e['start_datetime'])->toDateString(),
+                )->map(fn ($dayEvents) => $dayEvents->first());
+
+                foreach ($firstByDay as $firstEv) {
+                    $latB = $firstEv['client']['address']['latitude'] ?? null;
+                    $lngB = $firstEv['client']['address']['longitude'] ?? null;
+                    if ($latB === null || $lngB === null) continue;
+
+                    $startB = Carbon::parse($firstEv['start_datetime']);
+                    $dist = $this->distance->distance(
+                        $homeAddr->latitude, $homeAddr->longitude,
+                        $latB, $lngB,
+                    );
+                    $duration = $dist['duration_minutes'] ?? null;
+                    $departureTime = $duration !== null
+                        ? $startB->copy()->subMinutes((int) $duration)
+                        : null;
+
+                    $trips->push([
+                        'employee_id' => $employeeId,
+                        'employee_name' => $firstEv['employee']['name'] ?? null,
+                        'is_home_origin' => true,
+                        'from_event_id' => null,
+                        'to_event_id' => $firstEv['id'],
+                        'from_address' => [
+                            'label' => 'Domicile',
+                            'address' => $homeAddr->address,
+                            'city' => $homeAddr->city,
+                            'postal_code' => $homeAddr->postal_code,
+                            'latitude' => (float) $homeAddr->latitude,
+                            'longitude' => (float) $homeAddr->longitude,
+                        ],
+                        'to_address' => [
+                            'label' => $firstEv['client']['company_name']
+                                ?? $firstEv['client']['code'] ?? 'Client',
+                            'address' => $firstEv['client']['address']['address'] ?? null,
+                            'city' => $firstEv['client']['address']['city'] ?? null,
+                            'postal_code' => $firstEv['client']['address']['postal_code'] ?? null,
+                            'latitude' => (float) $latB,
+                            'longitude' => (float) $lngB,
+                        ],
+                        'from_end' => $departureTime?->toIso8601String(),
+                        'to_start' => $startB->toIso8601String(),
+                        // gap_minutes : par convention 0 pour les trajets domicile
+                        // (pas de "pause" applicable, c'est un déplacement direct)
+                        'gap_minutes' => 0,
+                        'distance_km' => $dist['distance_km'] ?? null,
+                        'duration_minutes' => $duration,
+                        'is_paid' => false,  // ← TOUJOURS non payé
+                        'source' => $dist['source'] ?? null,
+                    ]);
+                }
+            }
+
+            // ============================================================
+            // Trajets inter-RDV classiques (règle des 45 min)
+            // ============================================================
             for ($i = 0; $i < $sorted->count() - 1; $i++) {
                 $a = $sorted[$i];
                 $b = $sorted[$i + 1];
@@ -74,8 +146,25 @@ class TripPlannerService
                 $trips->push([
                     'employee_id' => $employeeId,
                     'employee_name' => $a['employee']['name'] ?? null,
+                    'is_home_origin' => false,
                     'from_event_id' => $a['id'],
                     'to_event_id' => $b['id'],
+                    'from_address' => [
+                        'label' => $a['client']['company_name'] ?? $a['client']['code'] ?? 'Client',
+                        'address' => $a['client']['address']['address'] ?? null,
+                        'city' => $a['client']['address']['city'] ?? null,
+                        'postal_code' => $a['client']['address']['postal_code'] ?? null,
+                        'latitude' => $latA !== null ? (float) $latA : null,
+                        'longitude' => $lngA !== null ? (float) $lngA : null,
+                    ],
+                    'to_address' => [
+                        'label' => $b['client']['company_name'] ?? $b['client']['code'] ?? 'Client',
+                        'address' => $b['client']['address']['address'] ?? null,
+                        'city' => $b['client']['address']['city'] ?? null,
+                        'postal_code' => $b['client']['address']['postal_code'] ?? null,
+                        'latitude' => $latB !== null ? (float) $latB : null,
+                        'longitude' => $lngB !== null ? (float) $lngB : null,
+                    ],
                     'from_end' => $endA->toIso8601String(),
                     'to_start' => $startB->toIso8601String(),
                     'gap_minutes' => $gapMinutes,
@@ -87,7 +176,31 @@ class TripPlannerService
             }
         }
 
-        return $trips;
+        // Tri final : par employee + par from_end pour que le frontend
+        // puisse afficher les trajets dans l'ordre chronologique de la journée.
+        return $trips->sortBy([
+            ['employee_id', 'asc'],
+            ['from_end', 'asc'],
+        ])->values();
+    }
+
+    /**
+     * Adresse domicile de l'intervenant (Address polymorphique owner_type='employee',
+     * type='main'). Cache simple en mémoire pour éviter N requêtes dans une même
+     * boucle.
+     */
+    private array $homeAddressCache = [];
+
+    private function getEmployeeHomeAddress(int $employeeId): ?Address
+    {
+        if (array_key_exists($employeeId, $this->homeAddressCache)) {
+            return $this->homeAddressCache[$employeeId];
+        }
+        $addr = Address::where('owner_type', 'employee')
+            ->where('owner_id', $employeeId)
+            ->where('type', 'main')
+            ->first();
+        return $this->homeAddressCache[$employeeId] = $addr;
     }
 
     /**

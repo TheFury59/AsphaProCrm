@@ -1,8 +1,10 @@
-import { Car, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Car, AlertCircle, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTrips } from "@/hooks/use-planning-summary";
+import { TripDetailDialog } from "./TripDetailDialog";
 
 /**
  * Récap trajets entre RDV consécutifs — affiche par intervenant le total
@@ -20,6 +22,10 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
     from, to,
     employee_id: employeeFilter ?? undefined,
   });
+  // Dialog détail journée : ouvert au click sur une card intervenant.
+  const [detailEmployeeId, setDetailEmployeeId] = useState<number | null>(null);
+  const detailEmployeeName = data?.summary?.find((s) => s.employee_id === detailEmployeeId)?.employee_name ?? "";
+  const detailTrips = data?.trips?.filter((t) => t.employee_id === detailEmployeeId) ?? [];
 
   return (
     <Card className="overflow-hidden">
@@ -65,8 +71,16 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
             </div>
           ) : (
             data?.summary.map((s) => (
-              <div key={s.employee_id} className="rounded-md border p-2 space-y-1.5 text-xs">
-                <div className="font-medium truncate">{s.employee_name}</div>
+              <button
+                key={s.employee_id}
+                type="button"
+                onClick={() => setDetailEmployeeId(s.employee_id)}
+                className="w-full text-left rounded-md border p-2 space-y-1.5 text-xs hover:bg-muted/50 hover:border-primary/40 transition-colors group cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <div className="font-medium truncate">{s.employee_name}</div>
+                  <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                </div>
                 <div className="grid grid-cols-2 gap-1 text-[10px]">
                   <div className="space-y-0.5">
                     <Badge variant="default" className="text-[9px] h-4 px-1.5">Payé</Badge>
@@ -83,7 +97,10 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
                     </div>
                   </div>
                 </div>
-              </div>
+                <div className="text-[9px] text-primary group-hover:underline">
+                  Voir la journée détaillée →
+                </div>
+              </button>
             ))
           )}
           {data && data.trips.some((t) => t.source === "haversine") && (
@@ -94,6 +111,14 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
           )}
         </CardContent>
       </ScrollArea>
+
+      <TripDetailDialog
+        open={detailEmployeeId !== null}
+        onClose={() => setDetailEmployeeId(null)}
+        employeeName={detailEmployeeName}
+        trips={detailTrips}
+        date={from}
+      />
     </Card>
   );
 }
