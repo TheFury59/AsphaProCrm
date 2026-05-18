@@ -30,6 +30,9 @@ import { RoleRouter } from "@/components/RoleRouter";
 import { IntervenantHome } from "@/pages/extranet/IntervenantHome";
 import { IntervenantPlanning } from "@/pages/extranet/IntervenantPlanning";
 import { ClientHome } from "@/pages/extranet/ClientHome";
+import { ClientInvoicesPage } from "@/pages/extranet/ClientInvoicesPage";
+import { ClientPrestationsPage } from "@/pages/extranet/ClientPrestationsPage";
+import { ClientTicketsPage } from "@/pages/extranet/ClientTicketsPage";
 import { Home, CalendarDays, Receipt, Briefcase, Ticket } from "lucide-react";
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { HelpPage } from "@/pages/help/HelpPage";
@@ -89,9 +92,9 @@ export default function App() {
               }
             >
               <Route path="/extranet/client" element={<ClientHome />} />
-              <Route path="/extranet/client/factures" element={<ClientHome />} />
-              <Route path="/extranet/client/prestations" element={<ClientHome />} />
-              <Route path="/extranet/client/demandes" element={<ClientHome />} />
+              <Route path="/extranet/client/factures" element={<ClientInvoicesPage />} />
+              <Route path="/extranet/client/prestations" element={<ClientPrestationsPage />} />
+              <Route path="/extranet/client/demandes" element={<ClientTicketsPage />} />
             </Route>
 
             <Route
