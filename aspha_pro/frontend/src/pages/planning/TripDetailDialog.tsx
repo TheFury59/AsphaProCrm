@@ -4,7 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Home, Building2, ArrowDown, Clock, Route, Car, Wallet, X } from "lucide-react";
+import { Home, Building2, ArrowDown, Clock, Route, Car, Wallet } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -119,40 +119,31 @@ export function TripDetailDialog({ open, onClose, employeeName, trips, date }: P
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="w-[95vw] sm:!max-w-[1400px] h-[88vh] max-h-[88vh] p-0 flex flex-col overflow-hidden gap-0 sm:rounded-2xl">
-        {/* Header */}
+        {/* Header — la croix de fermeture est ajoutée automatiquement par
+            DialogContent de shadcn, pas besoin d'en ajouter une manuellement
+            (sinon doublon visuel) */}
         <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <DialogTitle className="text-xl tracking-tight flex items-center gap-2">
-                <Route className="h-5 w-5 text-primary" />
-                Journée de {employeeName}
-              </DialogTitle>
-              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
-                {date && (
-                  <span className="font-medium text-foreground">
-                    {format(new Date(date), "EEEE d MMMM yyyy", { locale: fr })}
-                  </span>
-                )}
-                <span className="flex items-center gap-1">
-                  <Car className="h-3 w-3" />
-                  {totalKm.toFixed(1)} km · {formatMin(totalMin)}
-                </span>
-                <span className="flex items-center gap-1 text-emerald-600">
-                  <Wallet className="h-3 w-3" />
-                  Payé : {paidKm.toFixed(1)} km
-                </span>
-                <span className="flex items-center gap-1 text-rose-600">
-                  Non payé : {unpaidKm.toFixed(1)} km
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground p-1 -mr-2"
-              aria-label="Fermer"
-            >
-              <X className="h-5 w-5" />
-            </button>
+          <DialogTitle className="text-xl tracking-tight flex items-center gap-2">
+            <Route className="h-5 w-5 text-primary" />
+            Journée de {employeeName}
+          </DialogTitle>
+          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+            {date && (
+              <span className="font-medium text-foreground">
+                {format(new Date(date), "EEEE d MMMM yyyy", { locale: fr })}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Car className="h-3 w-3" />
+              {totalKm.toFixed(1)} km · {formatMin(totalMin)}
+            </span>
+            <span className="flex items-center gap-1 text-emerald-600">
+              <Wallet className="h-3 w-3" />
+              Payé : {paidKm.toFixed(1)} km
+            </span>
+            <span className="flex items-center gap-1 text-rose-600">
+              Non payé : {unpaidKm.toFixed(1)} km
+            </span>
           </div>
         </DialogHeader>
 
