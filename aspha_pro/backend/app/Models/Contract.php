@@ -16,6 +16,7 @@ class Contract extends Model
     protected $fillable = [
         'employee_id',
         'entity_id',
+        'is_current',
         'position',
         'intervention_zone',
         'contract_type',
@@ -80,6 +81,7 @@ class Contract extends Model
     protected function casts(): array
     {
         return [
+            'is_current' => 'boolean',
             'is_cdi_inclusion' => 'boolean',
             'cdd_imprecise_term' => 'boolean',
             'end_date' => 'date',

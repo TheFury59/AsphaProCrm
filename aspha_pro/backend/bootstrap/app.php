@@ -1,8 +1,11 @@
 <?php
 
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,5 +26,41 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        /**
+         * Bloque les erreurs SQL/techniques de fuiter vers le frontend.
+         *
+         * Quand une QueryException se déclenche (colonne manquante, FK
+         * violée, contrainte unique, etc.), Laravel renvoie par défaut le
+         * SQL brut + driver message dans la réponse JSON. Cela :
+         *  1. Affiche un message incompréhensible à l'utilisateur final
+         *  2. Expose la structure interne de la BDD (sécurité)
+         *
+         * Politique : on logge le détail complet côté serveur (suivi dev)
+         * mais on renvoie au frontend uniquement un message générique
+         * humain + un code de référence pour le support.
+         *
+         * Décision du 2026-05-18 — UX globale.
+         */
+        $exceptions->render(function (QueryException $e, Request $request) {
+            if (! $request->expectsJson() && ! $request->is('api/*')) {
+                return null;  // laisser le rendu HTML par défaut pour les pages web
+            }
+
+            // Référence courte pour qu'on retrouve l'erreur dans les logs
+            $ref = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+
+            Log::error("[SQL #{$ref}] ".$e->getMessage(), [
+                'sql' => $e->getSql() ?? null,
+                'bindings' => $e->getBindings() ?? [],
+                'user_id' => $request->user()?->id,
+                'route' => $request->path(),
+            ]);
+
+            return response()->json([
+                'message' => "Une erreur technique est survenue lors de l'enregistrement. "
+                    ."Réessaye dans un instant. Si le problème persiste, "
+                    ."contacte le support en mentionnant la référence #{$ref}.",
+                'error_ref' => $ref,
+            ], 500);
+        });
     })->create();
