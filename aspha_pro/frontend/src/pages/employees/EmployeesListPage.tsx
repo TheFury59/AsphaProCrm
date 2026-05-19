@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { CreateEmployeeDialog } from "./CreateEmployeeDialog";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { ClickableRow } from "@/components/ClickableRow";
 
 export function EmployeesListPage() {
   const [search, setSearch] = useState("");
@@ -70,7 +71,7 @@ export function EmployeesListPage() {
               </TableRow>
             )}
             {data?.data.map((e) => (
-              <TableRow key={e.id}>
+              <ClickableRow key={e.id} to={`/intervenants/${e.id}`}>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
                     <EntityAvatar src={e.avatar_url} name={e.full_name} variant="employee" size="sm" />
@@ -92,7 +93,7 @@ export function EmployeesListPage() {
                     Ouvrir
                   </Link>
                 </TableCell>
-              </TableRow>
+              </ClickableRow>
             ))}
           </TableBody>
         </Table>

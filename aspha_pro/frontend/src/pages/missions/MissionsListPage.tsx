@@ -18,6 +18,7 @@ import {
 import { useClients } from "@/hooks/use-clients";
 import { useAllMissions, type MissionStatus } from "@/hooks/use-missions";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { ClickableRow } from "@/components/ClickableRow";
 
 /**
  * Page menu "Missions" — vue cross-clients de toutes les missions.
@@ -140,7 +141,7 @@ export function MissionsListPage() {
               const prestationsCount = m.client_prestations_count ?? m.client_prestations?.length ?? 0;
               const companyName = m.client?.company?.company_name ?? `Client #${m.client_id}`;
               return (
-                <TableRow key={m.id} className="group">
+                <ClickableRow key={m.id} to={`/clients/${m.client_id}#missions`} className="group">
                   <TableCell>
                     <div className="font-medium text-sm">{m.name}</div>
                     <div className="text-[10px] text-muted-foreground font-mono">#{m.id}</div>
@@ -189,13 +190,13 @@ export function MissionsListPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Link to={`/clients/${m.client_id}#missions`}>
+                    <Link to={`/clients/${m.client_id}#missions`} aria-label="Ouvrir la mission">
                       <Button size="icon" variant="ghost" className="h-7 w-7 opacity-60 group-hover:opacity-100">
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               );
             })}
           </TableBody>

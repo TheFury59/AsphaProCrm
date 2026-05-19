@@ -151,7 +151,14 @@ export function ReglementsListPage() {
                 </TableRow>
               )}
               {rows.map((r) => (
-                <TableRow key={r.id} className="hover:bg-muted/40">
+                <TableRow
+                  key={r.id}
+                  className="hover:bg-muted/40 cursor-pointer transition-colors"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("a,button,[role='button']")) return;
+                    setDetailId(r.id);
+                  }}
+                >
                   <TableCell className="font-mono text-xs">{r.reference}</TableCell>
                   <TableCell className="font-medium">{r.client?.company?.company_name ?? `#${r.client_id}`}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{r.operation_date}</TableCell>

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { CreateClientDialog } from "./CreateClientDialog";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { ClickableRow } from "@/components/ClickableRow";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   active: "default",
@@ -90,7 +91,7 @@ export function ClientsListPage() {
               </TableRow>
             )}
             {data?.data.map((c) => (
-              <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
+              <ClickableRow key={c.id} to={`/clients/${c.id}`}>
                 <TableCell className="font-mono text-xs">{c.code}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
@@ -115,7 +116,7 @@ export function ClientsListPage() {
                     <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                   </Link>
                 </TableCell>
-              </TableRow>
+              </ClickableRow>
             ))}
           </TableBody>
         </Table>

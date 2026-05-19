@@ -186,7 +186,14 @@ export function InvoicesListPage() {
                 </TableRow>
               )}
               {rows.map((inv: any) => (
-                <TableRow key={inv.id} className="hover:bg-muted/40">
+                <TableRow
+                  key={inv.id}
+                  className="hover:bg-muted/40 cursor-pointer transition-colors"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("a,button,[role='button']")) return;
+                    setDetailId(inv.id);
+                  }}
+                >
                   <TableCell className="font-mono text-xs">{inv.reference}</TableCell>
                   <TableCell className="font-medium">{inv.client?.company?.company_name ?? `Client #${inv.client_id}`}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{inv.invoice_date}</TableCell>

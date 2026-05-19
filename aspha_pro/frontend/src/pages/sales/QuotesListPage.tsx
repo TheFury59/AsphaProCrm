@@ -188,7 +188,14 @@ export function QuotesListPage() {
                 </TableRow>
               )}
               {rows.map((q: any) => (
-                <TableRow key={q.id} className="hover:bg-muted/40">
+                <TableRow
+                  key={q.id}
+                  className="hover:bg-muted/40 cursor-pointer transition-colors"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("a,button,[role='button']")) return;
+                    setDetailId(q.id);
+                  }}
+                >
                   <TableCell className="font-mono text-xs">{q.reference ?? `#${q.id}`}</TableCell>
                   <TableCell className="font-medium">
                     {q.client?.company?.company_name ?? `Client #${q.client_id}`}

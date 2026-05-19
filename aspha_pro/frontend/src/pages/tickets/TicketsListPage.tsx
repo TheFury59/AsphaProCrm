@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { ClickableRow } from "@/components/ClickableRow";
 import {
   Ticket as TicketIcon, Search, Plus, AlertCircle, MessageSquare,
   PackageOpen, ChevronRight, ArrowRight,
@@ -59,7 +60,6 @@ const PRIORITY_META: Record<TicketPriority, { label: string; bg: string }> = {
 // =========================================================================
 
 export function TicketsListPage() {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<TicketStatus | "all">("all");
   const [type, setType] = useState<TicketType | "all">("all");
@@ -169,15 +169,7 @@ export function TicketsListPage() {
               const TypeIcon = TYPE_META[t.type].icon;
               const companyName = t.client?.company?.company_name ?? `Client #${t.client_id}`;
               return (
-                <TableRow
-                  key={t.id}
-                  className="group cursor-pointer hover:bg-muted/40"
-                  onClick={(e) => {
-                    // Évite de re-naviguer quand on clique sur un lien interne (client / chevron)
-                    if ((e.target as HTMLElement).closest("a,button")) return;
-                    navigate(`/tickets/${t.id}`);
-                  }}
-                >
+                <ClickableRow key={t.id} to={`/tickets/${t.id}`} className="group">
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <TypeIcon className={`h-4 w-4 ${TYPE_META[t.type].color}`} />
@@ -221,7 +213,7 @@ export function TicketsListPage() {
                       </Button>
                     </Link>
                   </TableCell>
-                </TableRow>
+                </ClickableRow>
               );
             })}
           </TableBody>
