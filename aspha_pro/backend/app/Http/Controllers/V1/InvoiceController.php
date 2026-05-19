@@ -5,6 +5,9 @@ namespace App\Http\Controllers\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Quote;
+use App\Models\ReglementInvoiceLine;
+use App\Services\DocumentSequenceService;
 use App\Services\FacturXGenerator;
 use App\Services\PennylaneSyncService;
 use Illuminate\Http\Request;
@@ -59,11 +62,14 @@ class InvoiceController extends Controller
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
+            'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19 — TVA par ligne
         ]);
 
-        $invoice = DB::transaction(function () use ($data) {
-            // Référence auto : INV-YYYYMM-XXXX
-            $ref = 'INV-' . date('Ym') . '-' . str_pad((string) (Invoice::count() + 1), 4, '0', STR_PAD_LEFT);
+        $sequences = app(DocumentSequenceService::class);
+
+        $invoice = DB::transaction(function () use ($data, $sequences) {
+            // Numérotation atomique (audit 2026-05-19 — fix race condition count()+1)
+            $ref = $sequences->next('INV');
             $invoice = Invoice::create([
                 'reference' => $ref,
                 'type' => $data['type'] ?? 'client',
@@ -85,6 +91,7 @@ class InvoiceController extends Controller
                     'invoice_id' => $invoice->id,
                     'label' => $item['label'],
                     'item_type' => $item['item_type'] ?? 'forfait',
+                    'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'total' => $lineTotal,
@@ -122,7 +129,16 @@ class InvoiceController extends Controller
                 'message' => 'Facture émise — non supprimable. Annulez-la d\'abord.',
             ], 422);
         }
-        $invoice->delete();
+
+        // audit 2026-05-19 — purge cascade : allocations de règlement + délier
+        // un éventuel devis source (quotes.invoice_id devient null) pour éviter
+        // les FK orphelines / les références mortes côté reporting.
+        DB::transaction(function () use ($invoice) {
+            ReglementInvoiceLine::where('invoice_id', $invoice->id)->delete();
+            Quote::where('invoice_id', $invoice->id)->update(['invoice_id' => null]);
+            $invoice->delete();
+        });
+
         return response()->noContent();
     }
 

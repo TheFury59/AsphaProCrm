@@ -30,7 +30,7 @@ class PennylaneSyncService
 
     public function syncInvoice(Invoice $invoice): Invoice
     {
-        $invoice->loadMissing(['invoiceItems', 'client.company']);
+        $invoice->loadMissing(['invoiceItems.vatRate', 'client.company']);
 
         if (! $this->isConfigured()) {
             // MODE MOCK
@@ -101,10 +101,35 @@ class PennylaneSyncService
                     'quantity' => (float) $item->quantity,
                     'unit' => 'piece',
                     'unit_amount' => (float) $item->unit_price,
-                    'vat_rate' => 'FR_200',  // 20%
+                    // audit 2026-05-19 — TVA dynamique : map du taux réel vers le
+                    // code Pennylane. Fallback FR_200 (20%) si absent (compat
+                    // historique des factures sans vat_rate_id).
+                    'vat_rate' => $this->mapVatRateToPennylane($item->vatRate?->rate),
                 ])->all(),
             ],
         ];
+    }
+
+    /**
+     * Map d'un taux numérique (5.5, 10, 20…) vers le code Pennylane (FR_055, FR_100, FR_200…).
+     *
+     * audit 2026-05-19 — remplace le 'FR_200' hardcodé. Pennylane attend une
+     * énumération string, pas un float ; on couvre les taux français usuels.
+     */
+    private function mapVatRateToPennylane(?float $rate): string
+    {
+        if ($rate === null) {
+            Log::warning('Pennylane payload : vat_rate manquant sur une ligne, fallback FR_200 (20%).');
+            return 'FR_200';
+        }
+        return match (true) {
+            abs($rate - 0.0)  < 0.01 => 'FR_000', // exonéré (services à la personne agréés)
+            abs($rate - 2.1)  < 0.01 => 'FR_021',
+            abs($rate - 5.5)  < 0.01 => 'FR_055',
+            abs($rate - 10.0) < 0.01 => 'FR_100',
+            abs($rate - 20.0) < 0.01 => 'FR_200',
+            default => 'FR_200',
+        };
     }
 
     private function buildQuotePayload(Quote $quote): array

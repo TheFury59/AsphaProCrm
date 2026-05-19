@@ -46,13 +46,14 @@ Plan de correction (en cours) :
 - [ ] `SESSION_SECURE_COOKIE` documenté dans `.env.example`
 
 ### Phase C — Finances
-- [ ] TVA dynamique (champ `vat_rate_id` sur QuoteItem/InvoiceItem au lieu de 20% hardcodé)
-- [ ] Numérotation atomique (lock + table de séquence)
-- [ ] Anti-double conversion devis→facture (champ `invoice_id` sur Quote)
-- [ ] Over-allocation règlement (check `sum(allocations) ≤ amount` + `sum ≤ remaining_to_pay`)
+- [x] TVA dynamique (`vat_rate_id` sur QuoteItem/InvoiceItem + relation `vatRate`) — 2026-05-19
+- [x] Numérotation atomique (table `document_sequences` + `DocumentSequenceService` lockForUpdate) — 2026-05-19
+- [x] Anti-double conversion devis→facture (`quotes.invoice_id` + abort 409) — 2026-05-19
+- [x] Over-allocation règlement (`sum(allocations) ≤ amount` + `sum ≤ TTC dû par facture`) — 2026-05-19
 - [ ] Pennylane idempotence + customer_id mapping
 - [ ] Factur-X : 422 explicite si SIRET émetteur manquant
-- [ ] Cascade `Invoice.destroy` / `Reglement.destroy` (purge allocations)
+- [x] Cascade `Invoice.destroy` / `Reglement.destroy` (purge `reglement_invoice_lines`) — 2026-05-19
+- [x] `QuoteController.update` bloque modif devis converti (abort 409) — 2026-05-19
 
 ### Phase D — Bugs UX bloquants
 - [x] EditableField : null OK (toast + restore), single save (ref-flag), draft preserved (editingRef) — fix 2026-05-19

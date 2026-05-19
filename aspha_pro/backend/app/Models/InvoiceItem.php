@@ -14,6 +14,7 @@ class InvoiceItem extends Model
         'client_prestation_id',
         'intervention_id',
         'item_type',
+        'vat_rate_id', // audit 2026-05-19 — TVA dynamique par ligne
         'label',
         'quantity',
         'unit_price',
@@ -42,6 +43,12 @@ class InvoiceItem extends Model
     public function intervention(): BelongsTo
     {
         return $this->belongsTo(Intervention::class, 'intervention_id');
+    }
+
+    // audit 2026-05-19 — TVA dynamique par ligne (sinon fallback 20% au calcul)
+    public function vatRate(): BelongsTo
+    {
+        return $this->belongsTo(VatRate::class, 'vat_rate_id');
     }
 
 }

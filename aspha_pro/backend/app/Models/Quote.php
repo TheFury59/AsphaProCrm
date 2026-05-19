@@ -53,6 +53,7 @@ class Quote extends Model
         'has_night_surcharge',
         'comment',
         'status',
+        'invoice_id', // audit 2026-05-19 — anti double-conversion devis→facture
         'pennylane_id',
         'pennylane_synced_at',
     ];
@@ -139,6 +140,12 @@ class Quote extends Model
     public function items(): HasMany
     {
         return $this->hasMany(QuoteItem::class, 'quote_id')->orderBy('order');
+    }
+
+    // audit 2026-05-19 — facture issue de la conversion (anti double-conversion)
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'invoice_id');
     }
 
 }

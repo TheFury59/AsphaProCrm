@@ -12,6 +12,7 @@ class QuoteItem extends Model
     protected $fillable = [
         'quote_id',
         'item_type',
+        'vat_rate_id', // audit 2026-05-19 — TVA dynamique par ligne
         'label',
         'quantity',
         'unit_price',
@@ -32,5 +33,11 @@ class QuoteItem extends Model
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class, 'quote_id');
+    }
+
+    // audit 2026-05-19 — TVA dynamique par ligne (sinon fallback 20% au calcul)
+    public function vatRate(): BelongsTo
+    {
+        return $this->belongsTo(VatRate::class, 'vat_rate_id');
     }
 }

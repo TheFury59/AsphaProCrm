@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Quote;
 use App\Models\QuoteItem;
+use App\Services\DocumentSequenceService;
 use App\Services\PennylaneSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,16 +63,18 @@ class QuoteController extends Controller
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
+            'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19 — TVA par ligne
         ]);
 
         $userId = $request->user()->id;
+        $sequences = app(DocumentSequenceService::class);
 
-        $quote = DB::transaction(function () use ($data, $userId) {
+        $quote = DB::transaction(function () use ($data, $userId, $sequences) {
             // Quote_type fallback : take first available if not provided
             $quoteTypeId = $data['quote_type_id'] ?? optional(\App\Models\QuoteType::query()->first())->id;
 
-            // Référence auto : QUO-YYYYMM-XXXX
-            $ref = 'QUO-' . date('Ym') . '-' . str_pad((string) (Quote::count() + 1), 4, '0', STR_PAD_LEFT);
+            // Référence auto atomique (audit 2026-05-19 — fix race condition count()+1)
+            $ref = $sequences->next('QUO');
 
             $quote = Quote::create([
                 'reference' => $ref,
@@ -96,6 +99,7 @@ class QuoteController extends Controller
                     'quote_id' => $quote->id,
                     'label' => $item['label'],
                     'item_type' => $item['item_type'] ?? 'forfait',
+                    'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'total' => $lineTotal,
@@ -114,6 +118,12 @@ class QuoteController extends Controller
     public function update(Request $request, Quote $quote)
     {
         abort_unless($request->user()?->can('sales.quotes.edit'), 403);
+
+        // audit 2026-05-19 — un devis déjà converti en facture est verrouillé
+        // (sinon on pourrait modifier les lignes alors que la facture émise
+        // a déjà été générée → incohérence comptable).
+        abort_if($quote->invoice_id !== null, 409, 'Devis converti en facture — non modifiable.');
+
         $data = $request->validate([
             'quote_date' => ['sometimes', 'date'],
             'validity_date' => ['sometimes', 'nullable', 'date'],
@@ -125,6 +135,7 @@ class QuoteController extends Controller
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
+            'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19
         ]);
 
         DB::transaction(function () use ($data, $quote) {
@@ -142,6 +153,7 @@ class QuoteController extends Controller
                         'quote_id' => $quote->id,
                         'label' => $item['label'],
                         'item_type' => $item['item_type'] ?? 'forfait',
+                        'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
                         'quantity' => $item['quantity'],
                         'unit_price' => $item['unit_price'],
                         'total' => $lineTotal,
@@ -172,10 +184,17 @@ class QuoteController extends Controller
     public function convertToInvoice(Request $request, Quote $quote)
     {
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);
-        $quote->load('items');
 
-        $invoice = DB::transaction(function () use ($quote) {
-            $ref = 'INV-' . date('Ym') . '-' . str_pad((string) (Invoice::count() + 1), 4, '0', STR_PAD_LEFT);
+        // audit 2026-05-19 — anti double-conversion : une fois converti, le devis
+        // est lié à sa facture (quotes.invoice_id). 409 explicite pour le front.
+        abort_if($quote->invoice_id !== null, 409, 'Devis déjà converti en facture.');
+
+        $quote->load('items');
+        $sequences = app(DocumentSequenceService::class);
+
+        $invoice = DB::transaction(function () use ($quote, $sequences) {
+            // Numérotation atomique (audit 2026-05-19 — fix race condition count()+1)
+            $ref = $sequences->next('INV');
             $invoice = Invoice::create([
                 'reference' => $ref,
                 'type' => 'client',
@@ -195,6 +214,7 @@ class QuoteController extends Controller
                     'invoice_id' => $invoice->id,
                     'label' => $qi->label,
                     'item_type' => $qi->item_type ?? 'forfait',
+                    'vat_rate_id' => $qi->vat_rate_id, // audit 2026-05-19 — propage la TVA par ligne
                     'quantity' => $qi->quantity,
                     'unit_price' => $qi->unit_price,
                     'total' => $qi->total,
@@ -206,6 +226,9 @@ class QuoteController extends Controller
             if (in_array($quote->status, ['draft', 'sent'], true)) {
                 $quote->update(['status' => 'accepted']);
             }
+
+            // audit 2026-05-19 — lock le devis à la facture émise
+            $quote->update(['invoice_id' => $invoice->id]);
 
             return $invoice;
         });
