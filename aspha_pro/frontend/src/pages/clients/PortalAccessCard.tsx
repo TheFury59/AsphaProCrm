@@ -52,6 +52,12 @@ type PortalAccessCardProps = {
   portalUser: PortalUserShape;
   /** Email pré-rempli proposé par défaut (primary_email pour client, vide pour intervenant) */
   defaultEmail?: string;
+  /**
+   * Emails connus à proposer en chips cliquables dans le dialog (pour éviter
+   * de retaper). Typiquement : contacts type=email du client, ou email perso
+   * de l'intervenant. Déduplication faite côté composant.
+   */
+  availableEmails?: string[];
   /** Pour les copies UX. Default "client" → labels "client", "employee" → "intervenant" */
   labels?: {
     cardTitle: string;
@@ -92,10 +98,15 @@ const DEFAULT_LABELS: Record<EntityType, PortalAccessCardProps["labels"]> = {
 };
 
 export function PortalAccessCard({
-  type, entityId, portalUser, defaultEmail = "", labels: customLabels,
+  type, entityId, portalUser, defaultEmail = "", availableEmails = [], labels: customLabels,
 }: PortalAccessCardProps) {
   const labels = customLabels ?? DEFAULT_LABELS[type]!;
   const hasAccess = !!portalUser;
+
+  // Dédupliquer + retirer les vides + mettre defaultEmail en tête s'il existe
+  const suggestions = Array.from(new Set(
+    [defaultEmail, ...availableEmails].filter((e): e is string => !!e?.trim()),
+  ));
 
   const createMut = useCreatePortalAccess(type, entityId);
   const resetMut = useResetPortalAccess(type, entityId);
@@ -139,6 +150,7 @@ export function PortalAccessCard({
               open={showCreateDialog}
               onClose={() => setShowCreateDialog(false)}
               defaultEmail={defaultEmail}
+              suggestions={suggestions}
               emailFieldLabel={labels.emailFieldLabel}
               sendEmailLabel={labels.sendEmailLabel}
               onSuccess={(result) => {
@@ -288,12 +300,14 @@ export function PortalAccessCard({
 // =========================================================================
 
 function CreateAccessDialog({
-  open, onClose, defaultEmail, emailFieldLabel, sendEmailLabel,
+  open, onClose, defaultEmail, suggestions, emailFieldLabel, sendEmailLabel,
   onSubmit, onSuccess, isPending,
 }: {
   open: boolean;
   onClose: () => void;
   defaultEmail: string;
+  /** Liste d'emails connus à proposer en chips sous l'input. */
+  suggestions: string[];
   emailFieldLabel: string;
   sendEmailLabel: string;
   onSubmit: (params: { email?: string; send_email?: boolean }) => Promise<PortalAccessResult>;
@@ -347,6 +361,29 @@ function CreateAccessDialog({
               <p className="text-[10px] text-muted-foreground mt-1">
                 Servira d'identifiant de connexion. Doit être unique dans le système.
               </p>
+
+              {/* Chips suggestions — clic = remplit l'input */}
+              {suggestions.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">Suggestions :</span>
+                  {suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setEmail(s)}
+                      className={
+                        "text-[11px] px-2 py-0.5 rounded-full border transition-colors " +
+                        (email === s
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-input hover:border-primary/40 hover:bg-muted/50")
+                      }
+                      title="Cliquer pour utiliser cet email"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <label className="flex items-start gap-2 cursor-pointer text-xs">

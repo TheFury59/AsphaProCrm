@@ -94,7 +94,12 @@ export function EmployeeFichePage() {
               type="employee"
               entityId={employeeId}
               portalUser={e.user}
-              defaultEmail=""
+              // Email perso saisi sur la fiche → pré-rempli
+              defaultEmail={e.email ?? ""}
+              // Emails déjà connus pour cet intervenant : email perso + email
+              // du compte de connexion existant si présent. Les chips permettent
+              // à l'admin de cliquer au lieu de retaper.
+              availableEmails={[e.email, e.user?.email].filter((x): x is string => !!x?.trim())}
             />
           </div>
 
@@ -106,6 +111,7 @@ export function EmployeeFichePage() {
               <CardContent className="space-y-2 text-sm">
                 <EditableRow label="Nom complet" value={e.name} onSave={(v) => updateField("name", v)} />
                 <EditableRow label="Téléphone" value={e.phone} type="tel" onSave={(v) => updateField("phone", v)} />
+                <EditableRow label="Email personnel" value={e.email} type="email" onSave={(v) => updateField("email", v)} />
                 <Field label="Classification" value={e.classification === "cadre" ? "Cadre" : "Non-cadre"} />
                 <EditableRow label="Mode déplacement" value={e.transport_mode} onSave={(v) => updateField("transport_mode", v)} />
                 <Field label="Véhicule service" value={e.has_company_vehicle ? "Oui (jamais véhicule perso)" : "Non"} />

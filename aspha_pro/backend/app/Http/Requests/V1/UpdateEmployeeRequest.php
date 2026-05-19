@@ -22,6 +22,7 @@ class UpdateEmployeeRequest extends FormRequest
             'user_id' => ['sometimes', 'nullable', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($employeeId)],
             'name' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:255'],
             'classification' => ['sometimes', 'in:non_cadre,cadre'],
             'transport_mode' => ['sometimes', 'nullable', 'string', 'max:32'],
             'has_company_vehicle' => ['sometimes', 'boolean'],

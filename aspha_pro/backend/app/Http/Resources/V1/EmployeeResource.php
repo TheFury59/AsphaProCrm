@@ -17,6 +17,7 @@ class EmployeeResource extends JsonResource
             'name' => $this->name,
             'full_name' => $this->fullName(),
             'phone' => $this->phone,
+            'email' => $this->email,
             'classification' => $this->classification,
             'transport_mode' => $this->transport_mode,
             'has_company_vehicle' => (bool) $this->has_company_vehicle,

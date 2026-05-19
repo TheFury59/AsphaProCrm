@@ -104,6 +104,14 @@ export function ClientFichePage() {
               entityId={clientId}
               portalUser={c.portal_user}
               defaultEmail={c.company?.primary_email ?? ""}
+              // Emails déjà connus pour ce client : primary_email + tous les contacts
+              // de type "email" + email du contact de facturation. Permet à l'admin
+              // de cliquer un chip au lieu de retaper.
+              availableEmails={[
+                c.company?.primary_email,
+                c.billing_contact?.email,
+                ...(c.contacts?.filter((ct) => ct.type === "email").map((ct) => ct.value) ?? []),
+              ].filter((e): e is string => !!e?.trim())}
             />
           </div>
 

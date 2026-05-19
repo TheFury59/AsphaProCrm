@@ -139,6 +139,8 @@ export type Employee = {
   /** URL absolue calculée par l'accessor Employee::avatar_url. */
   avatar_url: string | null;
   phone: string | null;
+  /** Email personnel (différent de user.email qui est l'identifiant de connexion). */
+  email: string | null;
   classification: EmployeeClassification;
   transport_mode: string | null;
   has_company_vehicle: boolean;

@@ -26,6 +26,7 @@ class Employee extends Model
         'name',
         'avatar_path',
         'phone',
+        'email',
         'classification',
         'transport_mode',
         'has_company_vehicle',
