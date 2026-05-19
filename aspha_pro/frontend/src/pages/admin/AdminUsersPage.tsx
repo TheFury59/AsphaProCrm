@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   Users, Search, ShieldCheck, ShieldOff, ShieldAlert,
-  Crown, Loader2, Power, PowerOff,
+  Crown, Loader2, Power, PowerOff, Plus, Copy, Check, AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -19,11 +19,16 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { useAuthStore } from "@/stores/auth";
 import {
   useAdminUsers, useAvailableRoles, useSetUserRole, useUpdateUserStatus,
-  type AdminUser,
+  useCreateUser,
+  type AdminUser, type CreateUserResult,
 } from "@/hooks/use-users";
 
 /**
@@ -68,6 +73,9 @@ export function AdminUsersPage() {
   const currentUser = useAuthStore((s) => s.user);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  // Dialog one-shot d'affichage du password apres creation
+  const [createdResult, setCreatedResult] = useState<CreateUserResult | null>(null);
 
   const { data, isLoading } = useAdminUsers({
     search,
@@ -87,7 +95,38 @@ export function AdminUsersPage() {
       <PageHeader
         title="Gestion des utilisateurs"
         description="Affecter les rôles et activer/désactiver les comptes. Réservé super-administrateur."
+        actions={
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95">
+                <Plus className="h-4 w-4 mr-1.5" /> Nouvel utilisateur
+              </Button>
+            </DialogTrigger>
+            <CreateUserDialog
+              onClose={() => setCreateOpen(false)}
+              onCreated={(result) => {
+                setCreateOpen(false);
+                setCreatedResult(result);
+              }}
+            />
+          </Dialog>
+        }
       />
+
+      {/* Note explicative sur le scope de la page */}
+      <div className="mb-4 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs flex items-start gap-2.5">
+        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="text-amber-900 dark:text-amber-100">
+          <strong>Cette page liste uniquement les comptes de connexion existants.</strong>{" "}
+          Les intervenants et clients qui n'ont pas encore d'accès au portail
+          n'apparaissent pas ici. Pour leur créer un accès :
+          <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px]">
+            <li><strong>Clients</strong> : fiche client → onglet Général → carte "Accès extranet" → bouton "Créer l'accès"</li>
+            <li><strong>Intervenants</strong> : à venir, ou crée manuellement un compte ci-dessus avec le rôle "Intervenant"</li>
+            <li><strong>Admins / Super-admins</strong> : clique "Nouvel utilisateur" en haut à droite</li>
+          </ul>
+        </div>
+      </div>
 
       {/* Card explicative des rôles */}
       <div className="grid md:grid-cols-4 gap-3 mb-4">
@@ -169,7 +208,103 @@ export function AdminUsersPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Dialog one-shot d'affichage des identifiants apres creation */}
+      {createdResult && (
+        <CredentialsDialog
+          result={createdResult}
+          onClose={() => setCreatedResult(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// =========================================================================
+// Dialog affichage one-shot des identifiants apres creation
+// =========================================================================
+
+function CredentialsDialog({
+  result, onClose,
+}: {
+  result: CreateUserResult;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copy = (label: string, value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600" />
+            Utilisateur créé
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 text-xs">
+            <strong className="text-emerald-900 dark:text-emerald-100">{result.user.name}</strong>
+            <div className="text-emerald-700 dark:text-emerald-300 mt-0.5">
+              Rôle : <strong>{result.user.role}</strong>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Identifiant (email)</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <Input value={result.user.email} readOnly className="font-mono text-sm" />
+              <Button type="button" size="icon" variant="outline" onClick={() => copy("email", result.user.email)}>
+                {copied === "email" ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Mot de passe {result.password_was_generated && "(généré automatiquement)"}
+            </Label>
+            <div className="flex items-center gap-2 mt-1">
+              <Input
+                value={result.password}
+                readOnly
+                className="font-mono text-base tracking-wider font-semibold"
+              />
+              <Button type="button" size="icon" variant="outline" onClick={() => copy("password", result.password)}>
+                {copied === "password" ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              ⚠ Ce mot de passe ne sera <strong>plus jamais affiché</strong>. Copie-le ou communique-le maintenant.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            className="w-full"
+            onClick={() => {
+              navigator.clipboard.writeText(
+                `Identifiant : ${result.user.email}\nMot de passe : ${result.password}\nURL : ${window.location.origin}/login`,
+              );
+              toast.success("Identifiants complets copiés");
+            }}
+          >
+            <Copy className="h-4 w-4 mr-1.5" />
+            Copier tout (id + password + URL)
+          </Button>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" onClick={onClose}>J'ai noté</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -270,3 +405,122 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
     </TableRow>
   );
 }
+
+// =========================================================================
+// Dialog "Nouvel utilisateur"
+// =========================================================================
+
+function CreateUserDialog({
+  onClose, onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (result: CreateUserResult) => void;
+}) {
+  const create = useCreateUser();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"super_admin" | "admin" | "intervenant" | "client">("admin");
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    try {
+      const result = await create.mutateAsync({
+        name: name.trim(),
+        email: email.trim(),
+        password: password || undefined,
+        role,
+      });
+      toast.success("Utilisateur créé");
+      onCreated(result);
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const firstErr = data?.errors ? Object.values(data.errors).flat()[0] : null;
+      toast.error((firstErr as string) ?? data?.message ?? "Création impossible");
+    }
+  };
+
+  return (
+    <DialogContent className="sm:!max-w-md">
+      <form onSubmit={submit}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-4 w-4 text-primary" />
+            Nouvel utilisateur
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-3">
+          <div>
+            <Label className="text-xs">Nom complet *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jean Dupont"
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Email *</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jean.dupont@aspha.local"
+              required
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Servira d'identifiant de connexion.
+            </p>
+          </div>
+          <div>
+            <Label className="text-xs">Rôle *</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as any)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="super_admin">
+                  <Crown className="h-3 w-3 inline mr-1.5" />
+                  Super-administrateur
+                </SelectItem>
+                <SelectItem value="admin">
+                  <ShieldCheck className="h-3 w-3 inline mr-1.5" />
+                  Administrateur
+                </SelectItem>
+                <SelectItem value="intervenant">
+                  <ShieldAlert className="h-3 w-3 inline mr-1.5" />
+                  Intervenant
+                </SelectItem>
+                <SelectItem value="client">
+                  <ShieldOff className="h-3 w-3 inline mr-1.5" />
+                  Client
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Mot de passe (optionnel)</Label>
+            <Input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Laisser vide pour générer automatiquement"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Si vide, un mot de passe sera généré et affiché une seule fois.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button type="submit" disabled={!name.trim() || !email.trim() || create.isPending}>
+            {create.isPending ? "Création…" : "Créer l'utilisateur"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+

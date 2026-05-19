@@ -268,6 +268,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // === Admin : gestion users + rôles (super_admin only) ===
     Route::get('admin/users', [UsersController::class, 'index']);
+    Route::post('admin/users', [UsersController::class, 'store']);
     Route::get('admin/users/roles', [UsersController::class, 'availableRolesList']);
     Route::post('admin/users/{user}/role', [UsersController::class, 'setRole']);
     Route::patch('admin/users/{user}', [UsersController::class, 'update']);

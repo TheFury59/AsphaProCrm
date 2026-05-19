@@ -87,6 +87,30 @@ export function useAvailableRoles() {
   });
 }
 
+export type CreateUserPayload = {
+  name: string;
+  email: string;
+  password?: string;
+  role: "super_admin" | "admin" | "intervenant" | "client";
+};
+
+export type CreateUserResult = {
+  user: { id: number; name: string; email: string; role: string };
+  password: string;
+  password_was_generated: boolean;
+};
+
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateUserPayload) => {
+      const { data } = await api.post<{ data: CreateUserResult }>("/admin/users", payload);
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+  });
+}
+
 export function useSetUserRole() {
   const qc = useQueryClient();
   return useMutation({

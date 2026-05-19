@@ -5,6 +5,8 @@ namespace App\Http\Controllers\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role;
 
@@ -64,6 +66,69 @@ class UsersController extends Controller
         });
 
         return ['data' => $paginated];
+    }
+
+    /**
+     * POST /api/v1/admin/users
+     *
+     * Crée un nouvel utilisateur avec un rôle. Typiquement utilisé pour
+     * créer des comptes admin/super_admin manuels. Pour les intervenants
+     * et clients, préférer les flow dédiés (fiche intervenant → futur
+     * "Créer accès", fiche client → "Accès extranet").
+     *
+     * Mot de passe : si non fourni, généré random 12 chars sans ambiguïtés
+     * et retourné UNE SEULE FOIS dans la réponse (pas re-fetchable).
+     */
+    public function store(Request $request)
+    {
+        abort_unless($request->user()?->hasRole('super_admin'), 403, "Accès super_admin requis");
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:users,email'],
+            'password' => ['nullable', 'string', 'min:8'],
+            'role' => ['required', Rule::in($this->availableRoles())],
+        ]);
+
+        $plainPassword = $data['password'] ?? $this->generatePassword();
+
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => Hash::make($plainPassword),
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $user->syncRoles([$data['role']]);
+
+        return response()->json([
+            'data' => [
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $data['role'],
+                ],
+                // Affiché UNE seule fois côté UI — pas re-fetchable côté serveur
+                'password' => $plainPassword,
+                'password_was_generated' => empty($data['password']),
+            ],
+        ], 201);
+    }
+
+    /**
+     * Génère un mot de passe lisible : 12 chars alphanum sans ambiguïtés.
+     * Cf. ClientPortalAccessController::generatePassword pour le même algo.
+     */
+    private function generatePassword(): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+        $out = '';
+        $len = strlen($alphabet);
+        for ($i = 0; $i < 12; $i++) {
+            $out .= $alphabet[random_int(0, $len - 1)];
+        }
+        return $out;
     }
 
     /**
