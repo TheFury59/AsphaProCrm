@@ -16,7 +16,15 @@ class QrCode extends Model
         'type',
         'code',
         'status',
+        'expires_at', // audit 2026-05-19 — QR optionnellement expirable
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'expires_at' => 'datetime', // audit 2026-05-19
+        ];
+    }
 
     public function address(): BelongsTo
     {

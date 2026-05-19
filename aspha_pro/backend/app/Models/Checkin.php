@@ -18,6 +18,7 @@ class Checkin extends Model
         'checkout_time',
         'latitude',
         'longitude',
+        'flag_no_gps', // audit 2026-05-19 — mode dégradé sans GPS
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class Checkin extends Model
             'checkout_time' => 'datetime',
             'latitude' => 'float',
             'longitude' => 'float',
+            'flag_no_gps' => 'boolean', // audit 2026-05-19
         ];
     }
 

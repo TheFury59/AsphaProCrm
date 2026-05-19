@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Address;
 use App\Models\Employee;
+use App\Models\EmployeeAbsence;
 use App\Models\Intervention;
 use Illuminate\Support\Collection;
 
@@ -42,13 +43,23 @@ class InterventionMatchingService
         if ($employees->isEmpty()) return collect();
 
         // 2. Charge données contextuelles
-        $iv->loadMissing(['client.addresses', 'employee']);
+        // audit 2026-05-19 — eager-load les skills via la prestation/produit
+        // pour pouvoir scorer correctement la composante "skills".
+        $iv->loadMissing(['client.addresses', 'employee', 'clientPrestation.product.skills']);
 
         $interventionAddr = $this->resolveInterventionAddress($iv);
         $clientId = $iv->client_id;
         $start = $iv->start_datetime;
         $end = $iv->end_datetime;
-        $requiredSkillIds = []; // À enrichir : prestations → compétences requises (table de mapping)
+
+        // audit 2026-05-19 — récupère les compétences requises depuis la
+        // chaîne intervention → clientPrestation → product → skills (pivot
+        // product_skill). Si aucune skills déclarée, fallback neutre 25/40.
+        $requiredSkillIds = [];
+        $product = $iv->clientPrestation?->product;
+        if ($product && $product->relationLoaded('skills')) {
+            $requiredSkillIds = $product->skills->pluck('id')->all();
+        }
 
         $scored = $employees->map(function (Employee $e) use ($iv, $interventionAddr, $clientId, $start, $end, $requiredSkillIds) {
             $score = 0;
@@ -91,19 +102,38 @@ class InterventionMatchingService
             // --- Availability (20 pts) ---
             $availScore = 20;
             if ($start && $end) {
-                $conflicts = Intervention::where('employee_id', $e->id)
-                    ->where('id', '!=', $iv->id)
-                    ->where('is_exception', false)
-                    ->where(function ($q) use ($start, $end) {
-                        $q->whereBetween('start_datetime', [$start, $end])
-                          ->orWhereBetween('end_datetime', [$start, $end])
-                          ->orWhere(function ($q) use ($start, $end) {
-                              $q->where('start_datetime', '<=', $start)
-                                ->where('end_datetime', '>=', $end);
-                          });
+                // audit 2026-05-19 — vérifie d'abord les absences déclarées
+                // (congés, maladie, indispo). Une absence couvrant le créneau
+                // = score 0 directement, pas besoin de checker les conflits.
+                $isAbsent = EmployeeAbsence::where('employee_id', $e->id)
+                    ->whereDate('start_date', '<=', $end)
+                    ->where(function ($q) use ($start) {
+                        $q->whereNull('end_date')
+                          ->orWhereDate('end_date', '>=', $start);
                     })
                     ->exists();
-                if ($conflicts) $availScore = 0;
+
+                if ($isAbsent) {
+                    $availScore = 0;
+                } else {
+                    // audit 2026-05-19 — exclure les interventions annulées du calcul
+                    // de conflit (le statut métier réel est 'annulee', cf. enum
+                    // InterventionController).
+                    $conflicts = Intervention::where('employee_id', $e->id)
+                        ->where('id', '!=', $iv->id)
+                        ->where('is_exception', false)
+                        ->where('status', '!=', 'annulee')
+                        ->where(function ($q) use ($start, $end) {
+                            $q->whereBetween('start_datetime', [$start, $end])
+                              ->orWhereBetween('end_datetime', [$start, $end])
+                              ->orWhere(function ($q) use ($start, $end) {
+                                  $q->where('start_datetime', '<=', $start)
+                                    ->where('end_datetime', '>=', $end);
+                              });
+                        })
+                        ->exists();
+                    if ($conflicts) $availScore = 0;
+                }
             }
             $score += $availScore;
             $breakdown['availability'] = $availScore;
@@ -113,7 +143,7 @@ class InterventionMatchingService
             if ($clientId) {
                 $previously = Intervention::where('employee_id', $e->id)
                     ->where('client_id', $clientId)
-                    ->where('status', '!=', 'cancelled')
+                    ->where('status', '!=', 'annulee') // audit 2026-05-19 — enum réel
                     ->exists();
                 if ($previously) $prefScore = 10;
             }

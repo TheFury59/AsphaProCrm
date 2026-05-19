@@ -9,22 +9,33 @@ export type QrCode = {
   id: number;
   code: string;
   address_id: number | null;
-  status: "valid" | "rotated" | "revoked";
-  generated_at: string;
-  rotated_at: string | null;
+  status: "valid" | "obsolete" | "invalid" | "to_validate";
+  type: "qrcode" | "nfc";
+  expires_at: string | null; // audit 2026-05-19
+  generated_at?: string;
+  rotated_at?: string | null;
   [k: string]: any;
 };
 
+/**
+ * audit 2026-05-19 — typage aligné sur le backend `telemanagement_logs` :
+ * - `called_at` (et non `scanned_at`)
+ * - `event_type` arrival/departure (et non `action` in/out)
+ * - `origin` mobile/manual/landline (et non `source`)
+ * - `comment` (et non `manual_reason`)
+ */
 export type CheckinLog = {
   id: number;
   intervention_id: number | null;
   employee_id: number;
   client_id: number | null;
-  action: "in" | "out";
-  source: "qr" | "manual" | "geo" | "phone";
-  scanned_at: string;
-  is_manual: boolean;
-  manual_reason: string | null;
+  event_type: "arrival" | "departure" | "unrecognized";
+  origin: "mobile" | "manual" | "landline" | null;
+  called_at: string;
+  is_unrecognized: boolean;
+  comment: string | null;
+  employee?: { id: number; name: string } | null;
+  client?: { id: number; code: string } | null;
   [k: string]: any;
 };
 
@@ -41,18 +52,36 @@ export function useQrCodes(params: Record<string, any> = {}) {
 export function useGenerateQrCode() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { address_id?: number; rotate?: boolean }) => {
-      const { data } = await api.post<{ data: QrCode }>("/telemanagement/qr-codes", payload);
+    mutationFn: async (payload: {
+      address_id: number;
+      type?: "qrcode" | "nfc";
+      expires_at?: string | null; // audit 2026-05-19
+    }) => {
+      const { data } = await api.post<{ data: QrCode }>("/telemanagement/qr-codes", {
+        type: "qrcode",
+        ...payload,
+      });
       return data.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["telemanagement", "qr-codes"] }),
   });
 }
 
+/**
+ * audit 2026-05-19 — payload aligné sur le backend
+ * (event_type arrival/departure + employee_id obligatoire).
+ */
 export function useBadge() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { qr_code: string; action: "in" | "out"; latitude?: number; longitude?: number }) => {
+    mutationFn: async (payload: {
+      qr_code: string;
+      employee_id: number;
+      event_type: "arrival" | "departure";
+      intervention_id?: number | null;
+      latitude?: number;
+      longitude?: number;
+    }) => {
       const { data } = await api.post("/telemanagement/badge", payload);
       return data.data;
     },
@@ -60,14 +89,19 @@ export function useBadge() {
   });
 }
 
+/**
+ * audit 2026-05-19 — payload aligné sur TelemanagementController::manualEntry
+ * (employee_id + intervention_id requis ; checkin_time/checkout_time ; comment).
+ */
 export function useManualEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: {
+      employee_id: number;
       intervention_id: number;
-      action: "in" | "out";
-      scanned_at: string;
-      reason: string;
+      checkin_time?: string | null;
+      checkout_time?: string | null;
+      comment?: string;
     }) => {
       const { data } = await api.post("/telemanagement/manual-entry", payload);
       return data.data;

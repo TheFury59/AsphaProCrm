@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
@@ -70,6 +71,15 @@ class Product extends Model
     public function clientPrestations(): HasMany
     {
         return $this->hasMany(ClientPrestation::class, 'product_id');
+    }
+
+    /**
+     * Compétences requises pour cette prestation (pivot product_skill).
+     * audit 2026-05-19 — alimente le matching auto intervenant.
+     */
+    public function skills(): BelongsToMany
+    {
+        return $this->belongsToMany(Skill::class, 'product_skill', 'product_id', 'skill_id');
     }
 
 }
