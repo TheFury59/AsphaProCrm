@@ -173,6 +173,17 @@ class InterventionController extends Controller
             'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
             'status' => ['nullable', 'in:a_pourvoir,planifiee,realisee,annulee,draft,terminated'],
             'comment' => ['nullable', 'string'],
+            // audit 2026-05-19 — accepter aussi les champs métier que le dialog d'édition
+            // d'occurrence transmet désormais (avant : tout sauf start/end/employee/status/comment
+            // était silencieusement perdu en passant par exception).
+            'key_id' => ['nullable', 'integer', 'exists:keys,id'],
+            'address_id' => ['nullable', 'integer', 'exists:addresses,id'],
+            'contact_id' => ['nullable', 'integer', 'exists:client_contacts,id'],
+            'transport_mode' => ['nullable', 'string', 'max:32'],
+            'vehicle_type' => ['nullable', 'in:personal,company'],
+            'bill_client' => ['nullable', 'boolean'],
+            'is_paid' => ['nullable', 'boolean'],
+            'internal_comment' => ['nullable', 'string'],
         ]);
 
         // Empêcher les doublons d'exception sur la même date
@@ -187,11 +198,13 @@ class InterventionController extends Controller
             ], 409);
         }
 
+        // audit 2026-05-19 — propager tous les champs éditables vers l'exception, avec
+        // fallback sur la valeur de la série parent quand non fournis.
         $exception = Intervention::create([
             'client_id' => $intervention->client_id,
             'mission_id' => $intervention->mission_id,
             'client_prestation_id' => $intervention->client_prestation_id,
-            'employee_id' => $data['employee_id'] ?? $intervention->employee_id,
+            'employee_id' => array_key_exists('employee_id', $data) ? $data['employee_id'] : $intervention->employee_id,
             'is_recurring' => false,
             'is_exception' => true,
             'parent_id' => $intervention->id,
@@ -200,6 +213,14 @@ class InterventionController extends Controller
             'end_datetime' => $data['end_datetime'],
             'status' => $data['status'] ?? 'planifiee',
             'comment' => $data['comment'] ?? null,
+            'key_id' => array_key_exists('key_id', $data) ? $data['key_id'] : $intervention->key_id,
+            'address_id' => array_key_exists('address_id', $data) ? $data['address_id'] : $intervention->address_id,
+            'contact_id' => array_key_exists('contact_id', $data) ? $data['contact_id'] : $intervention->contact_id,
+            'transport_mode' => array_key_exists('transport_mode', $data) ? $data['transport_mode'] : $intervention->transport_mode,
+            'vehicle_type' => array_key_exists('vehicle_type', $data) ? $data['vehicle_type'] : $intervention->vehicle_type,
+            'bill_client' => array_key_exists('bill_client', $data) ? $data['bill_client'] : $intervention->bill_client,
+            'is_paid' => array_key_exists('is_paid', $data) ? $data['is_paid'] : $intervention->is_paid,
+            'internal_comment' => $data['internal_comment'] ?? null,
         ]);
 
         $exception->load(['employee:id,name', 'client:id,code']);

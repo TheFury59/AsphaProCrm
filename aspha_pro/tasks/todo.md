@@ -55,12 +55,13 @@ Plan de correction (en cours) :
 - [ ] Cascade `Invoice.destroy` / `Reglement.destroy` (purge allocations)
 
 ### Phase D — Bugs UX bloquants
-- [ ] EditableField : null OK, single save, draft preserved
-- [ ] `ClientController.update` : pas de DELETE billing_contact sur vidage de champ
-- [ ] `updateOrCreate` company : require `company_name` minimum
-- [ ] EditInterventionDialog : payload complet pour occurrence virtuelle
+- [x] EditableField : null OK (toast + restore), single save (ref-flag), draft preserved (editingRef) — fix 2026-05-19
+- [x] `ClientController.update` : pas de DELETE billing_contact sur vidage de champ — fix 2026-05-19
+- [x] `updateOrCreate` company : require `company_name` minimum à la création — fix 2026-05-19
+- [x] EditInterventionDialog : payload complet pour occurrence virtuelle (key/address/contact/transport/vehicle/flags/internal_comment) — fix 2026-05-19
 - [ ] Drag-drop : propager `employee_id`
-- [ ] Tickets observer : fallback sur admins en dernier recours (jamais l'expéditeur)
+- [x] Tickets observer : fallback sur super_admins en dernier recours (jamais l'expéditeur) — fix 2026-05-19
+- [x] Cascade Client/Employee.destroy : 409 si interventions futures liées, bypass `?force=1` super_admin — fix 2026-05-19
 - [ ] `RoleRouter` : gérer `role=null`, robuste au flash
 - [ ] `Sidebar` : filtrer items par rôle (ne plus rien afficher pour intervenant/client en /)
 - [ ] Route `*` 404 + ErrorBoundary global

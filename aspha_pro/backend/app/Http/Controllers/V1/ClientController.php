@@ -7,6 +7,7 @@ use App\Http\Requests\V1\StoreClientRequest;
 use App\Http\Requests\V1\UpdateClientRequest;
 use App\Http\Resources\V1\ClientResource;
 use App\Models\Client;
+use App\Models\Intervention;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -113,18 +114,36 @@ class ClientController extends Controller
                 $client->update($clientFields);
             }
 
+            // audit 2026-05-19 — refuser la création d'une ClientCompany sans company_name.
+            // Sans cette garde, un PATCH partiel `{company: {phone_landline: "01..."}}` créait
+            // un enregistrement company orphelin sans raison sociale (HIGH).
             if ($request->filled('company')) {
+                $companyData = $request->input('company');
+                $hasCompany = $client->company()->exists();
+                if (! $hasCompany && empty($companyData['company_name'] ?? null)) {
+                    abort(422, "Impossible de créer une société sans raison sociale (company_name requis).");
+                }
                 $client->company()->updateOrCreate(
                     ['client_id' => $client->id],
-                    $request->input('company')
+                    $companyData
                 );
             }
 
+            // audit 2026-05-19 — ne plus DELETE le billing_contact dès qu'un champ est vidé.
+            // Avant : EditableField envoyait `{billing_contact: {civility: null}}` pour vider 1 champ,
+            // et `empty(['civility' => null])` = true en PHP → DELETE complet (CRIT).
+            // Maintenant : on ne supprime QUE si la requête est explicite (au moins 2 champs passés
+            // et TOUS vides/null = geste intentionnel de purge). Sinon → updateOrCreate normal.
             if ($request->has('billing_contact')) {
                 $bc = $request->input('billing_contact');
-                if (empty($bc)) {
+                $bc = is_array($bc) ? $bc : [];
+                $nonEmptyCount = count(array_filter($bc, fn ($v) => $v !== null && $v !== ''));
+                $passedCount = count($bc);
+                $isExplicitPurge = $passedCount >= 2 && $nonEmptyCount === 0;
+
+                if ($isExplicitPurge) {
                     $client->billingContact()->delete();
-                } else {
+                } elseif ($passedCount > 0) {
                     $client->billingContact()->updateOrCreate(
                         ['client_id' => $client->id],
                         $bc
@@ -143,6 +162,25 @@ class ClientController extends Controller
     public function destroy(Request $request, Client $client)
     {
         abort_unless($request->user()?->can('clients.delete'), 403);
+
+        // audit 2026-05-19 — garde-fou anti-orphelins : refuser la suppression si des
+        // interventions futures sont liées (le client a encore des RDV planifiés). L'admin
+        // peut forcer via ?force=1 mais doit le faire explicitement.
+        $force = $request->boolean('force');
+        $isSuperAdmin = $request->user()?->hasRole('super_admin') ?? false;
+
+        if (! $force) {
+            $futureCount = Intervention::where('client_id', $client->id)
+                ->where('start_datetime', '>=', now())
+                ->whereNotIn('status', ['annulee', 'realisee', 'terminated'])
+                ->count();
+            if ($futureCount > 0) {
+                abort(409, "Impossible de supprimer : {$futureCount} intervention(s) future(s) liée(s). Annulez ou réassignez-les d'abord, ou forcez via ?force=1 (admin uniquement).");
+            }
+        } elseif (! $isSuperAdmin) {
+            abort(403, "Seul un super-admin peut forcer la suppression d'un client avec interventions futures.");
+        }
+
         $client->delete();
         return response()->noContent();
     }

@@ -7,6 +7,7 @@ use App\Http\Requests\V1\StoreEmployeeRequest;
 use App\Http\Requests\V1\UpdateEmployeeRequest;
 use App\Http\Resources\V1\EmployeeResource;
 use App\Models\Employee;
+use App\Models\Intervention;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -97,6 +98,25 @@ class EmployeeController extends Controller
     public function destroy(Request $request, Employee $employee)
     {
         abort_unless($request->user()?->can('employees.delete'), 403);
+
+        // audit 2026-05-19 — garde-fou anti-orphelins : si l'intervenant a des RDV
+        // futurs assignés, refuser la suppression. L'admin peut forcer via ?force=1
+        // mais doit choisir entre ré-assigner ou laisser orphelin.
+        $force = $request->boolean('force');
+        $isSuperAdmin = $request->user()?->hasRole('super_admin') ?? false;
+
+        if (! $force) {
+            $futureCount = Intervention::where('employee_id', $employee->id)
+                ->where('start_datetime', '>=', now())
+                ->whereNotIn('status', ['annulee', 'realisee', 'terminated'])
+                ->count();
+            if ($futureCount > 0) {
+                abort(409, "Impossible de supprimer : {$futureCount} intervention(s) future(s) assignée(s). Réassignez-les d'abord, ou forcez via ?force=1 (admin uniquement).");
+            }
+        } elseif (! $isSuperAdmin) {
+            abort(403, "Seul un super-admin peut forcer la suppression d'un intervenant avec interventions futures.");
+        }
+
         $employee->delete();
         return response()->noContent();
     }

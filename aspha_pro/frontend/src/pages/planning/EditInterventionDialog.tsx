@@ -125,6 +125,10 @@ export function EditInterventionDialog({
     };
 
     if (isOccurrence) {
+      // audit 2026-05-19 — payload exception complet : avant on ne propageait que
+      // start/end/employee/status/comment, et tous les autres champs édités dans le
+      // dialog (clé, adresse, contact, transport, véhicule, flags facturation, note interne)
+      // étaient silencieusement perdus à la création de l'exception.
       createException.mutate({
         parentId: intervention.intervention_id,
         payload: {
@@ -134,6 +138,14 @@ export function EditInterventionDialog({
           employee_id: payload.employee_id,
           status: form.status,
           comment: form.comment || null,
+          key_id: payload.key_id,
+          address_id: payload.address_id,
+          contact_id: payload.contact_id,
+          transport_mode: payload.transport_mode,
+          vehicle_type: payload.vehicle_type,
+          bill_client: payload.bill_client,
+          is_paid: payload.is_paid,
+          internal_comment: payload.internal_comment,
         },
       }, {
         onSuccess: () => { toast.success("Exception créée pour cette occurrence"); onClose(); },

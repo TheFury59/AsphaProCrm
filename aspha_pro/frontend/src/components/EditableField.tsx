@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { apiErrorMessage } from "@/lib/api";
 
 type Props = {
   value: string | null | undefined;
@@ -25,9 +27,20 @@ export function EditableField({
   const [draft, setDraft] = useState(value ?? "");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  // audit 2026-05-19 — ref-flag synchrone pour bloquer la 2e save quand onBlur + onMouseDown
+  // déclenchent save() dans le même tick (avant que setSaving(true) ne se propage).
+  const savingRef = useRef(false);
+  // audit 2026-05-19 — flag d'édition stable pour ne pas écraser le draft avec value
+  // pendant que l'utilisateur tape (refetch parent → useEffect([value]) écrasait le draft).
+  const editingRef = useRef(false);
+  useEffect(() => { editingRef.current = editing; }, [editing]);
 
   useEffect(() => {
-    setDraft(value ?? "");
+    // audit 2026-05-19 — sync draft<-value SEULEMENT hors édition. Sinon un refetch du
+    // parent (mutation cascade, polling) écrase ce que l'utilisateur est en train de saisir.
+    if (!editingRef.current) {
+      setDraft(value ?? "");
+    }
   }, [value]);
 
   useEffect(() => {
@@ -43,18 +56,25 @@ export function EditableField({
   };
 
   const save = async () => {
-    if (saving) return;
+    // audit 2026-05-19 — garde synchrone via ref (setSaving est async, donc 2 appels
+    // simultanés type onBlur + onMouseDown peuvent tous deux passer le `if (saving)`).
+    if (savingRef.current) return;
     if (draft === (value ?? "")) {
       setEditing(false);
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSave(draft.trim() === "" ? null : draft.trim());
       setEditing(false);
-    } catch {
-      // erreur silencieuse : la valeur affichée reste l'ancienne (pas modifiée par le parent)
+    } catch (err) {
+      // audit 2026-05-19 — ne plus avaler silencieusement : toast + restore du draft
+      // pour ne pas laisser un draft invalide à l'écran.
+      toast.error(apiErrorMessage(err, "Échec de la sauvegarde"));
+      setDraft(value ?? "");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
