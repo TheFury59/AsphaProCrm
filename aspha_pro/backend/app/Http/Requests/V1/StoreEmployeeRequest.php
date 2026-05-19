@@ -19,6 +19,7 @@ class StoreEmployeeRequest extends FormRequest
             'user_id' => ['nullable', 'exists:users,id', 'unique:employees,user_id'],
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:32'],
+            'email' => ['nullable', 'email', 'max:255'],
             'classification' => ['required', 'in:non_cadre,cadre'],
             'transport_mode' => ['nullable', 'string', 'max:32'],
             'has_company_vehicle' => ['nullable', 'boolean'],

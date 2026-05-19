@@ -55,7 +55,7 @@ class EmployeeController extends Controller
     {
         $employee = DB::transaction(function () use ($request) {
             $data = $request->only([
-                'user_id', 'entity_id', 'owner_user_id', 'name', 'phone',
+                'user_id', 'entity_id', 'owner_user_id', 'name', 'phone', 'email',
                 'classification', 'transport_mode', 'has_company_vehicle',
                 'diploma', 'job_reference_free',
             ]);
@@ -80,7 +80,7 @@ class EmployeeController extends Controller
     {
         DB::transaction(function () use ($request, $employee) {
             $employee->update($request->only([
-                'user_id', 'entity_id', 'owner_user_id', 'name', 'phone',
+                'user_id', 'entity_id', 'owner_user_id', 'name', 'phone', 'email',
                 'classification', 'transport_mode', 'has_company_vehicle',
                 'diploma', 'job_reference_free',
             ]));
