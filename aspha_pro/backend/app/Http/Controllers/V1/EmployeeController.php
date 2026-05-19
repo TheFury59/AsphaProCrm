@@ -43,7 +43,8 @@ class EmployeeController extends Controller
         abort_unless($request->user()?->can('employees.view'), 403);
 
         $employee->load([
-            'user', 'entity', 'ownerUser:id,name',
+            'user:id,name,email,status,last_login_at',
+            'entity', 'ownerUser:id,name',
             'currentContract', 'skills', 'addresses',
         ])->loadCount(['contracts', 'absences', 'trainings', 'interventions', 'salaryDeductions']);
 

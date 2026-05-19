@@ -17,6 +17,7 @@ use App\Http\Controllers\V1\InvoiceController;
 use App\Http\Controllers\V1\MatchingController;
 use App\Http\Controllers\V1\MessagingController;
 use App\Http\Controllers\V1\ClientPortalAccessController;
+use App\Http\Controllers\V1\EmployeePortalAccessController;
 use App\Http\Controllers\V1\ClientRequestController;
 use App\Http\Controllers\V1\MediaUploadController;
 use App\Http\Controllers\V1\MissionController;
@@ -95,6 +96,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('clients/{client}/portal-access/reset', [ClientPortalAccessController::class, 'reset']);
     Route::post('clients/{client}/portal-access/email', [ClientPortalAccessController::class, 'sendEmail']);
     Route::delete('clients/{client}/portal-access', [ClientPortalAccessController::class, 'revoke']);
+
+    // === Accès extranet intervenant (mêmes 4 actions que client) ===
+    Route::post('employees/{employee}/portal-access', [EmployeePortalAccessController::class, 'create']);
+    Route::post('employees/{employee}/portal-access/reset', [EmployeePortalAccessController::class, 'reset']);
+    Route::post('employees/{employee}/portal-access/email', [EmployeePortalAccessController::class, 'sendEmail']);
+    Route::delete('employees/{employee}/portal-access', [EmployeePortalAccessController::class, 'revoke']);
 
     // === Uploads médias (avatars intervenants + logos clients) ===
     Route::post('employees/{employee}/avatar', [MediaUploadController::class, 'uploadEmployeeAvatar']);
@@ -247,6 +254,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('planning', 'intervenantPlanning');
         Route::get('absences', 'intervenantAbsences');
         Route::get('contract', 'intervenantContract');
+        Route::get('my-clients', 'intervenantMyClients');
+        Route::get('tickets', 'intervenantTickets');
+        Route::post('tickets', 'createIntervenantTicket');
     });
     Route::prefix('extranet/client')->controller(ExtranetController::class)->group(function () {
         Route::get('profile', 'clientProfile');

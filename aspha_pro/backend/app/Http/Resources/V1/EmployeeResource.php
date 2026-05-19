@@ -29,6 +29,7 @@ class EmployeeResource extends JsonResource
                 'name' => $this->user->name,
                 'email' => $this->user->email,
                 'status' => $this->user->status,
+                'last_login_at' => optional($this->user->last_login_at)->toIso8601String(),
             ] : null),
 
             'entity' => $this->whenLoaded('entity', fn () => $this->entity ? [

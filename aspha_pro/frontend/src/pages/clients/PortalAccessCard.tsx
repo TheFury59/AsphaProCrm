@@ -16,12 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   useCreatePortalAccess, useResetPortalAccess, useSendPortalEmail, useRevokePortalAccess,
-  type PortalAccessResult,
+  type PortalAccessResult, type EntityType,
 } from "@/hooks/use-portal-access";
-import type { Client } from "@/types/api";
 
 /**
- * Section "Accès extranet" de la fiche client (onglet Général).
+ * Section "Accès extranet" générique — pour client OU intervenant.
  *
  * 2 états :
  *  1. Aucun accès → bouton "Créer l'accès" (avec email à confirmer + option
@@ -29,23 +28,67 @@ import type { Client } from "@/types/api";
  *  2. Accès existant → email, dernière connexion, badge statut, actions :
  *     - Renvoyer email avec nouveau mot de passe
  *     - Réinitialiser le mot de passe (affichage clair)
- *     - Tester l'extranet (bouton qui copie identifiant + ouvre /login dans
- *       nouvel onglet, l'admin colle manuellement)
+ *     - Tester l'extranet (copie identifiant + ouvre /login dans nouvel onglet)
  *     - Révoquer l'accès
  *
  * Le mot de passe en clair n'est affiché qu'**une seule fois** dans un dialog
- * dédié après création/reset, avec bouton de copie. C'est intentionnel : on
- * ne stocke jamais le clair côté serveur.
+ * dédié après création/reset, avec bouton de copie. On ne stocke jamais le
+ * clair côté serveur.
  */
-export function PortalAccessCard({ client }: { client: Client }) {
-  const portalUser = client.portal_user ?? null;
-  const hasAccess = !!portalUser;
-  const primaryEmail = client.company?.primary_email ?? "";
+type PortalUserShape = {
+  id: number;
+  name: string;
+  email: string;
+  status: "active" | "inactive";
+  last_login_at: string | null;
+} | null | undefined;
 
-  const createMut = useCreatePortalAccess(client.id);
-  const resetMut = useResetPortalAccess(client.id);
-  const sendMut = useSendPortalEmail(client.id);
-  const revokeMut = useRevokePortalAccess(client.id);
+type PortalAccessCardProps = {
+  /** "client" → endpoints /clients/{id}/portal-access, "employee" → /employees/{id}/portal-access */
+  type: EntityType;
+  /** ID du client ou de l'intervenant */
+  entityId: number;
+  /** Le user lié s'il existe (depuis client.portal_user ou employee.user) */
+  portalUser: PortalUserShape;
+  /** Email pré-rempli proposé par défaut (primary_email pour client, vide pour intervenant) */
+  defaultEmail?: string;
+  /** Pour les copies UX. Default "client" → labels "client", "employee" → "intervenant" */
+  labels?: {
+    cardTitle: string;
+    descriptionWithAccess: string;
+    descriptionWithoutAccess: string;
+    noAccessHint: string;
+    revokeConfirm: string;
+  };
+};
+
+const DEFAULT_LABELS: Record<EntityType, PortalAccessCardProps["labels"]> = {
+  client: {
+    cardTitle: "Accès extranet client",
+    descriptionWithAccess: "Ce client peut se connecter à son espace portail pour consulter ses factures, prestations et envoyer des demandes.",
+    descriptionWithoutAccess: "Crée un identifiant pour permettre à ce client d'accéder à son espace portail.",
+    noAccessHint: "Aucun accès extranet pour ce client. Cliquez sur « Créer l'accès » pour générer un identifiant et un mot de passe.",
+    revokeConfirm: "Révoquer l'accès extranet ? Le client ne pourra plus se connecter.",
+  },
+  employee: {
+    cardTitle: "Accès extranet intervenant",
+    descriptionWithAccess: "Cet intervenant peut se connecter à son espace personnel pour consulter son planning, sa messagerie et signaler des problèmes clients.",
+    descriptionWithoutAccess: "Crée un identifiant pour permettre à cet intervenant d'accéder à son espace personnel.",
+    noAccessHint: "Aucun accès extranet pour cet intervenant. Cliquez sur « Créer l'accès » pour générer un identifiant et un mot de passe.",
+    revokeConfirm: "Révoquer l'accès extranet ? L'intervenant ne pourra plus se connecter.",
+  },
+};
+
+export function PortalAccessCard({
+  type, entityId, portalUser, defaultEmail = "", labels: customLabels,
+}: PortalAccessCardProps) {
+  const labels = customLabels ?? DEFAULT_LABELS[type]!;
+  const hasAccess = !!portalUser;
+
+  const createMut = useCreatePortalAccess(type, entityId);
+  const resetMut = useResetPortalAccess(type, entityId);
+  const sendMut = useSendPortalEmail(type, entityId);
+  const revokeMut = useRevokePortalAccess(type, entityId);
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [credentials, setCredentials] = useState<PortalAccessResult | null>(null);
@@ -55,12 +98,10 @@ export function PortalAccessCard({ client }: { client: Client }) {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <KeyRound className="h-4 w-4 text-primary" />
-          Accès extranet client
+          {labels.cardTitle}
         </CardTitle>
         <CardDescription>
-          {hasAccess
-            ? "Ce client peut se connecter à son espace portail pour consulter ses factures, prestations et envoyer des demandes."
-            : "Crée un identifiant pour permettre à ce client d'accéder à son espace portail."}
+          {hasAccess ? labels.descriptionWithAccess : labels.descriptionWithoutAccess}
         </CardDescription>
       </CardHeader>
 
@@ -71,8 +112,7 @@ export function PortalAccessCard({ client }: { client: Client }) {
             <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 mb-3 flex items-start gap-2.5">
               <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-900 dark:text-amber-100">
-                Aucun accès extranet pour ce client. Cliquez sur « Créer l'accès » pour générer
-                un identifiant et un mot de passe.
+                {labels.noAccessHint}
               </div>
             </div>
             <Button
@@ -86,7 +126,7 @@ export function PortalAccessCard({ client }: { client: Client }) {
             <CreateAccessDialog
               open={showCreateDialog}
               onClose={() => setShowCreateDialog(false)}
-              defaultEmail={primaryEmail}
+              defaultEmail={defaultEmail}
               onSuccess={(result) => {
                 setShowCreateDialog(false);
                 setCredentials(result);
@@ -153,7 +193,7 @@ export function PortalAccessCard({ client }: { client: Client }) {
                     const r = await sendMut.mutateAsync();
                     setCredentials(r);
                     if (r.email_sent) {
-                      toast.success("Email envoyé au client");
+                      toast.success(`Email envoyé à ${type === "client" ? "l'entreprise" : "l'intervenant"}`);
                     } else {
                       toast.warning("Email NON envoyé (SMTP pas encore configuré) — utilise le mot de passe affiché");
                     }
@@ -203,7 +243,7 @@ export function PortalAccessCard({ client }: { client: Client }) {
                 className="text-rose-600 hover:text-rose-700"
                 disabled={revokeMut.isPending}
                 onClick={async () => {
-                  if (!confirm("Révoquer l'accès extranet ? Le client ne pourra plus se connecter.")) return;
+                  if (!confirm(labels.revokeConfirm)) return;
                   try {
                     await revokeMut.mutateAsync();
                     toast.success("Accès révoqué");

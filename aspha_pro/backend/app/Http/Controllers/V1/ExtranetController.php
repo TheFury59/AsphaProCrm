@@ -142,8 +142,98 @@ class ExtranetController extends Controller
             'client_id' => $client->id,
             'status' => 'open',
             'priority' => $data['priority'] ?? 'normal',
+            'created_by_user_id' => $request->user()->id,
         ]);
 
         return response()->json(['data' => $ticket], 201);
+    }
+
+    // ========== INTERVENANT — TICKETS (signaler un problème client) ==========
+
+    /**
+     * GET /api/v1/extranet/intervenant/tickets
+     *
+     * Liste les tickets créés par l'intervenant connecté (peu importe le client).
+     * Permet de suivre ses propres signalements.
+     */
+    public function intervenantTickets(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404);
+
+        $tickets = \App\Models\ClientRequest::where('created_by_user_id', $request->user()->id)
+            ->with([
+                'client:id,code',
+                'client.company:id,client_id,company_name,photo,updated_at',
+            ])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return ['data' => $tickets];
+    }
+
+    /**
+     * POST /api/v1/extranet/intervenant/tickets
+     *
+     * Permet à l'intervenant de signaler un problème pour un de SES clients
+     * (= un client chez qui il a déjà au moins une intervention).
+     * Garde-fou : on vérifie que le client_id est bien rattaché à l'intervenant
+     * via au moins une intervention — pas de spoofing possible.
+     */
+    public function createIntervenantTicket(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404);
+
+        $data = $request->validate([
+            'client_id' => ['required', 'integer', 'exists:clients,id'],
+            'type' => ['required', 'in:complaint,problem_report,consumable_reorder'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['nullable', 'string'],
+            'priority' => ['nullable', 'in:low,normal,high,urgent'],
+        ]);
+
+        // Sécurité : vérifier que l'intervenant a au moins une intervention chez ce client
+        $hasIntervention = \App\Models\Intervention::where('employee_id', $employee->id)
+            ->where('client_id', $data['client_id'])
+            ->exists();
+
+        if (! $hasIntervention) {
+            return response()->json([
+                'message' => "Tu ne peux signaler des problèmes que pour des clients chez qui tu interviens.",
+            ], 403);
+        }
+
+        $ticket = \App\Models\ClientRequest::create([
+            ...$data,
+            'status' => 'open',
+            'priority' => $data['priority'] ?? 'normal',
+            'created_by_user_id' => $request->user()->id,
+        ]);
+
+        return response()->json(['data' => $ticket], 201);
+    }
+
+    /**
+     * GET /api/v1/extranet/intervenant/my-clients
+     *
+     * Liste des clients chez qui l'intervenant connecté a au moins une
+     * intervention (pour peupler le sélecteur dans le formulaire ticket).
+     */
+    public function intervenantMyClients(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404);
+
+        $clientIds = \App\Models\Intervention::where('employee_id', $employee->id)
+            ->whereNotNull('client_id')
+            ->distinct()
+            ->pluck('client_id');
+
+        $clients = \App\Models\Client::with('company:id,client_id,company_name,photo,updated_at')
+            ->whereIn('id', $clientIds)
+            ->get(['id', 'code']);
+
+        return ['data' => $clients];
     }
 }

@@ -29,11 +29,12 @@ import { ExtranetLayout } from "@/components/ExtranetLayout";
 import { RoleRouter } from "@/components/RoleRouter";
 import { IntervenantHome } from "@/pages/extranet/IntervenantHome";
 import { IntervenantPlanning } from "@/pages/extranet/IntervenantPlanning";
+import { IntervenantTicketsPage } from "@/pages/extranet/IntervenantTicketsPage";
 import { ClientHome } from "@/pages/extranet/ClientHome";
 import { ClientInvoicesPage } from "@/pages/extranet/ClientInvoicesPage";
 import { ClientPrestationsPage } from "@/pages/extranet/ClientPrestationsPage";
 import { ClientTicketsPage } from "@/pages/extranet/ClientTicketsPage";
-import { Home, CalendarDays, Receipt, Briefcase, Ticket } from "lucide-react";
+import { Home, CalendarDays, Receipt, Briefcase, Ticket, MessageSquare as MsgIcon } from "lucide-react";
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
@@ -64,6 +65,8 @@ export default function App() {
                       tabs={[
                         { to: "/extranet/intervenant", label: "Accueil", icon: Home },
                         { to: "/extranet/intervenant/planning", label: "Mon planning", icon: CalendarDays },
+                        { to: "/extranet/intervenant/signalements", label: "Signalements", icon: Ticket },
+                        { to: "/extranet/intervenant/messagerie", label: "Messagerie", icon: MsgIcon },
                       ]}
                     />
                   </RoleRouter>
@@ -72,6 +75,8 @@ export default function App() {
             >
               <Route path="/extranet/intervenant" element={<IntervenantHome />} />
               <Route path="/extranet/intervenant/planning" element={<IntervenantPlanning />} />
+              <Route path="/extranet/intervenant/signalements" element={<IntervenantTicketsPage />} />
+              <Route path="/extranet/intervenant/messagerie" element={<MessagingPage />} />
             </Route>
 
             {/* Extranet client */}

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { AvatarUpload } from "@/components/AvatarUpload";
+import { PortalAccessCard } from "@/pages/clients/PortalAccessCard";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
@@ -73,20 +74,29 @@ export function EmployeeFichePage() {
         </TabsList>
 
         <TabsContent value="general" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Photo de profil</CardTitle>
-              <CardDescription>S'affiche sur le planning, la messagerie et le portail intervenant.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AvatarUpload
-                type="employee"
-                id={employeeId}
-                src={e.avatar_url}
-                name={e.full_name}
-              />
-            </CardContent>
-          </Card>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Photo de profil</CardTitle>
+                <CardDescription>S'affiche sur le planning, la messagerie et le portail intervenant.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AvatarUpload
+                  type="employee"
+                  id={employeeId}
+                  src={e.avatar_url}
+                  name={e.full_name}
+                />
+              </CardContent>
+            </Card>
+
+            <PortalAccessCard
+              type="employee"
+              entityId={employeeId}
+              portalUser={e.user}
+              defaultEmail=""
+            />
+          </div>
 
           <div className="grid md:grid-cols-2 gap-4">
             <Card>

@@ -145,7 +145,13 @@ export type Employee = {
   diploma: string | null;
   job_reference_free: string | null;
   created_at: string | null;
-  user?: { id: number; name: string; email: string; status: string } | null;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    status: "active" | "inactive";
+    last_login_at?: string | null;
+  } | null;
   entity?: { id: number; name: string } | null;
   owner_user?: { id: number; name: string } | null;
   current_contract?: EmployeeContract | null;

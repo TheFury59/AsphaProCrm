@@ -2,12 +2,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 /**
- * Hooks pour gérer l'accès extranet d'un client.
+ * Hooks pour gérer l'accès extranet d'une entité (client ou employee).
  *
  * Le mot de passe en clair n'est retourné que dans la réponse API
  * (une seule fois). L'UI doit le proposer à la copie immédiatement
  * après — pas de re-fetch possible côté serveur.
+ *
+ * Le type `EntityType` permet de partager le même hook entre les 2 cas
+ * (client → `clients/{id}/portal-access`, employee → `employees/{id}/portal-access`).
  */
+
+export type EntityType = "client" | "employee";
 
 export type PortalAccessResult = {
   user: { id: number; name: string; email: string; status: string };
@@ -16,62 +21,77 @@ export type PortalAccessResult = {
   note?: string;
 };
 
-function invalidateClient(qc: ReturnType<typeof useQueryClient>, clientId: number) {
-  qc.invalidateQueries({ queryKey: ["clients", clientId] });
-  qc.invalidateQueries({ queryKey: ["clients"] });
+function basePath(type: EntityType, id: number): string {
+  return type === "client"
+    ? `/clients/${id}/portal-access`
+    : `/employees/${id}/portal-access`;
+}
+
+function invalidateEntity(qc: ReturnType<typeof useQueryClient>, type: EntityType, id: number) {
+  if (type === "client") {
+    qc.invalidateQueries({ queryKey: ["clients", id] });
+    qc.invalidateQueries({ queryKey: ["clients"] });
+  } else {
+    qc.invalidateQueries({ queryKey: ["employees", id] });
+    qc.invalidateQueries({ queryKey: ["employees"] });
+  }
 }
 
 /**
- * Crée l'accès extranet (User dédié + rôle "client" + lien portal_user_id).
- * `email` est optionnel : si omis, on utilise client.company.primary_email.
+ * Crée l'accès extranet pour un client OU un intervenant.
+ * - Client : User créé avec rôle "client", lié via clients.portal_user_id
+ * - Employee : User créé avec rôle "intervenant", lié via employees.user_id
+ *
+ * `email` est obligatoire pour intervenant (pas de email auto-fill), optionnel
+ * pour client (fallback sur company.primary_email côté backend).
  */
-export function useCreatePortalAccess(clientId: number) {
+export function useCreatePortalAccess(type: EntityType, id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (params: { email?: string; send_email?: boolean }) => {
       const { data } = await api.post<{ data: PortalAccessResult }>(
-        `/clients/${clientId}/portal-access`,
+        basePath(type, id),
         params,
       );
       return data.data;
     },
-    onSuccess: () => invalidateClient(qc, clientId),
+    onSuccess: () => invalidateEntity(qc, type, id),
   });
 }
 
-export function useResetPortalAccess(clientId: number) {
+export function useResetPortalAccess(type: EntityType, id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (params: { send_email?: boolean } = {}) => {
       const { data } = await api.post<{ data: PortalAccessResult }>(
-        `/clients/${clientId}/portal-access/reset`,
+        `${basePath(type, id)}/reset`,
         params,
       );
       return data.data;
     },
-    onSuccess: () => invalidateClient(qc, clientId),
+    onSuccess: () => invalidateEntity(qc, type, id),
   });
 }
 
-export function useSendPortalEmail(clientId: number) {
+export function useSendPortalEmail(type: EntityType, id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const { data } = await api.post<{ data: PortalAccessResult }>(
-        `/clients/${clientId}/portal-access/email`,
+        `${basePath(type, id)}/email`,
       );
       return data.data;
     },
-    onSuccess: () => invalidateClient(qc, clientId),
+    onSuccess: () => invalidateEntity(qc, type, id),
   });
 }
 
-export function useRevokePortalAccess(clientId: number) {
+export function useRevokePortalAccess(type: EntityType, id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      await api.delete(`/clients/${clientId}/portal-access`);
+      await api.delete(basePath(type, id));
     },
-    onSuccess: () => invalidateClient(qc, clientId),
+    onSuccess: () => invalidateEntity(qc, type, id),
   });
 }

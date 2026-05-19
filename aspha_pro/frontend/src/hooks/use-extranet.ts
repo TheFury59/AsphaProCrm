@@ -83,3 +83,35 @@ export function useCreateClientTicket() {
     },
   });
 }
+
+// === Intervenant : tickets signalements + mes clients ===
+
+export function useIntervenantTickets() {
+  return useQuery({
+    queryKey: ["extranet", "intervenant", "tickets"],
+    queryFn: async () => (await api.get("/extranet/intervenant/tickets")).data.data,
+  });
+}
+
+export function useIntervenantMyClients() {
+  return useQuery({
+    queryKey: ["extranet", "intervenant", "my-clients"],
+    queryFn: async () => (await api.get("/extranet/intervenant/my-clients")).data.data,
+  });
+}
+
+export function useCreateIntervenantTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      client_id: number;
+      type: "complaint" | "problem_report" | "consumable_reorder";
+      subject: string;
+      body?: string;
+      priority?: "low" | "normal" | "high" | "urgent";
+    }) => (await api.post("/extranet/intervenant/tickets", payload)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "intervenant", "tickets"] });
+    },
+  });
+}

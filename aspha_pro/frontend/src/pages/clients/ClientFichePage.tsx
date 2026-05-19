@@ -99,7 +99,12 @@ export function ClientFichePage() {
               </CardContent>
             </Card>
 
-            <PortalAccessCard client={c} />
+            <PortalAccessCard
+              type="client"
+              entityId={clientId}
+              portalUser={c.portal_user}
+              defaultEmail={c.company?.primary_email ?? ""}
+            />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
