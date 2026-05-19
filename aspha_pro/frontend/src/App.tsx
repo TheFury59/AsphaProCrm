@@ -35,6 +35,8 @@ import { ClientPrestationsPage } from "@/pages/extranet/ClientPrestationsPage";
 import { ClientTicketsPage } from "@/pages/extranet/ClientTicketsPage";
 import { Home, CalendarDays, Receipt, Briefcase, Ticket } from "lucide-react";
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
+import { ProfilePage } from "@/pages/ProfilePage";
+import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { HelpPage } from "@/pages/help/HelpPage";
 
 const queryClient = new QueryClient({
@@ -126,6 +128,8 @@ export default function App() {
               <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/reglements" element={<ReglementsListPage />} />
               <Route path="/parametres" element={<AdminSettingsPage />} />
+              <Route path="/profil" element={<ProfilePage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/aide" element={<HelpPage />} />
             </Route>
           </Routes>

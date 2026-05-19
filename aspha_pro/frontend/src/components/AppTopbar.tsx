@@ -88,7 +88,7 @@ export function AppTopbar() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/profil")} className="cursor-pointer">
             <User className="mr-2 h-4 w-4" />
             Mon profil
           </DropdownMenuItem>

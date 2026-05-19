@@ -18,7 +18,9 @@ import {
   Car,
   HelpCircle,
   Ticket,
+  ShieldCheck,
 } from "lucide-react";
+import { useAuthStore } from "@/stores/auth";
 import {
   Sidebar,
   SidebarContent,
@@ -72,6 +74,7 @@ const NAV_GROUPS = [
     label: "Administration",
     items: [
       { to: "/parametres", label: "Paramètres", icon: Settings },
+      // /admin/users sera ajouté dynamiquement ci-dessous si super_admin
       { to: "/aide", label: "Aide", icon: HelpCircle },
     ],
   },
@@ -79,6 +82,22 @@ const NAV_GROUPS = [
 
 export function AppSidebar() {
   const { pathname } = useLocation();
+  const isSuperAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+
+  // On clone les groupes pour ajouter l'entrée "Utilisateurs" dans
+  // Administration uniquement si l'utilisateur est super_admin.
+  // (cf. règle métier 2026-05-18 : gestion des rôles réservée super_admin)
+  const navGroups = NAV_GROUPS.map((g) => {
+    if (g.label !== "Administration" || !isSuperAdmin) return g;
+    return {
+      ...g,
+      items: [
+        g.items[0],  // Paramètres
+        { to: "/admin/users", label: "Utilisateurs", icon: ShieldCheck },
+        ...g.items.slice(1),  // Aide
+      ],
+    };
+  });
 
   return (
     <Sidebar>
@@ -95,7 +114,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\V1\AuthController;
+use App\Http\Controllers\V1\UsersController;
 use App\Http\Controllers\V1\ClientController;
 use App\Http\Controllers\V1\ClientPortalController;
 use App\Http\Controllers\V1\ClientSubResourceController;
@@ -44,6 +45,7 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::patch('/me', [AuthController::class, 'updateMe']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Référentiels
@@ -263,6 +265,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // === Admin : permissions (super_admin only) ===
     Route::get('admin/permissions', [PermissionsController::class, 'index']);
     Route::put('admin/roles/{role}/permissions', [PermissionsController::class, 'syncRolePermissions']);
+
+    // === Admin : gestion users + rôles (super_admin only) ===
+    Route::get('admin/users', [UsersController::class, 'index']);
+    Route::get('admin/users/roles', [UsersController::class, 'availableRolesList']);
+    Route::post('admin/users/{user}/role', [UsersController::class, 'setRole']);
+    Route::patch('admin/users/{user}', [UsersController::class, 'update']);
 
     // === Référentiel docs requis intervenants ===
     Route::apiResource('required-document-types', RequiredDocumentTypesController::class)
