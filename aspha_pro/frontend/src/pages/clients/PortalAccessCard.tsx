@@ -59,6 +59,12 @@ type PortalAccessCardProps = {
     descriptionWithoutAccess: string;
     noAccessHint: string;
     revokeConfirm: string;
+    /** Label du champ email dans le dialog de création */
+    emailFieldLabel: string;
+    /** Label de la checkbox "Envoyer un email à X" */
+    sendEmailLabel: string;
+    /** Toast quand l'email a été envoyé */
+    emailSentToast: string;
   };
 };
 
@@ -69,6 +75,9 @@ const DEFAULT_LABELS: Record<EntityType, PortalAccessCardProps["labels"]> = {
     descriptionWithoutAccess: "Crée un identifiant pour permettre à ce client d'accéder à son espace portail.",
     noAccessHint: "Aucun accès extranet pour ce client. Cliquez sur « Créer l'accès » pour générer un identifiant et un mot de passe.",
     revokeConfirm: "Révoquer l'accès extranet ? Le client ne pourra plus se connecter.",
+    emailFieldLabel: "Email du client *",
+    sendEmailLabel: "Envoyer un email au client",
+    emailSentToast: "Email envoyé au client",
   },
   employee: {
     cardTitle: "Accès extranet intervenant",
@@ -76,6 +85,9 @@ const DEFAULT_LABELS: Record<EntityType, PortalAccessCardProps["labels"]> = {
     descriptionWithoutAccess: "Crée un identifiant pour permettre à cet intervenant d'accéder à son espace personnel.",
     noAccessHint: "Aucun accès extranet pour cet intervenant. Cliquez sur « Créer l'accès » pour générer un identifiant et un mot de passe.",
     revokeConfirm: "Révoquer l'accès extranet ? L'intervenant ne pourra plus se connecter.",
+    emailFieldLabel: "Email personnel de l'intervenant *",
+    sendEmailLabel: "Envoyer un email à l'intervenant",
+    emailSentToast: "Email envoyé à l'intervenant",
   },
 };
 
@@ -127,6 +139,8 @@ export function PortalAccessCard({
               open={showCreateDialog}
               onClose={() => setShowCreateDialog(false)}
               defaultEmail={defaultEmail}
+              emailFieldLabel={labels.emailFieldLabel}
+              sendEmailLabel={labels.sendEmailLabel}
               onSuccess={(result) => {
                 setShowCreateDialog(false);
                 setCredentials(result);
@@ -193,7 +207,7 @@ export function PortalAccessCard({
                     const r = await sendMut.mutateAsync();
                     setCredentials(r);
                     if (r.email_sent) {
-                      toast.success(`Email envoyé à ${type === "client" ? "l'entreprise" : "l'intervenant"}`);
+                      toast.success(labels.emailSentToast);
                     } else {
                       toast.warning("Email NON envoyé (SMTP pas encore configuré) — utilise le mot de passe affiché");
                     }
@@ -274,11 +288,14 @@ export function PortalAccessCard({
 // =========================================================================
 
 function CreateAccessDialog({
-  open, onClose, defaultEmail, onSubmit, onSuccess, isPending,
+  open, onClose, defaultEmail, emailFieldLabel, sendEmailLabel,
+  onSubmit, onSuccess, isPending,
 }: {
   open: boolean;
   onClose: () => void;
   defaultEmail: string;
+  emailFieldLabel: string;
+  sendEmailLabel: string;
   onSubmit: (params: { email?: string; send_email?: boolean }) => Promise<PortalAccessResult>;
   onSuccess: (r: PortalAccessResult) => void;
   isPending: boolean;
@@ -318,7 +335,7 @@ function CreateAccessDialog({
 
           <div className="space-y-3 py-3">
             <div>
-              <Label className="text-xs">Email du client *</Label>
+              <Label className="text-xs">{emailFieldLabel}</Label>
               <Input
                 type="email"
                 required
@@ -340,7 +357,7 @@ function CreateAccessDialog({
                 className="mt-0.5"
               />
               <span>
-                <span className="font-medium">Envoyer un email au client</span>
+                <span className="font-medium">{sendEmailLabel}</span>
                 <span className="block text-muted-foreground text-[11px]">
                   Si non coché, vous devrez communiquer le mot de passe manuellement.
                 </span>
