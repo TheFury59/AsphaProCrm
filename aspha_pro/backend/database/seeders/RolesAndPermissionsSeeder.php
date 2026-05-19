@@ -80,17 +80,23 @@ class RolesAndPermissionsSeeder extends Seeder
             'stock.view', 'stock.manage',
         ]);
 
-        // intervenant = télégestion + planning perso
+        // intervenant = télégestion uniquement.
+        // ⚠️ PAS de `planning.view` ici : l'intervenant consulte son planning
+        // via les endpoints `/api/v1/extranet/intervenant/*` qui sont filtrés
+        // server-side sur son `user_id`. Lui donner `planning.view` ouvrirait
+        // `GET /api/v1/interventions/{id}` (admin endpoint) sur N'IMPORTE quel
+        // RDV — leak de planning collègue. Cf. audit 2026-05-19.
         $intervenant->syncPermissions([
-            'planning.view',
             'telemanagement.badge',
         ]);
 
-        // client = portail uniquement
+        // client = portail uniquement.
+        // ⚠️ PAS de `sales.*` ni `planning.view` ici. Le client consulte ses
+        // factures/devis/planning via `/api/v1/extranet/client/*` qui filtrent
+        // sur son `portal_user_id`. Les permissions admin ouvriraient
+        // `GET /api/v1/invoices` (liste de TOUTES les factures, tous clients
+        // confondus) — leak inter-tenants. Cf. audit 2026-05-19.
         $client->syncPermissions([
-            'sales.quotes.view',
-            'sales.invoices.view',
-            'planning.view',
             'portal.requests.create',
             'portal.signatures.sign',
         ]);

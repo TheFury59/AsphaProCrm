@@ -15,7 +15,10 @@ use App\Models\StockProduct;
 use App\Observers\ClientRequestObserver;
 use App\Observers\InterventionObserver;
 use App\Observers\StockProductObserver;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -53,5 +56,24 @@ class AppServiceProvider extends ServiceProvider
         Intervention::observe(InterventionObserver::class);
         ClientRequest::observe(ClientRequestObserver::class);
         StockProduct::observe(StockProductObserver::class);
+
+        // Rate limiters — défis brute-force / DoS basique.
+        // Les vars RATE_LIMIT_* étaient déclarées dans .env mais jamais
+        // utilisées (cf. audit 2026-05-19 HIGH).
+        RateLimiter::for('login', function (Request $request) {
+            $max = (int) env('RATE_LIMIT_LOGIN', 5);
+            return [
+                // Limite par IP ET par email (un attaquant change d'IP toutes
+                // les requêtes mais cible souvent le même user → double clé).
+                Limit::perMinute($max)->by($request->ip()),
+                Limit::perMinute($max)->by((string) $request->input('email', '')),
+            ];
+        });
+
+        RateLimiter::for('api', function (Request $request) {
+            $max = (int) env('RATE_LIMIT_API', 60);
+            return Limit::perMinute($max)
+                ->by(optional($request->user())->id ?: $request->ip());
+        });
     }
 }

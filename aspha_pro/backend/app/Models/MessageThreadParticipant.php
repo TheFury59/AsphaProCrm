@@ -12,10 +12,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class MessageThreadParticipant extends Model
 {
     protected $table = 'message_thread_participants';
-    public $timestamps = false;
-    public $incrementing = false;
-    protected $primaryKey = null;
 
+    // Depuis la migration 2026_05_19_100000_security_fixes_audit la table a
+    // un vrai `id` auto-increment et timestamps. Avant : `primaryKey=null`
+    // sur table sans id → `create()` non déterministe, `find()` impossible.
+    // Cf. audit 2026-05-19 (CRIT).
     protected $fillable = [
         'thread_id',
         'user_id',

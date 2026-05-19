@@ -1,4 +1,5 @@
-import { Calendar, FileText, GraduationCap, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Calendar, FileText, GraduationCap, ExternalLink, CalendarDays, Ticket, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,31 @@ export function IntervenantHome() {
       <div>
         <h1 className="text-2xl font-semibold">Bonjour {profile?.name?.split(" ")[0] ?? ""}</h1>
         <p className="text-sm text-muted-foreground">Voici un récap de ton dossier.</p>
+      </div>
+
+      {/* Accès rapides — raccourcis vers les sections principales de l'extranet */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <QuickAccess
+          to="/extranet/intervenant/planning"
+          icon={CalendarDays}
+          label="Mon planning"
+          description="Voir mes RDV de la semaine"
+          accent="from-emerald-500/15 to-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+        />
+        <QuickAccess
+          to="/extranet/intervenant/signalements"
+          icon={Ticket}
+          label="Signalements"
+          description="Signaler un problème client"
+          accent="from-amber-500/15 to-amber-500/5 text-amber-700 dark:text-amber-300"
+        />
+        <QuickAccess
+          to="/extranet/intervenant/messagerie"
+          icon={MessageSquare}
+          label="Messagerie"
+          description="Discuter avec l'équipe"
+          accent="from-sky-500/15 to-sky-500/5 text-sky-700 dark:text-sky-300"
+        />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -65,7 +91,8 @@ export function IntervenantHome() {
           </CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-x-6 text-sm">
             <Row label="Nom complet" value={profile?.name} />
-            <Row label="Email" value={profile?.user?.email} />
+            {/* Email perso saisi sur la fiche en priorité, sinon email de connexion */}
+            <Row label="Email" value={profile?.email ?? profile?.user?.email} />
             <Row label="Téléphone" value={profile?.phone} />
             <Row label="Entité" value={profile?.entity?.name} />
             <Row label="Classification" value={profile?.classification === "cadre" ? "Cadre" : "Non-cadre"} />
@@ -90,5 +117,42 @@ function Row({ label, value }: { label: string; value: string | number | null | 
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className="text-right">{value ?? <span className="text-muted-foreground/50">—</span>}</span>
     </div>
+  );
+}
+
+/**
+ * Carte d'accès rapide sur le dashboard intervenant — Link stylé avec
+ * icône colorée + label + description, hover effet pour rappeler que c'est
+ * cliquable.
+ */
+function QuickAccess({
+  to,
+  icon: Icon,
+  label,
+  description,
+  accent,
+}: {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  description: string;
+  /** Classes Tailwind pour le gradient bg + couleur icône. */
+  accent: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br ${accent} p-4 shadow-soft transition-all hover:shadow-brand hover:-translate-y-0.5`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="rounded-xl bg-background/80 p-2 shadow-sm">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-sm">{label}</div>
+          <div className="text-xs opacity-80 mt-0.5">{description}</div>
+        </div>
+      </div>
+    </Link>
   );
 }

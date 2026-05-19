@@ -23,9 +23,11 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
     employee_id: employeeFilter ?? undefined,
   });
   // Dialog détail journée : ouvert au click sur une card intervenant.
+  // Le dialog gère sa propre fenêtre (jour/semaine/mois) en interne — on
+  // lui passe juste l'employee_id et une date initiale (= début de la
+  // fenêtre courante du planning) pour qu'il se positionne sur le bon jour.
   const [detailEmployeeId, setDetailEmployeeId] = useState<number | null>(null);
   const detailEmployeeName = data?.summary?.find((s) => s.employee_id === detailEmployeeId)?.employee_name ?? "";
-  const detailTrips = data?.trips?.filter((t) => t.employee_id === detailEmployeeId) ?? [];
 
   return (
     <Card className="overflow-hidden">
@@ -115,9 +117,9 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
       <TripDetailDialog
         open={detailEmployeeId !== null}
         onClose={() => setDetailEmployeeId(null)}
+        employeeId={detailEmployeeId}
         employeeName={detailEmployeeName}
-        trips={detailTrips}
-        date={from}
+        initialDate={from}
       />
     </Card>
   );

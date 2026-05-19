@@ -42,7 +42,11 @@ Route::get('/ping', fn () => [
     'version' => 'v1',
 ]);
 
-Route::post('/login', [AuthController::class, 'login']);
+// Login : rate-limited à `RATE_LIMIT_LOGIN` tentatives/minute (défaut 5)
+// pour bloquer les attaques brute-force. Limiteur défini dans
+// AppServiceProvider::boot() via RateLimiter::for('login', ...).
+// Cf. audit 2026-05-19 (HIGH).
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);

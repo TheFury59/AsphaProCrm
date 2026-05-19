@@ -27,7 +27,14 @@ export function RoleRouter({ children }: { children: React.ReactNode }) {
   if (role === "client" && !pathname.startsWith("/extranet/client")) {
     return <Navigate to="/extranet/client" replace />;
   }
-  // admins peuvent accéder à tout (utile pour debug)
+  // admin / super_admin : pas d'extranet (UI dédiée intervenant/client cassée
+  // pour eux car les hooks /extranet/* attendent un employee_id ou client_id
+  // lié au user). Si un admin se reconnecte sur une URL extranet (cas typique
+  // : logout intervenant → login admin sur la même session), on le ramène
+  // vers le dashboard CRM `/`.
+  if ((role === "super_admin" || role === "admin") && pathname.startsWith("/extranet/")) {
+    return <Navigate to="/" replace />;
+  }
 
   return <>{children}</>;
 }

@@ -121,8 +121,22 @@ class Contract extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
+        // ⚠️ RGPD + secret rémunération : on EXCLUT explicitement les champs
+        // de paie de l'activity log. Sans ça, chaque update de contrat
+        // écrivait `monthly_salary`, `hourly_rate`, `km_rate_*` en clair
+        // dans `activity_log.properties` → toute personne avec lecture
+        // sur cette table voyait l'historique salarial complet. Cf. audit
+        // 2026-05-19 (CRIT). On log les autres champs (position, type,
+        // dates, etc.) qui restent utiles à la traçabilité.
         return LogOptions::defaults()
             ->logFillable()
+            ->logExcept([
+                'monthly_salary',
+                'hourly_rate',
+                'km_rate_inter_vacation',
+                'km_rate_intervention',
+                'pay_mode',
+            ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }

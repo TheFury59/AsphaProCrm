@@ -26,7 +26,10 @@ class ExtranetController extends Controller
     public function intervenantProfile(Request $request)
     {
         $user = $request->user();
-        $employee = Employee::with(['currentContract', 'entity', 'skills', 'addresses'])
+        $employee = Employee::with([
+            'user:id,email',  // pour fallback email de connexion si pas d'email perso
+            'currentContract', 'entity', 'skills', 'addresses',
+        ])
             ->where('user_id', $user->id)
             ->first();
         abort_unless($employee, 404, 'Profil intervenant introuvable');

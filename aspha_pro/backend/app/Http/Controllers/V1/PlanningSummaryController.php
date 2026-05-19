@@ -21,6 +21,35 @@ use Illuminate\Http\Request;
  */
 class PlanningSummaryController extends Controller
 {
+    /**
+     * Force le filtre `employee_id` au compte de l'utilisateur connecté si
+     * celui-ci n'est ni admin ni super_admin (typiquement un intervenant
+     * qui consulte ses propres données via l'extranet).
+     *
+     * Sécurité : sans cette garde, un intervenant authentifié pouvait lister
+     * trips/contract/longAbsences de TOUS ses collègues (cf. audit 2026-05-19).
+     * Les clients (rôle `client`) sont refusés — ils ont leurs endpoints
+     * dédiés `/extranet/client/*`.
+     */
+    private function enforceEmployeeScope(Request $request, ?int $requestedEmployeeId): ?int
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+
+        if ($user->hasRole('super_admin') || $user->hasRole('admin')) {
+            return $requestedEmployeeId;
+        }
+
+        // Pour rôle intervenant : on retrouve son employee_id et on force
+        $employee = Employee::where('user_id', $user->id)->first();
+        if ($employee) {
+            return $employee->id;
+        }
+
+        // Tout autre rôle (client, etc.) : refus
+        abort(403, 'Accès interdit aux endpoints de planning admin.');
+    }
+
     public function contractSummary(Request $request, InterventionExpander $expander)
     {
         $data = $request->validate([
@@ -28,6 +57,7 @@ class PlanningSummaryController extends Controller
             'to' => ['required', 'date'],
             'employee_id' => ['nullable', 'integer'],
         ]);
+        $data['employee_id'] = $this->enforceEmployeeScope($request, $data['employee_id'] ?? null);
 
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
@@ -86,12 +116,23 @@ class PlanningSummaryController extends Controller
             'from' => ['required', 'date'],
             'to' => ['required', 'date'],
         ]);
+        $user = $request->user();
+        abort_unless($user, 401);
+        // Sécurité : seuls admin/super_admin voient les absences de tous les
+        // intervenants. Les autres rôles n'ont rien à faire ici. Cf. audit
+        // 2026-05-19 ("RGPD : un intervenant ne doit pas voir les absences
+        // longue durée de ses collègues").
+        abort_unless($user->hasRole('super_admin') || $user->hasRole('admin'), 403);
+
         $threshold = (int) \App\Models\AppSetting::get('long_absence_threshold_days', 5);
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
 
         // Absences employés qui chevauchent la fenêtre.
         // NOTE : la FK s'appelle `reason_id` (pas `absence_reason_id`).
+        // NOTE 2 : on calcule `days` en PHP plutôt qu'en SQL pour rester
+        // compatible MariaDB/Postgres (`julianday()` est SQLite-only,
+        // cassait en prod — audit 2026-05-19).
         $employeeAbsences = \DB::table('employee_absences')
             ->join('employees', 'employees.id', '=', 'employee_absences.employee_id')
             ->leftJoin('absence_reasons', 'absence_reasons.id', '=', 'employee_absences.reason_id')
@@ -101,11 +142,22 @@ class PlanningSummaryController extends Controller
                 $q->whereNull('employee_absences.end_date')
                   ->orWhereDate('employee_absences.end_date', '>=', $from);
             })
-            ->selectRaw('employee_absences.id, "employee" as kind, employees.id as person_id, employees.name as person_name,
-                         employee_absences.start_date, employee_absences.end_date,
-                         absence_reasons.label as reason_label,
-                         (julianday(coalesce(employee_absences.end_date, ?)) - julianday(employee_absences.start_date) + 1) as days', [$to->toDateString()])
+            ->select(
+                'employee_absences.id',
+                \DB::raw('"employee" as kind'),
+                'employees.id as person_id',
+                'employees.name as person_name',
+                'employee_absences.start_date',
+                'employee_absences.end_date',
+                'absence_reasons.label as reason_label',
+            )
             ->get()
+            ->map(function ($a) use ($to) {
+                $start = Carbon::parse($a->start_date);
+                $end = $a->end_date ? Carbon::parse($a->end_date) : $to;
+                $a->days = $start->diffInDays($end) + 1;
+                return $a;
+            })
             ->filter(fn ($a) => $a->days >= $threshold)
             ->values();
 
@@ -121,6 +173,15 @@ class PlanningSummaryController extends Controller
      */
     public function availableEmployees(Request $request, \App\Services\GoogleMapsDistanceService $distanceService)
     {
+        // Endpoint admin-only : utilisé par le dialog d'assignation côté
+        // planning. Aucun usage extranet → on bloque les rôles non-admin.
+        $user = $request->user();
+        abort_unless($user, 401);
+        abort_unless(
+            $user->hasRole('super_admin') || $user->hasRole('admin') || $user->can('planning.edit'),
+            403,
+        );
+
         $data = $request->validate([
             'start_datetime' => ['required', 'date'],
             'end_datetime' => ['required', 'date', 'after:start_datetime'],
@@ -212,6 +273,7 @@ class PlanningSummaryController extends Controller
             'to' => ['required', 'date'],
             'employee_id' => ['nullable', 'integer'],
         ]);
+        $data['employee_id'] = $this->enforceEmployeeScope($request, $data['employee_id'] ?? null);
 
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();

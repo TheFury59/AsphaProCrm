@@ -67,7 +67,13 @@ class NotificationDispatcher
                 'title' => $title,
                 'body' => $body,
                 'target_type' => $targetType,
-                'target_id' => $target?->id ?? 0,
+                // ⚠️ Avant : `?? 0` — insérait 0 quand pas de target, mais la
+                // colonne `target_id` est unsignedBigInteger NOT NULL → ça
+                // créait un deep-link cassé pointant vers un id inexistant.
+                // Fix : null si pas de target (la colonne est nullable depuis
+                // la migration `2026_05_19_fix_notifications_target_nullable`).
+                // Cf. audit 2026-05-19 (CRIT).
+                'target_id' => $target?->id,
                 'channel' => 'push',
                 'is_read' => false,
                 'sent_at' => now(),

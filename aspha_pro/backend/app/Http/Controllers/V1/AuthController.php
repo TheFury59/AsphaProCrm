@@ -23,8 +23,18 @@ class AuthController extends Controller
             'remember' => ['boolean'],
         ]);
 
+        // ⚠️ Sécurité : on filtre sur `status=active` directement dans les
+        // credentials. Auth::attempt accepte un 3e arg (where conditions
+        // additionnelles). Sans ça, un user `inactive` (révoqué via
+        // ClientPortalAccessController::revoke ou UsersController) restait
+        // fonctionnel — `revoke` ne fait que `update(['status' => 'inactive'])`
+        // sans purger tokens/sessions. Cf. audit 2026-05-19.
         if (! Auth::attempt(
-            ['email' => $credentials['email'], 'password' => $credentials['password']],
+            [
+                'email' => $credentials['email'],
+                'password' => $credentials['password'],
+                'status' => 'active',
+            ],
             $credentials['remember'] ?? false
         )) {
             throw ValidationException::withMessages([

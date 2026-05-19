@@ -1,38 +1,46 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip as LeafletTooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { format } from "date-fns";
+import { format, addDays, addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, parseISO, eachDayOfInterval, getDay, isSameMonth } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Home, Building2, ArrowDown, Clock, Route, Car, Wallet } from "lucide-react";
+import { Home, Building2, ArrowDown, Clock, Route, Car, Wallet, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Trip } from "@/hooks/use-planning-summary";
+import { Button } from "@/components/ui/button";
+import { useTrips, type Trip } from "@/hooks/use-planning-summary";
 
 /**
- * Dialog détaillé d'une journée de trajets pour un intervenant.
+ * Dialog détaillé des trajets d'un intervenant avec navigation par période.
  *
- * Layout 2/3 + 1/3 (en plein écran sur mobile) :
- *  - Gauche : carte Leaflet montrant tous les waypoints + lignes entre
- *  - Droite : timeline verticale ordonnée chronologiquement avec
- *    alternance trajet / RDV (durée, distance, payé/non payé)
+ * 3 modes de visualisation :
+ *  - **Jour** : un seul jour, carte + timeline complète
+ *  - **Semaine** : lun→dim, chips par jour cliquables pour filtrer la carte
+ *  - **Mois** : mois calendaire, chips par jour avec totaux quotidiens
  *
- * Le dialog est ouvert depuis TripSummaryPanel (click sur une carte
- * intervenant) avec les trajets pré-filtrés pour cet intervenant.
+ * Le composant fetch ses propres trips selon la fenêtre courante — il n'est
+ * plus dépendant de la fenêtre du calendrier parent. Ça permet d'afficher
+ * un total mensuel même si le calendrier admin n'affiche que 2 semaines.
+ *
+ * Layout :
+ *  - Header : titre + toggle scope + nav prev/next + totaux
+ *  - Ligne de chips jours (en mode week/month) — click = filtre carte
+ *  - Carte Leaflet (gauche) + Timeline verticale (droite)
  */
 type Props = {
   open: boolean;
   onClose: () => void;
+  employeeId: number | null;
   employeeName: string;
-  trips: Trip[];  // déjà filtrés sur l'employee_id concerné
-  /** Date affichée dans le header (ISO yyyy-MM-dd). Si null, "Toute la période". */
-  date?: string | null;
+  /** Date initialement focalisée (yyyy-MM-dd). À défaut, aujourd'hui. */
+  initialDate?: string | null;
 };
 
-// Icônes de waypoint — domicile (vert) vs client (bleu pour le 1er, dégradé pour la suite)
+type Scope = "day" | "week" | "month";
+
+// Icônes de waypoint — domicile (vert) vs client (bleu numéroté)
 function waypointIcon(kind: "home" | "client", index?: number): L.DivIcon {
   const color = kind === "home" ? "#10b981" : "#3b82f6";
   const label = kind === "home" ? "🏠" : String((index ?? 0) + 1);
@@ -44,59 +52,115 @@ function waypointIcon(kind: "home" | "client", index?: number): L.DivIcon {
   });
 }
 
-export function TripDetailDialog({ open, onClose, employeeName, trips, date }: Props) {
-  // Construit la liste des waypoints uniques dans l'ordre chronologique
-  // (un trajet = from -> to ; on chaîne pour éviter les doublons consécutifs).
-  const waypoints = useMemo(() => {
-    if (trips.length === 0) return [] as Array<{
-      lat: number; lng: number; label: string; kind: "home" | "client"; address: string | null; time: string | null;
-    }>;
-    const points: Array<{ lat: number; lng: number; label: string; kind: "home" | "client"; address: string | null; time: string | null }> = [];
+function ymd(d: Date): string {
+  return format(d, "yyyy-MM-dd");
+}
 
-    trips.forEach((t, idx) => {
-      const from = t.from_address;
-      const to = t.to_address;
-      // Ajoute "from" si absent du dernier point ajouté
-      const last = points[points.length - 1];
-      const fromKind: "home" | "client" = t.is_home_origin ? "home" : "client";
-      if (from.latitude !== null && from.longitude !== null) {
-        if (!last || last.lat !== from.latitude || last.lng !== from.longitude) {
-          points.push({
-            lat: from.latitude,
-            lng: from.longitude,
-            label: from.label,
-            kind: fromKind,
-            address: from.address ?? null,
-            time: idx === 0 && t.from_end ? format(new Date(t.from_end), "HH:mm") : null,
-          });
-        }
-      }
-      if (to.latitude !== null && to.longitude !== null) {
-        points.push({
-          lat: to.latitude,
-          lng: to.longitude,
-          label: to.label,
-          kind: "client",
-          address: to.address ?? null,
-          time: format(new Date(t.to_start), "HH:mm"),
-        });
-      }
-    });
+/**
+ * Calcule la fenêtre [from, to] (yyyy-MM-dd) selon le scope autour d'une
+ * date pivot. firstDay=1 (lundi) pour la semaine — convention FR.
+ */
+function windowFor(scope: Scope, anchor: Date): { from: string; to: string } {
+  if (scope === "day") return { from: ymd(anchor), to: ymd(anchor) };
+  if (scope === "week") {
+    return {
+      from: ymd(startOfWeek(anchor, { weekStartsOn: 1 })),
+      to: ymd(endOfWeek(anchor, { weekStartsOn: 1 })),
+    };
+  }
+  return { from: ymd(startOfMonth(anchor)), to: ymd(endOfMonth(anchor)) };
+}
 
-    return points;
-  }, [trips]);
+export function TripDetailDialog({ open, onClose, employeeId, employeeName, initialDate }: Props) {
+  const [scope, setScope] = useState<Scope>("day");
+  const [anchor, setAnchor] = useState<Date>(() => initialDate ? parseISO(initialDate) : new Date());
+  // Quand scope=week/month : permet de filtrer la carte sur 1 seul jour.
+  // null = tous les jours de la fenêtre affichés.
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
-  // Centre + zoom : moyenne des waypoints, fallback Paris
+  // Resync l'anchor quand le dialog s'ouvre avec une nouvelle date initiale
+  useEffect(() => {
+    if (open && initialDate) {
+      setAnchor(parseISO(initialDate));
+      setScope("day");
+      setSelectedDay(null);
+    }
+  }, [open, initialDate]);
+
+  // Reset selectedDay quand on change de scope (sinon ID de jour orphelin)
+  useEffect(() => { setSelectedDay(null); }, [scope]);
+
+  const { from, to } = useMemo(() => windowFor(scope, anchor), [scope, anchor]);
+  const { data, isLoading } = useTrips({
+    from, to,
+    employee_id: employeeId ?? undefined,
+  });
+
+  // Tous les trips de la fenêtre — déjà filtrés server-side sur l'employee_id
+  const allTrips: Trip[] = useMemo(() => data?.trips ?? [], [data]);
+
+  // Trips affichés sur la carte/timeline : selectedDay si défini, sinon tout
+  const displayedTrips = useMemo(() => {
+    if (!selectedDay) return allTrips;
+    return allTrips.filter((t) => t.to_start.slice(0, 10) === selectedDay);
+  }, [allTrips, selectedDay]);
+
+  // Liste des jours de la fenêtre pour la vue semaine (7 cases lun→dim).
+  // En vue mois on utilise monthGridDays() qui complète avec les jours
+  // adjacents pour aligner sur une grille 7×N propre.
+  const days = useMemo(() => {
+    if (scope !== "week") return [];
+    return eachDayOfInterval({ start: parseISO(from), end: parseISO(to) });
+  }, [scope, from, to]);
+
+  // Totaux par jour (pour les chips) — calculés depuis allTrips
+  const tripsByDay = useMemo(() => {
+    const map = new Map<string, Trip[]>();
+    for (const t of allTrips) {
+      const k = t.to_start.slice(0, 10);
+      const arr = map.get(k) ?? [];
+      arr.push(t);
+      map.set(k, arr);
+    }
+    return map;
+  }, [allTrips]);
+
+  // Totaux globaux période courante
+  const totals = useMemo(() => sumTrips(allTrips), [allTrips]);
+  // Totaux du jour sélectionné (si applicable)
+  const dayTotals = useMemo(() => sumTrips(displayedTrips), [displayedTrips]);
+
+  // Navigation prev/next selon scope
+  const navigate = (dir: -1 | 1) => {
+    setSelectedDay(null);
+    if (scope === "day") setAnchor((a) => addDays(a, dir));
+    else if (scope === "week") setAnchor((a) => addDays(a, dir * 7));
+    else setAnchor((a) => addMonths(a, dir));
+  };
+  const goToday = () => {
+    setSelectedDay(null);
+    setAnchor(new Date());
+  };
+
+  // Label de la période courante
+  const periodLabel = useMemo(() => {
+    if (scope === "day") return format(anchor, "EEEE d MMMM yyyy", { locale: fr });
+    if (scope === "week") {
+      return `${format(parseISO(from), "d MMM", { locale: fr })} → ${format(parseISO(to), "d MMM yyyy", { locale: fr })}`;
+    }
+    return format(anchor, "MMMM yyyy", { locale: fr });
+  }, [scope, anchor, from, to]);
+
+  // === Carte : waypoints + polylines à partir de displayedTrips ===
+  const waypoints = useMemo(() => buildWaypoints(displayedTrips), [displayedTrips]);
   const center: [number, number] = waypoints.length > 0
     ? [
         waypoints.reduce((s, p) => s + p.lat, 0) / waypoints.length,
         waypoints.reduce((s, p) => s + p.lng, 0) / waypoints.length,
       ]
     : [48.8566, 2.3522];
-
-  // Lignes entre waypoints — pointillés rouges pour non payé, plein vert pour payé
   const polylines = useMemo(() => {
-    return trips
+    return displayedTrips
       .filter((t) => t.from_address.latitude && t.to_address.latitude)
       .map((t) => ({
         positions: [
@@ -108,56 +172,140 @@ export function TripDetailDialog({ open, onClose, employeeName, trips, date }: P
         duration: t.duration_minutes,
         distance: t.distance_km,
       }));
-  }, [trips]);
-
-  // Totaux récap pour l'header
-  const totalKm = trips.reduce((s, t) => s + (t.distance_km ?? 0), 0);
-  const totalMin = trips.reduce((s, t) => s + (t.duration_minutes ?? 0), 0);
-  const paidKm = trips.filter((t) => t.is_paid).reduce((s, t) => s + (t.distance_km ?? 0), 0);
-  const unpaidKm = trips.filter((t) => !t.is_paid).reduce((s, t) => s + (t.distance_km ?? 0), 0);
+  }, [displayedTrips]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="w-[95vw] sm:!max-w-[1400px] h-[88vh] max-h-[88vh] p-0 flex flex-col overflow-hidden gap-0 sm:rounded-2xl">
-        {/* Header — la croix de fermeture est ajoutée automatiquement par
-            DialogContent de shadcn, pas besoin d'en ajouter une manuellement
-            (sinon doublon visuel) */}
-        <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0">
-          <DialogTitle className="text-xl tracking-tight flex items-center gap-2">
-            <Route className="h-5 w-5 text-primary" />
-            Journée de {employeeName}
-          </DialogTitle>
-          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
-            {date && (
-              <span className="font-medium text-foreground">
-                {format(new Date(date), "EEEE d MMMM yyyy", { locale: fr })}
-              </span>
-            )}
+      <DialogContent className="w-[95vw] sm:!max-w-[1400px] h-[90vh] max-h-[90vh] p-0 flex flex-col overflow-hidden gap-0 sm:rounded-2xl">
+        {/* ===== HEADER ===== */}
+        <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <DialogTitle className="text-xl tracking-tight flex items-center gap-2">
+              <Route className="h-5 w-5 text-primary" />
+              Trajets de {employeeName}
+            </DialogTitle>
+
+            {/* Toggle scope */}
+            <div className="inline-flex rounded-lg border bg-muted/30 p-0.5">
+              {(["day", "week", "month"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setScope(s)}
+                  className={
+                    "px-3 py-1 text-xs font-medium rounded-md transition-colors " +
+                    (scope === s ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {s === "day" ? "Jour" : s === "week" ? "Semaine" : "Mois"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Ligne navigation + label période */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate(-1)} className="h-7 px-2">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToday} className="h-7 px-2 text-xs">
+              Aujourd'hui
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(1)} className="h-7 px-2">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-sm font-medium ml-1 capitalize">{periodLabel}</span>
+          </div>
+
+          {/* Totaux de la période */}
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-medium text-foreground">
+              Total {scope === "day" ? "du jour" : scope === "week" ? "de la semaine" : "du mois"} :
+            </span>
             <span className="flex items-center gap-1">
               <Car className="h-3 w-3" />
-              {totalKm.toFixed(1)} km · {formatMin(totalMin)}
+              {totals.totalKm.toFixed(1)} km · {formatMin(totals.totalMin)}
             </span>
             <span className="flex items-center gap-1 text-emerald-600">
               <Wallet className="h-3 w-3" />
-              Payé : {paidKm.toFixed(1)} km
+              Payé : {totals.paidKm.toFixed(1)} km · {formatMin(totals.paidMin)}
             </span>
             <span className="flex items-center gap-1 text-rose-600">
-              Non payé : {unpaidKm.toFixed(1)} km
+              Non payé : {totals.unpaidKm.toFixed(1)} km · {formatMin(totals.unpaidMin)}
             </span>
+            {selectedDay && (
+              <span className="ml-auto pl-3 border-l text-muted-foreground">
+                <span className="font-medium text-foreground">Jour filtré :</span>{" "}
+                {dayTotals.totalKm.toFixed(1)} km · {formatMin(dayTotals.totalMin)}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(null)}
+                  className="ml-2 text-primary hover:underline"
+                >
+                  Tout afficher
+                </button>
+              </span>
+            )}
           </div>
+
+          {/* Grille jours (semaine / mois) — cliquables pour filtrer la carte.
+              Mois : grille calendrier 7 cols × 5-6 lignes avec offset pour
+              que le 1er soit aligné sur le bon jour de la semaine.
+              Semaine : grille 7 cols sur 1 ligne (lun→dim). */}
+          {scope === "week" && (
+            <div className="grid grid-cols-7 gap-1.5">
+              {days.map((d) => (
+                <DayCell
+                  key={ymd(d)}
+                  date={d}
+                  trips={tripsByDay.get(ymd(d)) ?? []}
+                  isSelected={selectedDay === ymd(d)}
+                  isOutside={false}
+                  onClick={() => setSelectedDay(selectedDay === ymd(d) ? null : ymd(d))}
+                />
+              ))}
+            </div>
+          )}
+          {scope === "month" && (
+            <div className="grid grid-cols-7 gap-1 max-h-[260px] overflow-y-auto">
+              {/* Entêtes jours de la semaine */}
+              {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((label) => (
+                <div key={label} className="text-[9px] uppercase tracking-wider text-muted-foreground text-center pb-0.5">
+                  {label}
+                </div>
+              ))}
+              {monthGridDays(anchor).map((d, i) => (
+                <DayCell
+                  key={`${ymd(d)}-${i}`}
+                  date={d}
+                  trips={tripsByDay.get(ymd(d)) ?? []}
+                  isSelected={selectedDay === ymd(d)}
+                  isOutside={!isSameMonth(d, anchor)}
+                  compact
+                  onClick={() => setSelectedDay(selectedDay === ymd(d) ? null : ymd(d))}
+                />
+              ))}
+            </div>
+          )}
         </DialogHeader>
 
+        {/* ===== CONTENU : CARTE + TIMELINE ===== */}
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_420px]">
-          {/* ============================================================ */}
-          {/* CARTE (gauche)                                                */}
-          {/* ============================================================ */}
-          <div className="relative min-h-[300px] lg:min-h-0 border-r">
-            {waypoints.length === 0 ? (
+          {/* Carte — min-h-0 obligatoire pour qu'une cellule grid puisse
+              shrink en dessous de sa hauteur intrinsèque (Leaflet sinon
+              déborde) */}
+          <div className="relative min-h-[300px] lg:min-h-0 border-r overflow-hidden">
+            {isLoading ? (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                Aucun trajet à afficher.
+                Chargement des trajets…
+              </div>
+            ) : waypoints.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                Aucun trajet à afficher{selectedDay ? " pour ce jour." : " sur cette période."}
               </div>
             ) : (
               <MapContainer
+                key={`${from}-${to}-${selectedDay ?? "all"}`}  // remount = recentrage propre
                 center={center}
                 zoom={11}
                 style={{ height: "100%", width: "100%" }}
@@ -167,8 +315,6 @@ export function TripDetailDialog({ open, onClose, employeeName, trips, date }: P
                   attribution='&copy; OpenStreetMap'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-
-                {/* Polylines : 1 ligne par trajet */}
                 {polylines.map((p, i) => (
                   <Polyline
                     key={i}
@@ -186,8 +332,6 @@ export function TripDetailDialog({ open, onClose, employeeName, trips, date }: P
                     </LeafletTooltip>
                   </Polyline>
                 ))}
-
-                {/* Waypoints */}
                 {waypoints.map((w, i) => (
                   <Marker
                     key={`${w.lat}-${w.lng}-${i}`}
@@ -207,52 +351,196 @@ export function TripDetailDialog({ open, onClose, employeeName, trips, date }: P
             )}
           </div>
 
-          {/* ============================================================ */}
-          {/* TIMELINE (droite)                                             */}
-          {/* ============================================================ */}
-          <ScrollArea className="h-full">
+          {/* Timeline — overflow-y-auto natif sur la cellule grid.
+              `<ScrollArea h-full>` de shadcn ne fonctionne pas ici car les
+              cellules grid n'ont pas de hauteur définie ; il faut `min-h-0`
+              + overflow-y-auto directement sur le div pour que le contenu
+              scrolle au lieu de pousser la cellule. */}
+          <div className="min-h-0 overflow-y-auto">
             <div className="p-4 space-y-3">
-              {trips.length === 0 && (
+              {displayedTrips.length === 0 && !isLoading && (
                 <div className="text-sm text-muted-foreground italic text-center py-8">
-                  Aucun trajet calculé pour ce jour.
+                  Aucun trajet sur cette période.
                 </div>
               )}
-
-              {trips.map((t, idx) => (
-                <div key={idx} className="space-y-1.5">
-                  {/* Waypoint départ (affiché seulement pour le premier trajet de chaque chaîne) */}
-                  {(idx === 0 || trips[idx - 1].to_address.latitude !== t.from_address.latitude) && (
-                    <WaypointBlock
-                      kind={t.is_home_origin ? "home" : "client"}
-                      label={t.from_address.label}
-                      address={t.from_address.address}
-                      city={t.from_address.city}
-                      time={t.from_end ? format(new Date(t.from_end), "HH:mm") : null}
-                      timeLabel="Départ"
-                    />
+              {/* Timeline groupée par jour (utile en mode semaine/mois sans filtre) */}
+              {groupTripsByDay(displayedTrips).map(({ day, trips }) => (
+                <div key={day} className="space-y-1.5">
+                  {scope !== "day" && !selectedDay && (
+                    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur px-1 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b">
+                      {format(parseISO(day), "EEEE d MMMM", { locale: fr })}
+                    </div>
                   )}
-
-                  {/* Trajet */}
-                  <TripBlock trip={t} />
-
-                  {/* Waypoint arrivée */}
-                  <WaypointBlock
-                    kind="client"
-                    label={t.to_address.label}
-                    address={t.to_address.address}
-                    city={t.to_address.city}
-                    time={format(new Date(t.to_start), "HH:mm")}
-                    timeLabel="Arrivée"
-                  />
+                  {trips.map((t, idx) => (
+                    <div key={`${day}-${idx}`} className="space-y-1.5">
+                      {(idx === 0 || trips[idx - 1].to_address.latitude !== t.from_address.latitude) && (
+                        <WaypointBlock
+                          kind={t.is_home_origin ? "home" : "client"}
+                          label={t.from_address.label}
+                          address={t.from_address.address}
+                          city={t.from_address.city}
+                          time={t.from_end ? format(new Date(t.from_end), "HH:mm") : null}
+                          timeLabel="Départ"
+                        />
+                      )}
+                      <TripBlock trip={t} />
+                      <WaypointBlock
+                        kind="client"
+                        label={t.to_address.label}
+                        address={t.to_address.address}
+                        city={t.to_address.city}
+                        time={format(new Date(t.to_start), "HH:mm")}
+                        timeLabel="Arrivée"
+                      />
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+// =========================================================================
+// Helpers
+// =========================================================================
+
+function sumTrips(trips: Trip[]): {
+  totalKm: number; totalMin: number;
+  paidKm: number; paidMin: number;
+  unpaidKm: number; unpaidMin: number;
+} {
+  let totalKm = 0, totalMin = 0, paidKm = 0, paidMin = 0, unpaidKm = 0, unpaidMin = 0;
+  for (const t of trips) {
+    const km = t.distance_km ?? 0;
+    const min = t.duration_minutes ?? 0;
+    totalKm += km;
+    totalMin += min;
+    if (t.is_paid) { paidKm += km; paidMin += min; }
+    else { unpaidKm += km; unpaidMin += min; }
+  }
+  return { totalKm, totalMin, paidKm, paidMin, unpaidKm, unpaidMin };
+}
+
+function buildWaypoints(trips: Trip[]): Array<{
+  lat: number; lng: number; label: string; kind: "home" | "client"; address: string | null; time: string | null;
+}> {
+  if (trips.length === 0) return [];
+  const points: Array<{ lat: number; lng: number; label: string; kind: "home" | "client"; address: string | null; time: string | null }> = [];
+  trips.forEach((t, idx) => {
+    const from = t.from_address;
+    const to = t.to_address;
+    const last = points[points.length - 1];
+    const fromKind: "home" | "client" = t.is_home_origin ? "home" : "client";
+    if (from.latitude !== null && from.longitude !== null) {
+      if (!last || last.lat !== from.latitude || last.lng !== from.longitude) {
+        points.push({
+          lat: from.latitude,
+          lng: from.longitude,
+          label: from.label,
+          kind: fromKind,
+          address: from.address ?? null,
+          time: idx === 0 && t.from_end ? format(new Date(t.from_end), "HH:mm") : null,
+        });
+      }
+    }
+    if (to.latitude !== null && to.longitude !== null) {
+      points.push({
+        lat: to.latitude,
+        lng: to.longitude,
+        label: to.label,
+        kind: "client",
+        address: to.address ?? null,
+        time: format(new Date(t.to_start), "HH:mm"),
+      });
+    }
+  });
+  return points;
+}
+
+function groupTripsByDay(trips: Trip[]): Array<{ day: string; trips: Trip[] }> {
+  const map = new Map<string, Trip[]>();
+  for (const t of trips) {
+    const k = t.to_start.slice(0, 10);
+    const arr = map.get(k) ?? [];
+    arr.push(t);
+    map.set(k, arr);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, trips]) => ({ day, trips }));
+}
+
+/**
+ * Construit une grille calendrier 7×N pour le mois d'`anchor`.
+ * Inclut les jours adjacents (mois précédent / suivant) pour compléter
+ * la 1ère et la dernière semaine — comme un mini-calendrier classique.
+ * weekStartsOn=1 (lundi) — convention FR.
+ */
+function monthGridDays(anchor: Date): Date[] {
+  const start = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 });
+  const end = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 });
+  return eachDayOfInterval({ start, end });
+}
+
+/**
+ * Cellule de jour cliquable — utilisée à la fois en mode semaine
+ * (taille normale) et mois (mode compact pour tenir dans 7 colonnes).
+ *
+ *  - `isOutside` (mois) : jour hors du mois courant, grisé
+ *  - `isSelected` : filtre actif sur ce jour, fond primary
+ *  - has trips : montre total km du jour
+ */
+function DayCell({
+  date, trips, isSelected, isOutside, compact, onClick,
+}: {
+  date: Date;
+  trips: Trip[];
+  isSelected: boolean;
+  isOutside: boolean;
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  const dayKm = trips.reduce((s, t) => s + (t.distance_km ?? 0), 0);
+  const hasTrips = trips.length > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hasTrips ? `${trips.length} trajet${trips.length > 1 ? "s" : ""} · ${dayKm.toFixed(1)} km` : "Aucun trajet"}
+      className={
+        (compact ? "px-1 py-1 text-[9px]" : "px-2 py-1.5 text-[10px]") +
+        " rounded-md border leading-tight transition-all text-center cursor-pointer " +
+        (isSelected
+          ? "bg-primary text-primary-foreground border-primary shadow-sm ring-2 ring-primary/30"
+          : isOutside
+          ? "bg-transparent text-muted-foreground/40 border-transparent hover:bg-muted/30"
+          : hasTrips
+          ? "bg-card hover:border-primary/40 hover:bg-muted/50"
+          : "bg-muted/20 text-muted-foreground/70 border-dashed hover:bg-muted/40")
+      }
+    >
+      {!compact && (
+        <div className="font-semibold uppercase">{format(date, "EEE", { locale: fr })}</div>
+      )}
+      <div className={(compact ? "text-[11px]" : "text-[13px]") + " font-bold tabular-nums"}>
+        {format(date, "d")}
+      </div>
+      {hasTrips && (
+        <div className={(compact ? "text-[8px]" : "text-[9px]") + " tabular-nums opacity-80 mt-0.5"}>
+          {dayKm.toFixed(0)} km
+        </div>
+      )}
+    </button>
+  );
+}
+
+// silence unused (getDay réservé pour usages futurs, ex: highlight weekend)
+void getDay;
 
 // =========================================================================
 // Sub-blocks

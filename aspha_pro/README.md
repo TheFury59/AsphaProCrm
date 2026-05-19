@@ -43,9 +43,17 @@ npm run dev
 
 ### Identifiants par défaut
 
-| Email | Mot de passe | Rôle |
-|---|---|---|
-| `admin@aspha.local` | `admin1234` | super_admin |
+| Email | Mot de passe | Rôle | Redirection après login |
+|---|---|---|---|
+| `admin@aspha.local` | `admin1234` | super_admin | `/` (dashboard CRM complet) |
+| `adelinemuret@aspha.com` | `nkpK7XxCigp5` | intervenant | `/extranet/intervenant` |
+
+URL frontend dev : http://127.0.0.1:5173/login
+
+Les comptes intervenant/client sont créés via la fiche
+correspondante → carte "Accès extranet" → "Créer l'accès".
+Le mot de passe est généré aléatoirement et affiché une seule fois ;
+il faut donc le copier ou demander un renvoi par email.
 
 ## Architecture
 
