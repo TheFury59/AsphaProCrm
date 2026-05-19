@@ -86,6 +86,64 @@ Plan de correction (en cours) :
 - [ ] Confirmations natives → AlertDialog shadcn
 - [ ] Dashboard KPIs réels (backend dédié)
 
+---
+
+## 🌅 À reprendre demain — 2026-05-20
+
+État au soir du 2026-05-19 : **Phases A→F livrées (5 commits, ~50 bugs CRIT/HIGH corrigés)**. Working tree clean, 0 erreur TS, migrations appliquées.
+
+### Items qui restent à corriger (priorisés)
+
+**🔴 Reste de Phase C — Finances (2 items HIGH)**
+- [ ] **Pennylane idempotence** — actuellement, un re-sync recrée une nouvelle facture côté Pennylane (doublon comptable). Ajouter une vérif `if ($invoice->pennylane_id) { skip ou PUT update }` au lieu de POST systématique. Aussi : table `pennylane_sync_logs` pour traçabilité.
+- [ ] **Pennylane customer_id mapping** — actuellement `'customer_id' => $invoice->client_id` envoie l'ID local. Créer une colonne `clients.pennylane_id` (nullable), résoudre lors du sync (créer le client Pennylane si absent, stocker l'id retourné).
+- [ ] **Factur-X 422 si SIRET émetteur manquant** — au lieu de générer un XML non conforme silencieux, abort 422 explicite "SIRET émetteur (entité) requis pour Factur-X EN16931".
+
+**🟠 Reste de Phase D — UX bloquants (4 items HIGH/MED)**
+- [ ] **Drag-drop propager `employee_id`** — `PlanningPage.handleEventDrop` ne lit jamais le nouvel employé si l'utilisateur drag sur une autre ligne (resourceTimeGrid). Lire `arg.event.getResources()` et propager dans le PATCH/exception.
+- [ ] **`RoleRouter` gérer `role=null`** — actuellement laisse passer si `user.role === null`. Forcer redirect login ou écran d'erreur explicite.
+- [ ] **`Sidebar` filtrer items par rôle** — un intervenant/client qui charge `/` (avant que RoleRouter redirige) voit clignoter la sidebar admin complète. Ajouter `if (!user.role.startsWith('admin')) return null` au début de `AppSidebar`.
+- [ ] **Route `*` 404 + ErrorBoundary global** — actuellement toute URL inconnue = page blanche. Ajouter `<Route path="*" element={<NotFound />} />` + un ErrorBoundary qui catch les exceptions React.
+
+**🟡 Phase G — Polish (4 items MED/LOW)**
+- [ ] Cache invalidation hooks (`useDeleteClient`, `useDeleteEmployee` → ne purgent pas `["clients", id]` ni `["employees", id]` → données fantômes au back).
+- [ ] Polling pause sur `document.hidden` (économise bande passante quand l'onglet est inactif).
+- [ ] Confirmations natives `confirm(...)` → `AlertDialog` shadcn (UX cohérente, i18n-able).
+- [ ] Dashboard KPIs : backend dédié `DashboardController::stats()` au lieu des 3 calls `useClients/Employees/Interventions{per_page:1}` actuels (lourd + faux si RLS).
+
+### Items reportés à plus tard (non bloquants prod immédiate)
+
+**Modules secondaires + admins** (MED/LOW)
+- Stock : mouvement `out` sans stock dispo silencieusement clampé à 0 (historique incohérent) — `StockController.php:113`.
+- Stock : ajustement à 0 unité bloqué par `min:1` (légitime pour inventaire physique vide).
+- Flotte : `FleetController` aucune permission `abort_unless` (tout user authentifié peut assigner véhicules).
+- Flotte : `incident_at` validé `date` mais colonne `dateTime` (heure perdue).
+- Matching front court-circuite `PATCH /matching-requests/{id}/assign` → historique vide.
+- `UsersController` : permet créer `super_admin` sans audit log + pas de garde-fou "dernier super_admin actif".
+- `ClientPortalAccessController.sendEmail` retourne le password en JSON même si email pas envoyé.
+
+**Headers sécurité + .env**
+- [ ] Headers HSTS / X-Frame-Options / CSP basique (middleware dédié).
+- [ ] `SESSION_SECURE_COOKIE` documenté dans `.env.example`.
+- [ ] `APP_DEBUG=false` par défaut dans `.env.example` + check au démarrage en prod.
+- [ ] Commande artisan `documents:migrate-to-local` pour migrer les fichiers existants du disk `public` vers `local`.
+
+**Notifications & messagerie** (MED)
+- [ ] `MessagingController.totalUnread` N+1 (50 threads = 50 queries) → utiliser sub-query SQL.
+- [ ] Pagination messages : actuellement `paginate(50)` mais front pas de scroll → historique > 50 perdu.
+- [ ] `with(['messages' => fn $q => $q->limit(1)])` Eloquent bug → renvoie 1 message TOTAL, pas 1 par thread.
+
+**Schéma BDD (reste après Phase F)** (LOW)
+- [ ] `notifications` polymorphe : `morphs('target')` au lieu de l'index composite manuel (déjà ajouté en Phase F mais nom à standardiser).
+- [ ] `vehicle_assignments` unicité `(employee_id) WHERE end_date IS NULL` (partial unique index).
+
+### Comment reprendre demain
+
+1. `git status` (working tree clean au moment de la pause)
+2. `git log --oneline -10` pour relire les 5 commits d'audit
+3. Choisir une phase à finir (priorité Phase C reste = Pennylane idempotence + customer_id mapping + Factur-X SIRET)
+4. Sinon : faire un test manuel des flows critiques (login intervenant/client extranet, drag-drop planning, création facture, upload document) avant de continuer à corriger — pour valider qu'aucune régression n'a été introduite par les 5 commits
+
 ## Reste à faire — voir INTEGRATIONS.md
 
 Tout le travail "additionnel" qui n'est pas du code dans le repo :
@@ -95,6 +153,43 @@ Tout le travail "additionnel" qui n'est pas du code dans le repo :
 - **Hardware** : impression QR codes physiques pour les adresses
 - **Prod** : MariaDB, CORS strict, queue worker, Sentry, backups, RGPD/DPA
 - **Tests E2E** : Playwright
+
+## Review session 2026-05-19 — Audit complet + Phases A→F livrées
+
+**Contexte** : avant cette session, le projet était "fonctionnellement complet" (157 routes, 10 phases) mais jamais audité sous l'angle sécurité/RGPD/cohérence schéma. Demandé un tour complet.
+
+**Méthode** : 11 sous-agents en parallèle (2 vagues), format strict `[SEV] file:line — bug + preuve`, max 25 items/agent. Résultat consolidé : **~250 bugs (37 CRIT, 81 HIGH, 78 MED, 54 LOW)**. ~30 min de wall-clock pour l'audit complet.
+
+**Volume corrigé** : ~50 bugs CRIT/HIGH en 5 commits sur la même journée.
+
+**Top failles neutralisées** :
+1. Rôles `client`/`intervenant` avaient les permissions admin (`sales.*.view`, `planning.view`) → leak inter-tenants total
+2. Documents stockés sur disk `public` symlinké → accessibles sans auth via URL directe + `file_path` exposé en JSON
+3. Salaires loggés en clair dans `activity_log` (Contract `logFillable`)
+4. CORS wildcard `/.*/` + credentials → CSRF cross-origin trivial
+5. TVA 20% hardcodée partout, numérotation `count()+1` race condition, over-allocation règlements non détectée
+6. Télégestion totalement cassée (front/back schemas incompatibles)
+7. FCM push mort silencieusement (token=null hardcodé + endpoint déprécié)
+8. Matching skills jamais fonctionnel ($requiredSkillIds=[] hardcodé)
+9. `MessageThreadParticipant` sans primary key
+10. ClientPortalController sans ownership check (client A pouvait voir réclamations de B)
+
+**Décisions structurantes prises** :
+- **Séparer endpoints admin vs extranet stricto sensu** : les rôles non-admin ne possèdent QUE les permissions de leur extranet. Pas de partage.
+- **Pattern `enforceEmployeeScope()`** : pour les endpoints de planning summary partagés admin/intervenant, force le filtre côté backend si non-admin.
+- **`Storage::disk('local')` obligatoire pour tout upload** : jamais `public`. Download via controller avec ownership.
+- **Toujours `logFillable()->logExcept([...])`** sur les models Spatie ActivityLog (salaires, secrets, IBAN).
+- **CORS env-aware** dès la création du fichier, pas en TODO.
+- **Numérotation atomique via `DocumentSequenceService`** + table `document_sequences` (lockForUpdate). Plus de `count()+1`.
+
+**LRN ajoutés au Brain** : LRN-099 (permissions vs ownership), LRN-100 (storage public CRIT), LRN-101 (logFillable trompeur), LRN-102 (CORS wildcard CSRF), LRN-103 (méthode audit massif sous-agents parallèles).
+
+**État technique au soir** :
+- ~165 routes V1 (ajout `extranet/*` + endpoints existants verrouillés)
+- 88 migrations (+8 cette session)
+- ~95 modèles
+- 0 erreur TypeScript
+- Working tree clean
 
 ## Review session 2026-05-12 — finale
 
