@@ -9,6 +9,7 @@ use App\Models\Quote;
 use App\Models\QuoteItem;
 use App\Services\DocumentSequenceService;
 use App\Services\PennylaneSyncService;
+use App\Services\QuotePdfGenerator; // 2026-05-20 PDF B2B
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -235,6 +236,25 @@ class QuoteController extends Controller
 
         $invoice->load(['client.company', 'invoiceItems']);
         return response()->json(['data' => $invoice], 201);
+    }
+
+    /**
+     * GET /api/v1/quotes/{quote}/pdf
+     *
+     * 2026-05-20 PDF B2B — Retourne le PDF du devis au format Aspha Services
+     * (adapté clients entreprises). Pas de XML Factur-X : un devis n'est pas
+     * une facture électronique.
+     */
+    public function pdf(Request $request, Quote $quote, QuotePdfGenerator $generator)
+    {
+        abort_unless($request->user()?->can('sales.quotes.view'), 403);
+
+        $pdf = $generator->generate($quote);
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $quote->reference . '.pdf"',
+        ]);
     }
 
     public function syncPennylane(Request $request, Quote $quote, PennylaneSyncService $sync)

@@ -162,6 +162,25 @@ class InvoiceController extends Controller
     }
 
     /**
+     * GET /api/v1/invoices/{invoice}/pdf
+     *
+     * 2026-05-20 PDF B2B — Retourne uniquement le PDF visuel de la facture
+     * (format Aspha Services, sans le XML Factur-X embarqué). Pour la version
+     * conforme facturation électronique avec XML CII, utiliser /facturx.
+     */
+    public function pdf(Request $request, Invoice $invoice, FacturXGenerator $generator)
+    {
+        abort_unless($request->user()?->can('sales.invoices.view'), 403);
+
+        $pdf = $generator->renderPdf($invoice);
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $invoice->reference . '.pdf"',
+        ]);
+    }
+
+    /**
      * POST /api/v1/invoices/{invoice}/sync-pennylane
      */
     public function syncPennylane(Request $request, Invoice $invoice, PennylaneSyncService $sync)

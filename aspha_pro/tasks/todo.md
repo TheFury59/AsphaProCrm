@@ -1,5 +1,22 @@
 # Aspha Pro — Todo
 
+## 🧾 2026-05-20 — Refonte PDF devis/factures format Aspha Services (B2B)
+
+- [x] Explorer l'existant (FacturXGenerator, blade, controllers, models, routes, front)
+- [x] Refondre `backend/resources/views/invoices/pdf.blade.php` au format Aspha B2B
+- [x] Créer `backend/resources/views/quotes/pdf.blade.php` (même charte, zone "Bon pour accord")
+- [x] `FacturXGenerator.php` : passer toutes les données nécessaires à la vue facture
+- [x] Créer `QuotePdfGenerator.php` (PDF simple dompdf, pas de XML Factur-X)
+- [x] `QuoteController::pdf()` + route `GET /api/v1/quotes/{quote}/pdf`
+- [x] `InvoiceController::pdf()` + route `GET /api/v1/invoices/{invoice}/pdf`
+- [x] Front : bouton "Télécharger PDF" sur QuotesListPage + InvoicesListPage (blob download)
+- [x] `php -l` + `npx tsc --noEmit`
+- [x] Commit
+
+Voir le récap final en fin de session.
+
+---
+
 ## Toutes les phases du plan initial sont livrées ✅
 
 - [x] **Phase 0** — Bootstrap (Laravel 11, Sanctum, Vite/React, Tailwind v4, shadcn)

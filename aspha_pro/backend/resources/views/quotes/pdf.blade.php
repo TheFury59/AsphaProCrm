@@ -1,4 +1,4 @@
-{{-- 2026-05-20 PDF B2B — Facture au format Aspha Services, adapté clients entreprises. --}}
+{{-- 2026-05-20 PDF B2B — Devis au format Aspha Services, adapté clients entreprises. --}}
 @php
     use Carbon\Carbon;
     $fmtDate = fn ($d) => $d ? Carbon::parse($d)->format('d/m/Y') : null;
@@ -9,7 +9,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Facture {{ $invoice->reference }}</title>
+    <title>Devis {{ $quote->reference }}</title>
     <style>
         @page { margin: 18mm 16mm 26mm 16mm; }
         * { box-sizing: border-box; }
@@ -48,12 +48,13 @@
         .totals td.val { text-align: right; }
         .totals tr.grand td { font-weight: bold; font-size: 11.5px; background: #1f6f8b; color: #fff; }
 
-        .recap { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-        .recap th, .recap td { border: 1px solid #333; padding: 4px 7px; font-size: 9px; }
-        .recap th { background: #eef3f4; text-align: left; }
-
-        .legal { font-size: 8.5px; color: #444; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px; }
+        .legal { font-size: 8.5px; color: #444; margin-top: 10px; }
         .legal p { margin-bottom: 3px; }
+
+        .accord { margin-top: 16px; border: 1px solid #333; padding: 10px; }
+        .accord .accord-title { font-weight: bold; margin-bottom: 6px; }
+        .accord .sign-row { display: table; width: 100%; margin-top: 6px; }
+        .accord .sign-row > div { display: table-cell; width: 50%; vertical-align: bottom; padding-top: 26px; }
 
         .footer { position: fixed; bottom: -16mm; left: 0; right: 0; text-align: center;
                   font-size: 7.5px; color: #777; border-top: 1px solid #ddd; padding-top: 4px; }
@@ -77,15 +78,15 @@
                 @if ($header['phone'])N° Téléphone : {{ $header['phone'] }}<br>@endif
                 @if ($header['email'])Email : {{ $header['email'] }}<br>@endif
                 {{ $header['website'] }}<br>
-                @if ($header['authorization_number'])N° Autorisation : SAP/{{ $header['authorization_number'] }}@endif
+                @if ($header['agreement_number'])N° Agrément : {{ $header['agreement_number'] }}@endif
             </div>
         </div>
         <div class="right">
-            <div class="doc-title">Facture N° {{ $invoice->reference }}</div>
+            <div class="doc-title">Devis N° {{ $quote->reference }}</div>
             <div class="doc-meta muted">
-                Date de facture : {{ $fmtDate($invoice->invoice_date) ?? '—' }}<br>
-                @if ($invoice->due_date)
-                    Date d'échéance : {{ $fmtDate($invoice->due_date) }}<br>
+                Date de devis : {{ $fmtDate($quote->quote_date) ?? '—' }}<br>
+                @if ($quote->validity_date)
+                    Date de validité : {{ $fmtDate($quote->validity_date) }}<br>
                 @endif
             </div>
         </div>
@@ -93,7 +94,7 @@
 
     {{-- ===== Bloc client (B2B : raison sociale + SIRET + TVA) ===== --}}
     <div class="client-box">
-        <div class="cb-label">Facturé à</div>
+        <div class="cb-label">Établi pour</div>
         <div class="cb-name">{{ $clientBlock['company_name'] }}</div>
         @unless ($clientBlock['has_company'])
             <div class="small muted">— Fiche entreprise non renseignée —</div>
@@ -114,18 +115,8 @@
             {{ trim(($interventionAddress->address ?? '') . ' ' . ($interventionAddress->postal_code ?? '') . ' ' . ($interventionAddress->city ?? '')) }}
         </div>
     @endif
-    @if ($invoice->payment_mode)
-        <div class="info-line"><span class="lbl">Mode de facturation :</span> {{ $invoice->payment_mode }}</div>
-    @endif
-    @if ($invoice->invoice_date)
-        @php
-            $periodStart = Carbon::parse($invoice->invoice_date)->startOfMonth();
-            $periodEnd = Carbon::parse($invoice->invoice_date)->endOfMonth();
-        @endphp
-        <div class="info-line">
-            <span class="lbl">Période :</span>
-            {{ $periodStart->format('d/m') }} - {{ $periodEnd->format('d/m/Y') }}
-        </div>
+    @if ($quote->billing_mode)
+        <div class="info-line"><span class="lbl">Mode d'intervention :</span> {{ $quote->billing_mode }}</div>
     @endif
 
     {{-- ===== Tableau des lignes ===== --}}
@@ -173,39 +164,25 @@
     </div>
     <div class="clearfix"></div>
 
-    {{-- ===== Récap interventions (si lignes liées à une intervention) ===== --}}
-    @php
-        $interventionLines = collect($invoice->invoiceItems ?? [])
-            ->filter(fn ($it) => ! empty($it->intervention_id));
-    @endphp
-    @if ($interventionLines->isNotEmpty())
-        <table class="recap">
-            <thead>
-                <tr>
-                    <th style="width:60%">N° Intervention</th>
-                    <th style="width:40%; text-align:right">Nb H</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($interventionLines as $il)
-                    <tr>
-                        <td>{{ $il->label }} (réf. #{{ $il->intervention_id }})</td>
-                        <td style="text-align:right">{{ $fmtQty($il->quantity) }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @endif
-
-    @if ($invoice->comment)
-        <div class="info-line"><span class="lbl">Commentaire :</span> {{ $invoice->comment }}</div>
+    @if ($quote->comment)
+        <div class="info-line"><span class="lbl">Commentaire :</span> {{ $quote->comment }}</div>
     @endif
 
     {{-- ===== Mentions légales ===== --}}
     <div class="legal">
-        <p>Pénalités de retard : en cas de retard de paiement, une pénalité égale à trois fois le taux d'intérêt légal sera exigible (sans rappel préalable), ainsi qu'une indemnité forfaitaire pour frais de recouvrement de 40 €.</p>
-        <p>TVA acquittée sur les encaissements.</p>
-        <p>Cette facture peut être transmise au format électronique Factur-X (PDF/A-3 + XML CII, norme EN 16931) via Chorus Pro ou tout opérateur Peppol agréé.</p>
+        <p><strong>NOTA :</strong> prix forfaitaire établi sur la base des indications fournies par le client. Toute prestation supplémentaire fera l'objet d'un avenant.</p>
+        <p>Les modes de règlement acceptés : {{ $company ? config('aspha.payment_methods') : 'chèque, virement bancaire' }}.</p>
+        <p>Le client certifie avoir pris connaissance des conditions générales de vente et les accepter sans réserve.</p>
+    </div>
+
+    {{-- ===== Bon pour accord ===== --}}
+    <div class="accord">
+        <div class="accord-title">Bon pour accord</div>
+        <div class="small muted">Devis à retourner daté et signé, précédé de la mention « Bon pour accord ».</div>
+        <div class="sign-row">
+            <div>Date : ............................</div>
+            <div>Signature :</div>
+        </div>
     </div>
 
 </body>

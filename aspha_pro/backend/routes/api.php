@@ -161,10 +161,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Phase 3 — Ventes
     Route::apiResource('quotes', QuoteController::class);
+    Route::get('quotes/{quote}/pdf', [QuoteController::class, 'pdf']); // 2026-05-20 PDF B2B
     Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);
     Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice']);
     Route::apiResource('invoices', InvoiceController::class);
     Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
+    Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']); // 2026-05-20 PDF B2B
     Route::post('invoices/{invoice}/sync-pennylane', [InvoiceController::class, 'syncPennylane']);
 
     // Règlements (paiements reçus + ventilations sur factures)

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import {
   Plus, Trash2, Eye, FileText, Cloud, CloudCheck, FileSignature,
-  Search, FileSpreadsheet, TrendingUp, CheckCircle2,
+  Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import {
   useQuotes, useCreateQuote, useDeleteQuote, useConvertQuoteToInvoice, useQuote,
   type Quote as QuoteType,
@@ -90,6 +91,23 @@ export function QuotesListPage() {
       toast.success("Devis supprimé");
     } catch {
       toast.error("Échec de la suppression");
+    }
+  };
+
+  // 2026-05-20 PDF B2B — download du PDF devis via blob (préserve l'auth Sanctum,
+  // contrairement à un <a href> direct). Pattern repris de ClientSalesTab.
+  const handleDownloadPdf = async (id: number, ref: string) => {
+    try {
+      const res = await api.get(`/quotes/${id}/pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${ref ?? `QUO-${id}`}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      console.error("Téléchargement PDF devis échoué", e?.response ?? e);
+      toast.error("Échec du téléchargement du PDF");
     }
   };
 
@@ -211,6 +229,11 @@ export function QuotesListPage() {
                       <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Voir détail"
                         onClick={() => setDetailId(q.id)}>
                         <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      {/* 2026-05-20 PDF B2B */}
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Télécharger PDF"
+                        onClick={() => handleDownloadPdf(q.id, q.reference ?? `#${q.id}`)}>
+                        <FileDown className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Convertir en facture"
                         disabled={convert.isPending}

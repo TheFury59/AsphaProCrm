@@ -9,6 +9,7 @@ import {
 } from "@/hooks/use-phase3";
 import { useSyncInvoicePennylane } from "@/hooks/use-payments";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,23 @@ export function InvoicesListPage() {
       );
     } catch {
       toast.error("Échec de synchronisation Pennylane");
+    }
+  };
+
+  // 2026-05-20 PDF B2B — download du PDF facture (Factur-X : PDF + XML CII embarqué)
+  // via blob pour préserver l'auth Sanctum, au lieu d'un <a href> direct qui la perd.
+  const handleDownloadPdf = async (id: number, ref: string) => {
+    try {
+      const res = await api.get(`/invoices/${id}/facturx`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${ref ?? `INV-${id}`}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      console.error("Téléchargement PDF facture échoué", e?.response ?? e);
+      toast.error("Échec du téléchargement du PDF");
     }
   };
 
@@ -213,11 +231,11 @@ export function InvoicesListPage() {
                         onClick={() => setDetailId(inv.id)}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      <a href={`/api/v1/invoices/${inv.id}/facturx`} target="_blank" rel="noreferrer">
-                        <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Télécharger PDF Factur-X">
-                          <FileDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </a>
+                      {/* 2026-05-20 PDF B2B — blob download (préserve l'auth Sanctum) */}
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Télécharger PDF Factur-X"
+                        onClick={() => handleDownloadPdf(inv.id, inv.reference)}>
+                        <FileDown className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         size="sm"
                         variant={inv.pennylane_synced_at ? "default" : "outline"}

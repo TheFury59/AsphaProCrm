@@ -23,17 +23,21 @@ use Illuminate\Support\Facades\Log;
  */
 class FacturXGenerator
 {
+    public function __construct(private SalesPdfPresenter $presenter)
+    {
+    }
+
     public function generate(Invoice $invoice): string
     {
         $invoice->loadMissing(['invoiceItems.vatRate', 'client.company']);
         $entity = Entity::find($invoice->entity_id);
 
         // Étape 1 : PDF visible via DomPDF
-        $pdfBinary = Pdf::loadView('invoices.pdf', [
-            'invoice' => $invoice,
-            'client' => $invoice->client,
-            'entity' => $entity,
-        ])->output();
+        // 2026-05-20 PDF B2B — la vue facture est refondue au format Aspha
+        // Services (clients entreprises). Les données complètes (en-tête agence,
+        // bloc client SIRET/TVA, totaux TVA par taux) sont préparées par le
+        // SalesPdfPresenter, partagé avec le générateur de devis.
+        $pdfBinary = $this->renderPdf($invoice);
 
         // Étape 2 : XML CII via horstoeko/zugferd
         $xml = $this->buildCiiXml($invoice, $entity);
@@ -42,6 +46,16 @@ class FacturXGenerator
         $merger = new ZugferdDocumentPdfMerger($xml, $pdfBinary);
         $merger->generateDocument();
         return $merger->downloadString();
+    }
+
+    /**
+     * 2026-05-20 PDF B2B — Génère uniquement le PDF visuel de la facture
+     * (sans le XML Factur-X embarqué). Utilisé par le endpoint
+     * GET /api/v1/invoices/{invoice}/pdf.
+     */
+    public function renderPdf(Invoice $invoice): string
+    {
+        return Pdf::loadView('invoices.pdf', $this->presenter->forInvoice($invoice))->output();
     }
 
     private function buildCiiXml(Invoice $invoice, ?Entity $entity): string
