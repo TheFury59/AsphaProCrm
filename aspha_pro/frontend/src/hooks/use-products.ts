@@ -64,3 +64,43 @@ export function useUpdateProduct() {
     },
   });
 }
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/products/${id}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
+  });
+}
+
+// === Référentiels utilisés par le formulaire de prestation ===
+
+export type VatRate = { id: number; label: string; rate: number; status: string };
+export type ProductCategory = { id: number; label: string; status: string };
+export type EntityRef = { id: number; name: string };
+
+export function useVatRates() {
+  return useQuery({
+    queryKey: ["referentials", "vat-rates"],
+    queryFn: async () => (await api.get<{ data: VatRate[] }>("/referentials/vat-rates")).data.data,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useProductCategories() {
+  return useQuery({
+    queryKey: ["referentials", "product-categories"],
+    queryFn: async () => (await api.get<{ data: ProductCategory[] }>("/referentials/product-categories")).data.data,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useEntities() {
+  return useQuery({
+    queryKey: ["referentials", "entities"],
+    queryFn: async () => (await api.get<{ data: EntityRef[] }>("/referentials/entities")).data.data,
+    staleTime: 5 * 60_000,
+  });
+}

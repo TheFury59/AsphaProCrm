@@ -1,13 +1,28 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
-import { useProducts } from "@/hooks/use-products";
+import { Search, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
+  useVatRates, useProductCategories, useEntities,
+} from "@/hooks/use-products";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import type { Product } from "@/types/api";
 
-const typeLabels: Record<string, string> = {
+const TYPE_LABELS: Record<string, string> = {
   hourly: "Horaire",
   forfait: "Forfait",
   frais: "Frais",
@@ -16,15 +31,36 @@ const typeLabels: Record<string, string> = {
   exceptional: "Exceptionnel",
 };
 
+const NATURE_LABELS: Record<string, string> = {
+  regular: "Régulière",
+  punctual: "Ponctuelle",
+};
+
+const BILLING_MODE_LABELS: Record<string, string> = {
+  per_intervention: "Par intervention",
+  per_month: "Par mois",
+  per_week: "Par semaine",
+  per_unit: "À l'unité",
+};
+
 export function ProductsListPage() {
   const [search, setSearch] = useState("");
   const { data, isLoading } = useProducts({ per_page: 100, search });
+
+  // Dialog : null = fermé, "new" = création, Product = édition
+  const [editing, setEditing] = useState<Product | "new" | null>(null);
 
   return (
     <div>
       <PageHeader
         title="Catalogue prestations"
-        description="Produits & services proposés par Aspha — utilisés dans les devis et plannings."
+        description="Produits & services proposés par Aspha — utilisés dans les devis, factures et plannings."
+        actions={
+          <Button onClick={() => setEditing("new")}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Nouvelle prestation
+          </Button>
+        }
       />
 
       <div className="mb-4 relative max-w-sm">
@@ -45,30 +81,38 @@ export function ProductsListPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm text-muted-foreground">Aucune prestation dans le catalogue.</p>
-            <p className="text-xs text-muted-foreground mt-1">La cliente fournira la liste des prestations standard.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Clique sur « Nouvelle prestation » pour créer la première.
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data?.data.map((p) => (
-            <Card key={p.id} className="hover:border-primary/50 transition-colors">
+            <Card
+              key={p.id}
+              onClick={() => setEditing(p)}
+              className="hover:border-primary/50 transition-colors cursor-pointer"
+            >
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base leading-tight">{p.name}</CardTitle>
                   <Badge variant={p.status === "active" ? "default" : "secondary"} className="text-xs shrink-0">
-                    {p.status}
+                    {p.status === "active" ? "Active" : "Inactive"}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs font-mono">{p.code}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-2xl font-semibold">{p.price.toFixed(2)} €</span>
-                  <Badge variant="outline" className="text-xs">{typeLabels[p.type] ?? p.type}</Badge>
+                  <span className="text-2xl font-semibold">
+                    {p.price.toFixed(2)} € <span className="text-xs font-normal text-muted-foreground">{p.amount_incl_tax ? "TTC" : "HT"}</span>
+                  </span>
+                  <Badge variant="outline" className="text-xs">{TYPE_LABELS[p.type] ?? p.type}</Badge>
                 </div>
                 <div className="space-y-1 text-xs text-muted-foreground">
                   {p.category && <div>Catégorie : <span className="text-foreground">{p.category.label}</span></div>}
-                  {p.default_duration_minutes && <div>Durée standard : <span className="text-foreground">{p.default_duration_minutes} min</span></div>}
+                  {p.default_duration_minutes != null && <div>Durée standard : <span className="text-foreground">{p.default_duration_minutes} min</span></div>}
                   {p.vat_rate && <div>TVA : <span className="text-foreground">{p.vat_rate.rate}%</span></div>}
                   {p.has_degressive_pricing && <Badge variant="secondary" className="text-xs mt-1">Tarif dégressif</Badge>}
                 </div>
@@ -77,6 +121,315 @@ export function ProductsListPage() {
           ))}
         </div>
       )}
+
+      {editing !== null && (
+        <ProductFormDialog
+          product={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Formulaire création / édition d'une prestation
+// ===========================================================================
+
+type PriceTierDraft = { from_quantity: string; price: string };
+
+function ProductFormDialog({ product, onClose }: {
+  product: Product | null;
+  onClose: () => void;
+}) {
+  const isEdit = product !== null;
+  const create = useCreateProduct();
+  const update = useUpdateProduct();
+  const del = useDeleteProduct();
+
+  const { data: vatRates } = useVatRates();
+  const { data: categories } = useProductCategories();
+  const { data: entities } = useEntities();
+
+  // État du formulaire — initialisé depuis le produit en édition
+  const [code, setCode] = useState(product?.code ?? "");
+  const [name, setName] = useState(product?.name ?? "");
+  const [status, setStatus] = useState(product?.status ?? "active");
+  const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
+  const [type, setType] = useState(product?.type ?? "hourly");
+  const [nature, setNature] = useState(product?.nature ?? "regular");
+  const [billingMode, setBillingMode] = useState(product?.billing_mode ?? "per_intervention");
+  const [categoryId, setCategoryId] = useState<string>(product?.category_id ? String(product.category_id) : "none");
+  const [duration, setDuration] = useState<string>(product?.default_duration_minutes != null ? String(product.default_duration_minutes) : "");
+  const [price, setPrice] = useState<string>(product?.price != null ? String(product.price) : "");
+  const [cost, setCost] = useState<string>(product?.cost != null ? String(product.cost) : "");
+  const [vatRateId, setVatRateId] = useState<string>(product?.vat_rate_id ? String(product.vat_rate_id) : "none");
+  const [amountInclTax, setAmountInclTax] = useState(product?.amount_incl_tax ?? false);
+  const [degressive, setDegressive] = useState(product?.has_degressive_pricing ?? false);
+  const [specificForbidden, setSpecificForbidden] = useState(product?.specific_rates_forbidden ?? false);
+  const [accountingCode, setAccountingCode] = useState(product?.accounting_code ?? "");
+  const [chapter, setChapter] = useState(product?.chapter ?? "");
+  const [description, setDescription] = useState(product?.description ?? "");
+  const [tiers, setTiers] = useState<PriceTierDraft[]>(
+    product?.price_tiers?.map((t) => ({ from_quantity: String(t.from_quantity), price: String(t.price) })) ?? []
+  );
+
+  const busy = create.isPending || update.isPending || del.isPending;
+
+  const handleSubmit = async () => {
+    // Validation métier (jamais de submit disabled — on valide au clic)
+    const errors: string[] = [];
+    if (!code.trim()) errors.push("Le code est requis.");
+    if (!name.trim()) errors.push("Le nom est requis.");
+    if (price === "" || isNaN(Number(price)) || Number(price) < 0) errors.push("Le prix doit être un nombre positif.");
+    if (degressive) {
+      tiers.forEach((t, i) => {
+        if (t.from_quantity === "" || isNaN(Number(t.from_quantity))) errors.push(`Palier ${i + 1} : quantité invalide.`);
+        if (t.price === "" || isNaN(Number(t.price))) errors.push(`Palier ${i + 1} : prix invalide.`);
+      });
+    }
+    if (errors.length > 0) {
+      toast.error(errors.join(" "));
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      code: code.trim(),
+      name: name.trim(),
+      status,
+      entity_id: entityId === "none" ? null : Number(entityId),
+      type,
+      nature,
+      billing_mode: billingMode,
+      category_id: categoryId === "none" ? null : Number(categoryId),
+      default_duration_minutes: duration === "" ? null : Number(duration),
+      price: Number(price),
+      cost: cost === "" ? null : Number(cost),
+      vat_rate_id: vatRateId === "none" ? null : Number(vatRateId),
+      amount_incl_tax: amountInclTax,
+      has_degressive_pricing: degressive,
+      specific_rates_forbidden: specificForbidden,
+      accounting_code: accountingCode.trim() || null,
+      chapter: chapter.trim() || null,
+      description: description.trim() || null,
+      price_tiers: degressive
+        ? tiers.map((t) => ({ from_quantity: Number(t.from_quantity), price: Number(t.price) }))
+        : [],
+    };
+
+    try {
+      if (isEdit) {
+        await update.mutateAsync({ id: product!.id, patch: payload as Partial<Product> });
+        toast.success("Prestation mise à jour.");
+      } else {
+        await create.mutateAsync(payload as Partial<Product>);
+        toast.success("Prestation créée.");
+      }
+      onClose();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Échec de l'enregistrement.");
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!product) return;
+    if (!confirm("Désactiver cette prestation ? Elle ne sera plus proposée dans les nouveaux devis.")) return;
+    try {
+      await del.mutateAsync(product.id);
+      toast.success("Prestation désactivée.");
+      onClose();
+    } catch {
+      toast.error("Échec de la désactivation.");
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-[640px] max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Modifier la prestation" : "Nouvelle prestation"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Identité */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Code *">
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="ex : MEN-DOM" />
+            </Field>
+            <Field label="Statut">
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <Field label="Nom *">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex : Entretien du logement" />
+          </Field>
+
+          {/* Classification */}
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Type">
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Nature">
+              <Select value={nature} onValueChange={setNature}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(NATURE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Facturation">
+              <Select value={billingMode} onValueChange={setBillingMode}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(BILLING_MODE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Catégorie">
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Aucune —</SelectItem>
+                  {categories?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Entité (vide = global)">
+              <Select value={entityId} onValueChange={setEntityId}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Global —</SelectItem>
+                  {entities?.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          {/* Tarification */}
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Prix *">
+              <Input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+            </Field>
+            <Field label="Coût">
+              <Input type="number" step="0.01" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />
+            </Field>
+            <Field label="TVA">
+              <Select value={vatRateId} onValueChange={setVatRateId}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Aucune —</SelectItem>
+                  {vatRates?.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.label} ({v.rate}%)</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Durée standard (min)">
+              <Input type="number" min="0" value={duration} onChange={(e) => setDuration(e.target.value)} />
+            </Field>
+            <div className="flex flex-col justify-end gap-2 pb-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={amountInclTax} onCheckedChange={(v) => setAmountInclTax(v === true)} />
+                Prix saisi en TTC
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={specificForbidden} onCheckedChange={(v) => setSpecificForbidden(v === true)} />
+                Tarifs spécifiques interdits
+              </label>
+            </div>
+          </div>
+
+          {/* Tarif dégressif */}
+          <div className="rounded-lg border p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <Checkbox checked={degressive} onCheckedChange={(v) => setDegressive(v === true)} />
+              Tarif dégressif (paliers selon quantité)
+            </label>
+            {degressive && (
+              <div className="space-y-2 pt-1">
+                {tiers.map((t, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      type="number" step="0.01" min="0" placeholder="À partir de (qté)"
+                      value={t.from_quantity}
+                      onChange={(e) => setTiers((arr) => arr.map((x, j) => j === i ? { ...x, from_quantity: e.target.value } : x))}
+                    />
+                    <Input
+                      type="number" step="0.01" min="0" placeholder="Prix à ce palier"
+                      value={t.price}
+                      onChange={(e) => setTiers((arr) => arr.map((x, j) => j === i ? { ...x, price: e.target.value } : x))}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTiers((arr) => arr.filter((_, j) => j !== i))}
+                      className="text-destructive hover:bg-destructive/10 p-2 rounded shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  type="button" variant="outline" size="sm"
+                  onClick={() => setTiers((arr) => [...arr, { from_quantity: "", price: "" }])}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Ajouter un palier
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Comptabilité */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Code comptable">
+              <Input value={accountingCode} onChange={(e) => setAccountingCode(e.target.value)} />
+            </Field>
+            <Field label="Chapitre">
+              <Input value={chapter} onChange={(e) => setChapter(e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="Description">
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+          </Field>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          {isEdit && product?.status === "active" && (
+            <Button variant="ghost" onClick={handleDeactivate} disabled={busy} className="text-destructive mr-auto">
+              Désactiver
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose} disabled={busy}>Annuler</Button>
+          <Button onClick={handleSubmit} disabled={busy}>
+            {isEdit ? "Enregistrer" : "Créer la prestation"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
     </div>
   );
 }
