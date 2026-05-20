@@ -25,11 +25,15 @@ return new class extends Migration {
                 ->after('key_id')
                 ->constrained('addresses')
                 ->restrictOnDelete();
-            $table->foreignId('contact_id')
+            // `contact_id` : pas de `->constrained()` inline. La declaration
+            // d'origine pointait vers une table `contacts` qui n'existe pas
+            // (la vraie table est `client_contacts`, cf. 2026_05_18_160000).
+            // Sous PostgreSQL, `constrained('contacts')` casse immediatement.
+            // La FK correcte (-> client_contacts) est posee par
+            // 2026_05_20_999000_add_deferred_foreign_keys.php.
+            $table->unsignedBigInteger('contact_id')
                 ->nullable()
-                ->after('address_id')
-                ->constrained('contacts')
-                ->restrictOnDelete();
+                ->after('address_id');
         });
     }
 

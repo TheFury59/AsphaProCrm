@@ -19,11 +19,16 @@ use Illuminate\Support\Facades\Schema;
  * SQLite refuse `dropColumn` quand une FK fantome existe — la seule solution
  * sans recreer la table entiere est de modifier la definition stockee.
  *
- * Fix MySQL/Postgres : `Schema::dropConstrainedForeignId + foreignId+constrained`
- * passe sans probleme sur ces moteurs (drop column avec FK = trivial).
+ * Fix MySQL/Postgres : depuis la correction "deploiement PostgreSQL" du
+ * 2026-05-20, la migration 2026_05_15_110920 ne pose plus de FK inline sur
+ * `contact_id` (la colonne est un simple unsignedBigInteger). La vraie FK
+ * `contact_id -> client_contacts` est posee par la migration differee
+ * 2026_05_20_999000_add_deferred_foreign_keys.php. Cette migration-ci n'a
+ * donc plus rien a corriger sur MySQL/Postgres : elle devient un no-op pour
+ * ces moteurs (l'ancien `dropConstrainedForeignId` echouerait, faute de FK).
  *
  * On detecte le driver et on adapte. Sur SQLite on touche directement le
- * schema. Sur les autres on fait un ALTER classique.
+ * schema (la FK fantome y est bien stockee dans sqlite_master).
  */
 return new class extends Migration {
     public function up(): void
@@ -43,18 +48,9 @@ return new class extends Migration {
             // Force SQLite a relire le schema. Sans ca, certaines connexions
             // gardent en cache l'ancienne definition.
             DB::statement('PRAGMA integrity_check');
-        } else {
-            Schema::table('interventions', function (Blueprint $table) {
-                $table->dropConstrainedForeignId('contact_id');
-            });
-            Schema::table('interventions', function (Blueprint $table) {
-                $table->foreignId('contact_id')
-                    ->nullable()
-                    ->after('address_id')
-                    ->constrained('client_contacts')
-                    ->nullOnDelete();
-            });
         }
+        // MySQL / PostgreSQL : no-op. La FK correcte est posee par la
+        // migration differee 2026_05_20_999000.
     }
 
     public function down(): void
