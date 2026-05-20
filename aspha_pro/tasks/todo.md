@@ -1,19 +1,35 @@
 # Aspha Pro — Todo
 
-## 🧾 2026-05-20 — Refonte PDF devis/factures format Aspha Services (B2B)
+## 🧾 2026-05-20 — Devis/Factures autonomes + Prestations + PDF B2B
 
-- [x] Explorer l'existant (FacturXGenerator, blade, controllers, models, routes, front)
-- [x] Refondre `backend/resources/views/invoices/pdf.blade.php` au format Aspha B2B
-- [x] Créer `backend/resources/views/quotes/pdf.blade.php` (même charte, zone "Bon pour accord")
-- [x] `FacturXGenerator.php` : passer toutes les données nécessaires à la vue facture
-- [x] Créer `QuotePdfGenerator.php` (PDF simple dompdf, pas de XML Factur-X)
-- [x] `QuoteController::pdf()` + route `GET /api/v1/quotes/{quote}/pdf`
-- [x] `InvoiceController::pdf()` + route `GET /api/v1/invoices/{invoice}/pdf`
-- [x] Front : bouton "Télécharger PDF" sur QuotesListPage + InvoicesListPage (blob download)
-- [x] `php -l` + `npx tsc --noEmit`
-- [x] Commit
+Contexte : les API Pennylane/Silae ne seront pas dispo tout de suite (conformité
+facturation électronique en cours). L'ERP doit créer devis/factures de façon
+autonome. Templates adaptés aux clients ENTREPRISES (B2B).
 
-Voir le récap final en fin de session.
+### Volet PDF B2B (commit 5d23fca)
+- [x] Refonte `invoices/pdf.blade.php` au format Aspha B2B
+- [x] Nouveau `quotes/pdf.blade.php` (zone "Bon pour accord")
+- [x] `SalesPdfPresenter` (calcul TVA dynamique par taux) + `QuotePdfGenerator`
+- [x] `config/aspha.php` (constantes société, surchargeable .env)
+- [x] Routes `GET /quotes/{quote}/pdf` + `GET /invoices/{invoice}/pdf`
+- [x] Front : bouton "Télécharger PDF" QuotesListPage + InvoicesListPage (blob)
+- [x] Fix bug : `<a href>` direct vers /facturx perdait l'auth Sanctum → blob
+
+### Volet Prestations (commit 23258f2)
+- [x] `ProductController` : store/update validation stricte + paliers dégressifs
+- [x] Permission élargie super_admin → super_admin + admin
+- [x] Front : bouton "Nouvelle prestation" + ProductFormDialog complet
+- [x] Hooks référentiels (vat-rates, product-categories, entities)
+- [x] Test fonctionnel : création produit + paliers OK
+
+### Volet "devis/factures sans Pennylane"
+- [x] Déjà acquis : numérotation via `DocumentSequenceService`, Pennylane = sync
+      optionnel séparé. Création autonome confirmée.
+
+### Reste éventuel (non bloquant)
+- [ ] En-tête agence : l'`Entity` n'a pas d'adresse ni N° agrément en BDD →
+      fallback `config/aspha.php`. Si besoin, migration pour stocker ces
+      champs par entité (adresse, tel, N° agrément/autorisation).
 
 ---
 
