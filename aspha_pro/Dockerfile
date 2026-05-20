@@ -15,7 +15,8 @@ COPY frontend/ ./
 RUN npx vite build
 
 # ===== Stage 2 : backend Laravel + serveur PHP =====
-FROM php:8.2-cli AS app
+# PHP 8.3 requis : spatie/laravel-medialibrary → maennchen/zipstream-php ^8.3
+FROM php:8.3-cli AS app
 
 # Extensions système + PHP nécessaires (PostgreSQL, PDF, i18n, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
