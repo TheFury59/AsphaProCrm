@@ -154,6 +154,9 @@ function ProductFormDialog({ product, onClose }: {
   // État du formulaire — initialisé depuis le produit en édition
   const [code, setCode] = useState(product?.code ?? "");
   const [name, setName] = useState(product?.name ?? "");
+  // En création, le code s'auto-génère depuis le nom tant que l'utilisateur
+  // n'y a pas touché. Dès qu'il édite le champ code à la main, on arrête.
+  const [codeEdited, setCodeEdited] = useState(false);
   const [status, setStatus] = useState(product?.status ?? "active");
   const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
   const [type, setType] = useState(product?.type ?? "hourly");
@@ -252,9 +255,32 @@ function ProductFormDialog({ product, onClose }: {
 
         <div className="space-y-4 py-2">
           {/* Identité */}
+          <Field label="Nom *">
+            <Input
+              value={name}
+              onChange={(e) => {
+                const v = e.target.value;
+                setName(v);
+                // Auto-génère le code depuis le nom (création uniquement,
+                // tant que l'utilisateur n'a pas modifié le code à la main).
+                if (! isEdit && ! codeEdited) setCode(generateCode(v));
+              }}
+              placeholder="ex : Nettoyage de bureaux"
+            />
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Code *">
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="ex : MEN-DOM" />
+              <Input
+                value={code}
+                onChange={(e) => { setCode(e.target.value); setCodeEdited(true); }}
+                placeholder="généré automatiquement"
+              />
+              {! isEdit && (
+                <p className="text-[11px] text-muted-foreground">
+                  Référence unique — générée depuis le nom, modifiable.
+                </p>
+              )}
             </Field>
             <Field label="Statut">
               <Select value={status} onValueChange={setStatus}>
@@ -266,10 +292,6 @@ function ProductFormDialog({ product, onClose }: {
               </Select>
             </Field>
           </div>
-
-          <Field label="Nom *">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex : Entretien du logement" />
-          </Field>
 
           {/* Classification */}
           <div className="grid grid-cols-3 gap-3">
@@ -432,4 +454,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+/**
+ * Génère un code de prestation lisible à partir du nom.
+ * "Nettoyage de bureaux" → "NETTOYAGE-BUREAUX"
+ *  - accents retirés, mise en majuscules
+ *  - mots de liaison ignorés (de, des, du, la, le, et…)
+ *  - séparateur = tiret, longueur bornée à 48 caractères
+ */
+function generateCode(name: string): string {
+  const stopWords = new Set(["de", "des", "du", "la", "le", "les", "et", "a", "au", "aux", "en", "pour", "sur"]);
+  return name
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")  // retire les accents (combining marks)
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")                      // garde alphanumérique
+    .split(/\s+/)
+    .filter((w) => w && ! stopWords.has(w.toLowerCase()))
+    .join("-")
+    .slice(0, 48);
 }
