@@ -27,6 +27,9 @@ class DatabaseSeeder extends Seeder
         // Étape 2quinquies : articles d'aide in-app
         $this->call(HelpArticlesSeeder::class);
 
+        // Étape 2sexies : catalogue de prestations Aspha (liste cliente 2026-05-20)
+        $this->call(PrestationCatalogSeeder::class);
+
         // Étape 3 : super-admin par défaut
         $admin = User::firstOrCreate(
             ['email' => 'admin@aspha.local'],
