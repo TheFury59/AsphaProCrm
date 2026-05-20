@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\Log;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
+        // routes/web.php sert le SPA React buildé (catch-all). Indispensable
+        // en déploiement : sans `web`, `/` et les routes du SPA tombent en
+        // 404. En dev le front tourne sur Vite à part, mais le fichier est
+        // inoffensif (il retombe sur la vue welcome si pas de build).
+        web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
