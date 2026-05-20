@@ -1,5 +1,30 @@
 # Aspha Pro — Todo
 
+## 🔔 2026-05-20 — Matrice de notifications in-app (cloche)
+
+Contexte : la cloche existait mais ne couvrait qu'une fraction des events
+métier. Objectif : couvrir tous les events importants pour les 3 publics
+(admin / intervenant / client), via observers Eloquent + NotificationDispatcher.
+
+### Fait
+- [x] Audit : `NotificationDispatcher`, 3 observers existants, seeder, `MessagingController`
+- [x] `InterventionObserver` étendu : notifie aussi le **client** (`portal_user_id`)
+      + nouvel event **changement de date/heure** (`intervention_modified`)
+- [x] `ClientRequestObserver` réécrit : création → **admins + owner** (jamais le
+      créateur) ; ajout event **changement de statut** → créateur du ticket
+- [x] `MissionObserver` créé : mission créée → admins + client
+- [x] `InvoiceObserver` créé : facture émise (status → sent) → client
+- [x] `QuoteObserver` créé : devis envoyé (status → sent) → client
+- [x] `MessageObserver` créé : message posté → tous les participants sauf l'expéditeur
+- [x] `MessagingController::postMessage` : suppression du `Notification::create()`
+      en direct → délégué à `MessageObserver` (passe par le Dispatcher)
+- [x] Morph map : ajout `mission` (`invoice`/`quote` déjà présents)
+- [x] `NotificationTypesSeeder` : ajout `mission_created`, `invoice_issued`,
+      `quote_sent`, `client_request_status` (idempotent, relancé)
+- [x] Tests tinker : tous les events vérifiés (bons `user_id`, bon `target_type`)
+
+---
+
 ## 🧩 2026-05-20 — Refonte formulaire de création de devis + UI types de devis
 
 Contexte : le `CreateQuoteDialog` faisait tout saisir à la main (désignation

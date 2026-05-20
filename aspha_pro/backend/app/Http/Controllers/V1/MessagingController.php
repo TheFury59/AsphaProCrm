@@ -158,28 +158,10 @@ class MessagingController extends Controller
             ->where('user_id', $request->user()->id)
             ->update(['last_read_at' => now()]);
 
-        // Notification typée "new_message" pour tous les autres participants.
-        $typeId = \App\Models\NotificationType::where('code', 'new_message')->value('id');
-        if ($typeId) {
-            $recipientIds = MessageThreadParticipant::where('thread_id', $thread->id)
-                ->where('user_id', '!=', $request->user()->id)
-                ->pluck('user_id');
-            $title = $thread->subject ? "Nouveau message · {$thread->subject}" : "Nouveau message";
-            $bodyPreview = mb_substr($data['body'], 0, 120);
-            foreach ($recipientIds as $rid) {
-                \App\Models\Notification::create([
-                    'notification_type_id' => $typeId,
-                    'user_id' => $rid,
-                    'title' => $title,
-                    'body' => $bodyPreview,
-                    'target_type' => 'message_thread',
-                    'target_id' => $thread->id,
-                    'channel' => 'push',
-                    'is_read' => false,
-                    'sent_at' => now(),
-                ]);
-            }
-        }
+        // La notification "new_message" est émise par MessageObserver
+        // (point d'émission unique, passe par NotificationDispatcher → respect
+        // des préférences + canaux push/email). Plus de Notification::create()
+        // en direct ici (cf. audit notifications 2026-05-20).
 
         return response()->json(['data' => $message->load('sender:id,name')], 201);
     }

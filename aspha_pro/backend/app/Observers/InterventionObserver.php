@@ -8,9 +8,20 @@ use App\Services\NotificationDispatcher;
 /**
  * Déclenche les notifications applicatives sur les events Intervention.
  *
- *  - Créée avec employee_id assigné → notif `intervention_assigned` à l'intervenant
- *  - Update employee_id (réaffectation) → notif `intervention_assigned` au nouveau
- *  - Annulation (status = annulee) → notif `intervention_cancelled` à l'intervenant
+ * Destinataires possibles d'un RDV :
+ *   - l'intervenant assigné  → employee.user_id
+ *   - le client              → client.portal_user_id (s'il a un accès extranet)
+ *
+ * Events couverts :
+ *   - created            → `intervention_assigned`  : intervenant + client
+ *   - update employee_id → `intervention_assigned`  : nouvel intervenant + client
+ *   - update date/heure  → `intervention_modified`  : intervenant + client
+ *   - status = annulee   → `intervention_cancelled` : intervenant + client
+ *
+ * Règle : on ne notifie JAMAIS l'auteur de l'action (cf. LRN 2026-05-19).
+ * Ici l'auteur est un admin la plupart du temps ; l'intervenant et le client
+ * ne sont jamais à l'origine d'un RDV, donc aucun risque d'auto-notif — mais on
+ * filtre quand même via auth() par sécurité.
  */
 class InterventionObserver
 {
@@ -18,12 +29,13 @@ class InterventionObserver
 
     public function created(Intervention $iv): void
     {
-        if (! $iv->employee_id || ! $iv->employee?->user_id) return;
+        $userIds = $this->recipients($iv);
+        if (empty($userIds)) return;
 
         $this->dispatcher->dispatch(
             code: 'intervention_assigned',
-            userIds: [$iv->employee->user_id],
-            title: 'Nouvelle intervention assignée',
+            userIds: $userIds,
+            title: 'Nouveau rendez-vous',
             body: $this->describe($iv),
             target: $iv,
         );
@@ -31,14 +43,27 @@ class InterventionObserver
 
     public function updated(Intervention $iv): void
     {
-        // Changement d'intervenant
+        // Changement d'intervenant : notifier le NOUVEAU intervenant + le client.
         if ($iv->wasChanged('employee_id') && $iv->employee_id) {
-            $iv->loadMissing('employee');
-            if ($iv->employee?->user_id) {
+            $userIds = $this->recipients($iv);
+            if (! empty($userIds)) {
                 $this->dispatcher->dispatch(
                     code: 'intervention_assigned',
-                    userIds: [$iv->employee->user_id],
-                    title: 'Intervention assignée',
+                    userIds: $userIds,
+                    title: 'Intervenant modifié',
+                    body: $this->describe($iv),
+                    target: $iv,
+                );
+            }
+        } elseif ($iv->wasChanged(['start_datetime', 'end_datetime', 'recurrence_start_date'])) {
+            // Changement de date/heure (hors réaffectation, déjà traitée ci-dessus
+            // pour éviter une double notif quand les deux changent ensemble).
+            $userIds = $this->recipients($iv);
+            if (! empty($userIds)) {
+                $this->dispatcher->dispatch(
+                    code: 'intervention_modified',
+                    userIds: $userIds,
+                    title: 'Rendez-vous reporté',
                     body: $this->describe($iv),
                     target: $iv,
                 );
@@ -47,12 +72,12 @@ class InterventionObserver
 
         // Annulation
         if ($iv->wasChanged('status') && $iv->status === 'annulee') {
-            $iv->loadMissing('employee');
-            if ($iv->employee?->user_id) {
+            $userIds = $this->recipients($iv);
+            if (! empty($userIds)) {
                 $this->dispatcher->dispatch(
                     code: 'intervention_cancelled',
-                    userIds: [$iv->employee->user_id],
-                    title: 'Intervention annulée',
+                    userIds: $userIds,
+                    title: 'Rendez-vous annulé',
                     body: $this->describe($iv),
                     target: $iv,
                 );
@@ -60,12 +85,39 @@ class InterventionObserver
         }
     }
 
+    /**
+     * Destinataires d'une notif de RDV : intervenant assigné (compte user)
+     * + client (compte extranet s'il existe). L'auteur de l'action est exclu.
+     */
+    private function recipients(Intervention $iv): array
+    {
+        $iv->loadMissing(['employee:id,user_id', 'client:id,portal_user_id']);
+
+        $ids = [];
+        if ($iv->employee?->user_id) {
+            $ids[] = (int) $iv->employee->user_id;
+        }
+        if ($iv->client?->portal_user_id) {
+            $ids[] = (int) $iv->client->portal_user_id;
+        }
+
+        // Ne jamais s'auto-notifier (cf. LRN 2026-05-19).
+        $authorId = auth()->id();
+        if ($authorId) {
+            $ids = array_filter($ids, fn ($id) => $id !== (int) $authorId);
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     private function describe(Intervention $iv): string
     {
         if (! $iv->start_datetime) return 'Voir détails dans le planning.';
-        $iv->loadMissing('client');
+        $iv->loadMissing('client.company');
         $when = $iv->start_datetime->isoFormat('dddd D MMMM, HH:mm');
-        $who = $iv->client?->code ?? 'client';
+        $who = $iv->client?->company?->company_name
+            ?? $iv->client?->code
+            ?? 'client';
         return "{$when} chez {$who}";
     }
 }

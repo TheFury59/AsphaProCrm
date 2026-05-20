@@ -36,9 +36,17 @@ class NotificationTypesSeeder extends Seeder
             ['code' => 'checkin_late', 'label' => 'Retard de badgeage', 'module' => 'telemanagement', 'default_channels' => 'push'],
             ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
 
+            // Missions / contrats
+            ['code' => 'mission_created', 'label' => 'Nouvelle mission', 'module' => 'missions', 'default_channels' => 'push'],
+
             // Ventes
             ['code' => 'invoice_paid', 'label' => 'Facture réglée', 'module' => 'sales', 'default_channels' => 'push'],
             ['code' => 'invoice_overdue', 'label' => 'Facture en retard', 'module' => 'sales', 'default_channels' => 'email'],
+            ['code' => 'invoice_issued', 'label' => 'Nouvelle facture', 'module' => 'sales', 'default_channels' => 'push,email'],
+            ['code' => 'quote_sent', 'label' => 'Nouveau devis', 'module' => 'sales', 'default_channels' => 'push,email'],
+
+            // Tickets
+            ['code' => 'client_request_status', 'label' => 'Ticket mis à jour', 'module' => 'portal', 'default_channels' => 'push'],
 
             // Messagerie
             ['code' => 'new_message', 'label' => 'Nouveau message', 'module' => 'messaging', 'default_channels' => 'push'],

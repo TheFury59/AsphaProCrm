@@ -9,22 +9,21 @@ use App\Services\NotificationDispatcher;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Observer ClientRequest — émet une notification dès qu'un ticket est créé,
- * peu importe le chemin (admin global, fiche client, extranet client, command,
- * import en masse…).
+ * Observer ClientRequest (tickets / réclamations) — point d'émission unique,
+ * peu importe le chemin de création (admin global, fiche client, extranet
+ * client, command, import en masse…).
  *
- * Avant cet observer, l'émission était dupliquée dans 3 controllers et un
- * chemin sur 4 oubliait de notifier. Avec l'observer, garantie d'unicité.
+ * Events couverts :
+ *  - created → `client_request_new` : les admins (super_admin + admin)
+ *              + le gestionnaire du dossier (client.owner_user_id) s'il existe.
+ *              JAMAIS l'expéditeur lui-même (created_by_user_id).
+ *  - update status → `client_request_status` : le créateur du ticket
+ *              (created_by_user_id), pour qu'il soit prévenu de l'avancement.
+ *              JAMAIS l'auteur du changement de statut (un admin en général).
  *
- *  - Crée → notif `client_request_new` au gestionnaire du dossier
- *    (client.owner_user_id), avec :
- *      title = raison sociale du client (ou code si pas de société)
- *      body  = sujet du ticket
- *      target = le ticket lui-même → permet le deep-link côté UI
- *
- * Note : la priorité du ticket peut un jour conditionner les canaux (ex:
- * urgent → email + push systématique), mais on s'appuie pour l'instant sur
- * les préférences utilisateur.
+ * Règle dure (cf. LRN 2026-05-19) : on ne notifie JAMAIS l'auteur d'une action.
+ * Si après filtrage il ne reste aucun destinataire valide → log + skip,
+ * jamais de fallback "se notifier soi-même".
  */
 class ClientRequestObserver
 {
@@ -32,58 +31,84 @@ class ClientRequestObserver
 
     public function created(ClientRequest $ticket): void
     {
-        // Récupère le client et son gestionnaire. Sans gestionnaire on n'émet pas
-        // (évite les notifs orphelines). En pratique tous les clients ont un owner.
         $client = Client::with('company:id,client_id,company_name')->find($ticket->client_id);
-        if (! $client) return;
 
-        // audit 2026-05-19 — résolution des destinataires sans JAMAIS retomber sur
-        // l'expéditeur (auth()->id()) : le créateur recevait sa propre notif quand
-        // assigned_to et client.owner_user_id étaient null.
-        // Nouvel ordre : assigned_to → owner_user_id → tous les super_admin → skip + log.
-        $recipientIds = [];
+        // Destinataires : tous les admins + le gestionnaire du dossier.
+        // L'audit a relevé qu'un fallback sur l'expéditeur pouvait se produire
+        // quand owner_user_id était null → ici on part TOUJOURS des admins, donc
+        // un destinataire valide existe tant qu'il y a au moins un admin.
+        $recipientIds = User::role(['super_admin', 'admin'])->pluck('id')->all();
 
-        if ($ticket->assigned_to) {
-            $recipientIds = [(int) $ticket->assigned_to];
-        } elseif ($client->owner_user_id) {
-            $recipientIds = [(int) $client->owner_user_id];
-        } else {
-            // Dernier recours : notifier tous les super_admin pour qu'au moins quelqu'un
-            // prenne en charge. Exclut explicitement l'expéditeur du ticket (created_by_user_id)
-            // pour ne jamais s'auto-notifier.
-            $superAdminIds = User::role('super_admin')->pluck('id')->all();
-            $recipientIds = array_values(array_filter(
-                $superAdminIds,
-                fn ($id) => (int) $id !== (int) ($ticket->created_by_user_id ?? 0),
-            ));
-            if (empty($recipientIds)) {
-                Log::warning("ClientRequestObserver: aucun destinataire trouvé pour le ticket #{$ticket->id} (client_id={$ticket->client_id}). Notif skippée.");
-                return;
-            }
+        if ($client?->owner_user_id) {
+            $recipientIds[] = (int) $client->owner_user_id;
         }
 
-        // Garde-fou final : retirer l'expéditeur dans tous les cas (au cas où assigned_to
-        // ou owner_user_id pointerait sur lui).
-        if ($ticket->created_by_user_id) {
-            $recipientIds = array_values(array_filter(
-                $recipientIds,
-                fn ($id) => (int) $id !== (int) $ticket->created_by_user_id,
-            ));
-        }
-        if (empty($recipientIds)) return;
+        // Garde-fou final : ne jamais notifier l'expéditeur du ticket.
+        $recipientIds = $this->excludeAuthor($recipientIds, $ticket->created_by_user_id);
 
-        // Titre = nom commercial pour que l'admin sache de qui ça vient
-        // dès le premier coup d'œil dans la cloche.
-        $companyName = $client->company?->company_name
-            ?? $client->display_name
-            ?? "Client {$client->code}";
+        if (empty($recipientIds)) {
+            Log::warning("ClientRequestObserver: aucun destinataire pour le ticket #{$ticket->id}. Notif (création) skippée.");
+            return;
+        }
+
+        $companyName = $client?->company?->company_name
+            ?? ($client ? "Client {$client->code}" : 'Client');
 
         $this->dispatcher->dispatch(
             code: 'client_request_new',
             userIds: $recipientIds,
-            title: $companyName,
+            title: "Nouveau ticket · {$companyName}",
             body: $ticket->subject ?? 'Nouvelle demande',
             target: $ticket,
         );
+    }
+
+    public function updated(ClientRequest $ticket): void
+    {
+        if (! $ticket->wasChanged('status')) return;
+
+        // Le créateur du ticket suit l'avancement. S'il est lui-même l'auteur
+        // du changement de statut (cas rare), on n'émet pas (pas d'auto-notif).
+        if (! $ticket->created_by_user_id) return;
+
+        $recipientIds = $this->excludeAuthor(
+            [(int) $ticket->created_by_user_id],
+            auth()->id(),
+        );
+        if (empty($recipientIds)) return;
+
+        $this->dispatcher->dispatch(
+            code: 'client_request_status',
+            userIds: $recipientIds,
+            title: 'Ticket mis à jour',
+            body: 'Nouveau statut : ' . $this->statusLabel($ticket->status),
+            target: $ticket,
+        );
+    }
+
+    /**
+     * Retire l'auteur d'une action de la liste de destinataires.
+     */
+    private function excludeAuthor(array $ids, $authorId): array
+    {
+        if (! $authorId) {
+            return array_values(array_unique(array_map('intval', $ids)));
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            fn ($id) => $id !== (int) $authorId,
+        )));
+    }
+
+    private function statusLabel(?string $status): string
+    {
+        return match ($status) {
+            'open' => 'ouvert',
+            'in_progress' => 'en cours',
+            'resolved' => 'résolu',
+            'closed' => 'clôturé',
+            default => (string) $status,
+        };
     }
 }

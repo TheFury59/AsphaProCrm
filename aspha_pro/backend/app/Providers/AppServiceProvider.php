@@ -10,10 +10,16 @@ use App\Models\Entity;
 use App\Models\ClientRequest;
 use App\Models\Intervention;
 use App\Models\Invoice;
+use App\Models\Message;
+use App\Models\Mission;
 use App\Models\Quote;
 use App\Models\StockProduct;
 use App\Observers\ClientRequestObserver;
 use App\Observers\InterventionObserver;
+use App\Observers\InvoiceObserver;
+use App\Observers\MessageObserver;
+use App\Observers\MissionObserver;
+use App\Observers\QuoteObserver;
 use App\Observers\StockProductObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -50,12 +56,21 @@ class AppServiceProvider extends ServiceProvider
             'client_request' => ClientRequest::class,
             'intervention' => Intervention::class,
             'message_thread' => \App\Models\MessageThread::class,
+            // Ajout 2026-05-20 — deep-link cloche vers une mission
+            // ('invoice' et 'quote' sont déjà mappés ci-dessus).
+            'mission' => Mission::class,
         ]);
 
-        // Observers pour déclencher les notifications applicatives
+        // Observers pour déclencher les notifications applicatives.
+        // Point d'émission UNIQUE par event métier (jamais d'appel direct
+        // dans les controllers — cf. LRN 2026-05-18 : double-notif silencieuse).
         Intervention::observe(InterventionObserver::class);
         ClientRequest::observe(ClientRequestObserver::class);
         StockProduct::observe(StockProductObserver::class);
+        Mission::observe(MissionObserver::class);
+        Invoice::observe(InvoiceObserver::class);
+        Quote::observe(QuoteObserver::class);
+        Message::observe(MessageObserver::class);
 
         // Rate limiters — défis brute-force / DoS basique.
         // Les vars RATE_LIMIT_* étaient déclarées dans .env mais jamais
