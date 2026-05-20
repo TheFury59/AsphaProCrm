@@ -28,6 +28,7 @@ use App\Http\Controllers\V1\ProductController;
 use App\Http\Controllers\V1\RequiredDocumentTypesController;
 use App\Http\Controllers\V1\SettingsController;
 use App\Http\Controllers\V1\QuoteController;
+use App\Http\Controllers\V1\QuoteTypeController;
 use App\Http\Controllers\V1\ReferentialsController;
 use App\Http\Controllers\V1\ReglementController;
 use App\Http\Controllers\V1\SalaryDeductionController;
@@ -160,6 +161,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('interventions', InterventionController::class);
 
     // Phase 3 — Ventes
+    // Types de devis (modèles pré-paramétrés) — 2026-05-20
+    Route::apiResource('quote-types', QuoteTypeController::class)
+        ->parameters(['quote-types' => 'quoteType']);
     Route::apiResource('quotes', QuoteController::class);
     Route::get('quotes/{quote}/pdf', [QuoteController::class, 'pdf']); // 2026-05-20 PDF B2B
     Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);

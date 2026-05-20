@@ -11,6 +11,7 @@ class QuoteItem extends Model
 
     protected $fillable = [
         'quote_id',
+        'product_id', // 2026-05-20 — prestation catalogue source (null = ligne libre)
         'item_type',
         'vat_rate_id', // audit 2026-05-19 — TVA dynamique par ligne
         'label',

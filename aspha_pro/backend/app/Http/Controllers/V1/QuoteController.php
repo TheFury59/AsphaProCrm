@@ -51,8 +51,13 @@ class QuoteController extends Controller
         abort_unless($request->user()?->can('sales.quotes.edit'), 403);
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
-            'entity_id' => ['required', 'exists:entities,id'],
+            // entity_id n'est plus exigé du formulaire : on le dérive du
+            // client (refonte 2026-05-20). Reste accepté en override admin.
+            'entity_id' => ['nullable', 'exists:entities,id'],
             'quote_type_id' => ['nullable', 'exists:quote_types,id'],
+            // mission_id optionnel : un devis "régulier" provient d'une mission
+            // dont il reprend les prestations contractualisées (2026-05-20).
+            'mission_id' => ['nullable', 'exists:missions,id'],
             'quote_date' => ['required', 'date'],
             'validity_date' => ['nullable', 'date'],
             'nature' => ['nullable', 'in:regular,punctual'],
@@ -65,23 +70,37 @@ class QuoteController extends Controller
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19 — TVA par ligne
+            // product_id : prestation du catalogue dont vient la ligne
+            // (null = ligne libre saisie à la main). 2026-05-20.
+            'items.*.product_id' => ['nullable', 'exists:products,id'],
         ]);
+
+        $client = \App\Models\Client::findOrFail($data['client_id']);
+        // entity_id : override admin sinon entité du client
+        $entityId = $data['entity_id'] ?? $client->entity_id;
+        abort_if(! $entityId, 422, "Le client n'est rattaché à aucune entité — impossible de générer le devis.");
+
+        // Si une mission est fournie, on vérifie sa cohérence avec le client
+        if (! empty($data['mission_id'])) {
+            $mission = \App\Models\Mission::findOrFail($data['mission_id']);
+            abort_if($mission->client_id !== $client->id, 422, "La mission sélectionnée n'appartient pas à ce client.");
+        }
 
         $userId = $request->user()->id;
         $sequences = app(DocumentSequenceService::class);
 
-        $quote = DB::transaction(function () use ($data, $userId, $sequences) {
-            // Quote_type fallback : take first available if not provided
-            $quoteTypeId = $data['quote_type_id'] ?? optional(\App\Models\QuoteType::query()->first())->id;
-
+        $quote = DB::transaction(function () use ($data, $userId, $sequences, $entityId) {
             // Référence auto atomique (audit 2026-05-19 — fix race condition count()+1)
             $ref = $sequences->next('QUO');
 
             $quote = Quote::create([
                 'reference' => $ref,
                 'client_id' => $data['client_id'],
-                'entity_id' => $data['entity_id'],
-                'quote_type_id' => $quoteTypeId,
+                'entity_id' => $entityId,
+                // quote_type_id réellement optionnel (migration 2026-05-20 :
+                // colonne nullable). Plus de fallback QuoteType::first() qui
+                // cassait l'insertion quand la table était vide.
+                'quote_type_id' => $data['quote_type_id'] ?? null,
                 'owner_user_id' => $userId,
                 'quote_date' => $data['quote_date'],
                 'validity_date' => $data['validity_date'] ?? null,
@@ -98,6 +117,7 @@ class QuoteController extends Controller
                 $lineTotal = (float) $item['quantity'] * (float) $item['unit_price'];
                 QuoteItem::create([
                     'quote_id' => $quote->id,
+                    'product_id' => $item['product_id'] ?? null, // 2026-05-20 traçabilité
                     'label' => $item['label'],
                     'item_type' => $item['item_type'] ?? 'forfait',
                     'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
@@ -109,6 +129,14 @@ class QuoteController extends Controller
                 $total += $lineTotal;
             }
             $quote->update(['total' => $total]);
+
+            // Lier la mission d'origine à ce devis (missions.quote_id).
+            if (! empty($data['mission_id'])) {
+                \App\Models\Mission::where('id', $data['mission_id'])
+                    ->whereNull('quote_id')
+                    ->update(['quote_id' => $quote->id]);
+            }
+
             return $quote;
         });
 
@@ -137,6 +165,7 @@ class QuoteController extends Controller
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19
+            'items.*.product_id' => ['nullable', 'exists:products,id'], // 2026-05-20
         ]);
 
         DB::transaction(function () use ($data, $quote) {
@@ -152,6 +181,7 @@ class QuoteController extends Controller
                     $lineTotal = (float) $item['quantity'] * (float) $item['unit_price'];
                     QuoteItem::create([
                         'quote_id' => $quote->id,
+                        'product_id' => $item['product_id'] ?? null, // 2026-05-20
                         'label' => $item['label'],
                         'item_type' => $item['item_type'] ?? 'forfait',
                         'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
@@ -213,6 +243,7 @@ class QuoteController extends Controller
             foreach ($quote->items as $qi) {
                 InvoiceItem::create([
                     'invoice_id' => $invoice->id,
+                    'product_id' => $qi->product_id, // 2026-05-20 — propage la prestation source
                     'label' => $qi->label,
                     'item_type' => $qi->item_type ?? 'forfait',
                     'vat_rate_id' => $qi->vat_rate_id, // audit 2026-05-19 — propage la TVA par ligne

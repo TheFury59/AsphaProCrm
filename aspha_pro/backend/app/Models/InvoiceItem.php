@@ -11,6 +11,7 @@ class InvoiceItem extends Model
 
     protected $fillable = [
         'invoice_id',
+        'product_id', // 2026-05-20 — prestation catalogue source (null = ligne libre)
         'client_prestation_id',
         'intervention_id',
         'item_type',
