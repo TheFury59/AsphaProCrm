@@ -198,3 +198,22 @@ export type Product = {
   vat_rate?: { id: number; label: string; rate: number } | null;
   price_tiers?: { id: number; from_quantity: number; price: number }[];
 };
+
+// === QUOTE TYPE (2026-05-20 refonte devis) ===
+// Modèle pré-paramétré sélectionnable à la création d'un devis.
+// Le type runtime + les hooks vivent dans hooks/use-quote-types.ts ; re-export ici
+// pour cohérence avec les autres types API.
+export type QuoteType = {
+  id: number;
+  entity_id: number | null;
+  label: string;
+  modality: string | null;
+  nature: "regular" | "punctual" | null;
+  billing_mode: string | null;
+  quote_calculation: "per_week" | "per_month" | "per_unit" | null;
+  commitment_duration: string | null;
+  billing_rhythm: string | null;
+  deposit_percent: number | string | null;
+  status: "active" | "inactive";
+  entity?: { id: number; name: string } | null;
+};

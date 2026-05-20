@@ -1,5 +1,34 @@
 # Aspha Pro — Todo
 
+## 🧩 2026-05-20 — Refonte formulaire de création de devis + UI types de devis
+
+Contexte : le `CreateQuoteDialog` faisait tout saisir à la main (désignation
+libre, qté, prix), déconnecté du catalogue de prestations. Refonte pour piloter
+les lignes par le catalogue + permettre les devis depuis une mission.
+
+### Frontend (ce qui a été fait)
+- [x] Nouveau hook `use-quote-types.ts` : `useQuoteTypes / useCreateQuoteType /
+      useUpdateQuoteType / useDeleteQuoteType` (CRUD `/quote-types`)
+- [x] `useClientMissions` / `useMissionPrestations` réutilisés (déjà dans `use-missions.ts`)
+- [x] Type `QuoteType` ajouté à `types/api.ts` ; `product_id`/`vat_rate_id` sur
+      `QuoteItem`, `quote_type_id`/`mission_id` sur `Quote` (`use-phase3.ts`)
+- [x] Refonte `CreateQuoteDialog` : Client → Type de devis (pré-remplit nature) →
+      Nature → Mission d'origine (si régulière, bouton « Charger les prestations »)
+      → Lignes catalogue (select prestation → pré-remplit label/prix/TVA/type) +
+      lignes libres → dates/commentaire → Total HT. `entity_id` n'est plus envoyé
+      (dérivé backend). Validation au clic (toast), submit jamais disabled hors `isPending`.
+- [x] Nouveau `QuoteTypesDialog` : bouton « Types de devis » dans le header,
+      CRUD inline (création/édition/désactivation/réactivation)
+- [x] Nettoyage type mort `Paginated<T>` dans `use-phase3.ts`
+- [x] Vérif : `tsc --noEmit` 0 erreur ; test navigateur réel (login admin →
+      création type de devis → création devis avec ligne catalogue → PDF intact)
+
+### Reste éventuel (non bloquant)
+- Le catalogue de prestations était vide en BDD de démo → prévoir un seeder
+  `CatalogSeeder` qui crée quelques prestations actives pour les démos.
+
+---
+
 ## 🧾 2026-05-20 — Devis/Factures autonomes + Prestations + PDF B2B
 
 Contexte : les API Pennylane/Silae ne seront pas dispo tout de suite (conformité

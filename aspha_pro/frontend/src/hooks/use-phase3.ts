@@ -85,6 +85,9 @@ export type QuoteItem = {
   total: number;
   item_type: string;
   order: number;
+  // 2026-05-20 refonte devis — traçabilité catalogue + TVA par ligne
+  product_id?: number | null;
+  vat_rate_id?: number | null;
 };
 
 export type Quote = {
@@ -92,6 +95,9 @@ export type Quote = {
   reference: string | null;
   client_id: number;
   entity_id: number;
+  // 2026-05-20 refonte devis — origine du devis
+  quote_type_id?: number | null;
+  mission_id?: number | null;
   quote_date: string;
   validity_date: string | null;
   nature: string | null;
@@ -133,7 +139,8 @@ export type InvoiceItem = {
   item_type: string;
 };
 
-type Paginated<T> = { data: T[]; meta: any; links: any };
+// 2026-05-20 refonte devis — retiré le type mort `Paginated<T>` (jamais référencé,
+// ce fichier utilise son propre helper `unwrapPaginated`).
 type ListResp<T> = { data: T[] };
 type Single<T> = { data: T };
 

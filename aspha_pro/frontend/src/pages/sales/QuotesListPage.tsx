@@ -1,22 +1,31 @@
 import { useMemo, useState } from "react";
 import {
-  Plus, Trash2, Eye, FileText, Cloud, CloudCheck, FileSignature,
+  Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
   Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
+  Settings2, PackagePlus, PencilLine, Layers,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 import {
   useQuotes, useCreateQuote, useDeleteQuote, useConvertQuoteToInvoice, useQuote,
   type Quote as QuoteType,
 } from "@/hooks/use-phase3";
 import { useSyncQuotePennylane } from "@/hooks/use-payments";
 import { useClients } from "@/hooks/use-clients";
+// 2026-05-20 refonte devis — catalogue, missions, types de devis, TVA
+import { useProducts, useVatRates } from "@/hooks/use-products";
+import { useClientMissions, useMissionPrestations } from "@/hooks/use-missions";
+import {
+  useQuoteTypes, useCreateQuoteType, useUpdateQuoteType, useDeleteQuoteType,
+  type QuoteType as QuoteTypeModel,
+} from "@/hooks/use-quote-types";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -24,6 +33,9 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "secondary",
@@ -40,6 +52,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function QuotesListPage() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [typesOpen, setTypesOpen] = useState(false); // 2026-05-20 refonte devis
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -130,12 +143,22 @@ export function QuotesListPage() {
         title="Devis"
         description="Propositions commerciales — gestion complète avec items + conversion en facture"
         actions={
-          <Button
-            onClick={() => setOpen(true)}
-            className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
-          >
-            <Plus className="h-4 w-4 mr-2" /> Nouveau devis
-          </Button>
+          <div className="flex gap-2">
+            {/* 2026-05-20 refonte devis — accès gestion des types de devis */}
+            <Button
+              variant="outline"
+              onClick={() => setTypesOpen(true)}
+              className="cursor-pointer"
+            >
+              <Settings2 className="h-4 w-4 mr-2" /> Types de devis
+            </Button>
+            <Button
+              onClick={() => setOpen(true)}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
+            >
+              <Plus className="h-4 w-4 mr-2" /> Nouveau devis
+            </Button>
+          </div>
         }
       />
 
@@ -274,8 +297,10 @@ export function QuotesListPage() {
         </div>
       )}
 
-      <CreateQuoteDialog open={open} onClose={() => setOpen(false)} />
+      {/* 2026-05-20 refonte devis — key force le remount = reset propre du form à chaque ouverture */}
+      {open && <CreateQuoteDialog key="create-quote" onClose={() => setOpen(false)} />}
       <QuoteDetailDialog id={detailId} onClose={() => setDetailId(null)} />
+      {typesOpen && <QuoteTypesDialog onClose={() => setTypesOpen(false)} />}
     </div>
   );
 }
@@ -376,130 +401,751 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function CreateQuoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+// ===========================================================================
+// 2026-05-20 refonte devis — Création de devis pilotée par le catalogue
+// ===========================================================================
+//
+// Flux : Client → Type de devis (optionnel) → Nature → Origine (mission si
+// régulière) → Lignes (catalogue ou libres) → dates/commentaire.
+// Les lignes proviennent du catalogue de prestations (sélecteur qui pré-remplit
+// prix/TVA/type) ou sont saisies à la main (ligne libre).
+//
+// Conventions projet respectées :
+//  - submit jamais `disabled` pour règle métier (validation au clic → toast)
+//  - try/catch sur la mutation (toast.error + console.error en cas d'échec)
+//  - entity_id NON envoyé (dérivé du client côté backend)
+//  - le composant est monté avec une `key` par le parent → reset propre
+
+// Une ligne du devis en cours d'édition. `product_id` null = ligne libre.
+type DraftItem = {
+  uid: string;            // clé React stable (pas l'index)
+  product_id: number | null;
+  label: string;
+  quantity: string;
+  unit_price: string;
+  vat_rate_id: number | null;
+  item_type: string;
+  free: boolean;          // true = ligne libre (pas de select prestation)
+};
+
+let _uidSeq = 0;
+const nextUid = () => `it-${++_uidSeq}`;
+
+// Le catalogue Product.type ('hourly'|'forfait'|'frais'|'remise'|'carte'|'exceptional')
+// ne mappe pas 1:1 sur item_type ('hourly'|'forfait'|'frais'|'remise'|'produit'|'carte'|'adjustment').
+// 'exceptional' n'est pas un item_type valide → on retombe sur 'forfait'.
+function productTypeToItemType(t: string | null | undefined): string {
+  switch (t) {
+    case "hourly":
+    case "forfait":
+    case "frais":
+    case "remise":
+    case "carte":
+      return t;
+    default:
+      return "forfait";
+  }
+}
+
+function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
   const create = useCreateQuote();
   const { data: clientsData } = useClients({ per_page: 100 });
-  const [form, setForm] = useState({
-    client_id: "",
-    entity_id: "1",
-    quote_date: new Date().toISOString().slice(0, 10),
-    validity_date: "",
-    nature: "regular",
+  const { data: products } = useProducts({ status: "active", per_page: 100 });
+  const { data: vatRates } = useVatRates();
+  const { data: quoteTypes } = useQuoteTypes({ status: "active" });
+
+  const [clientId, setClientId] = useState("");
+  const [quoteTypeId, setQuoteTypeId] = useState("none");
+  const [nature, setNature] = useState<"regular" | "punctual">("regular");
+  const [missionId, setMissionId] = useState("none");
+  const [quoteDate, setQuoteDate] = useState(() => {
+    // Date locale (pas toISOString qui passe en UTC → off-by-one près de minuit)
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
-  const [items, setItems] = useState<Array<{ label: string; quantity: string; unit_price: string }>>([
-    { label: "", quantity: "1", unit_price: "0" },
-  ]);
+  const [validityDate, setValidityDate] = useState("");
+  const [comment, setComment] = useState("");
+  const [items, setItems] = useState<DraftItem[]>([]);
+
+  // Missions du client sélectionné (uniquement pertinent en nature régulière)
+  const numClientId = clientId ? parseInt(clientId, 10) : 0;
+  const { data: missions } = useClientMissions(numClientId);
+  // Prestations de la mission choisie (pour le bouton "Charger les prestations")
+  const numMissionId = missionId !== "none" ? parseInt(missionId, 10) : null;
+  const { data: missionPrestations } = useMissionPrestations(numMissionId);
 
   const total = items.reduce(
     (sum, it) => sum + parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0"),
     0,
   );
 
-  const addItem = () => setItems((it) => [...it, { label: "", quantity: "1", unit_price: "0" }]);
-  const removeItem = (i: number) => setItems((it) => it.filter((_, idx) => idx !== i));
-  const updateItem = (i: number, key: string, value: string) =>
-    setItems((arr) => arr.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)));
+  // --- Lignes ---------------------------------------------------------------
+  const addCatalogLine = () =>
+    setItems((arr) => [
+      ...arr,
+      { uid: nextUid(), product_id: null, label: "", quantity: "1", unit_price: "0", vat_rate_id: null, item_type: "forfait", free: false },
+    ]);
 
-  const reset = () => {
-    setForm({
-      client_id: "",
-      entity_id: "1",
-      quote_date: new Date().toISOString().slice(0, 10),
-      validity_date: "",
-      nature: "regular",
+  const addFreeLine = () =>
+    setItems((arr) => [
+      ...arr,
+      { uid: nextUid(), product_id: null, label: "", quantity: "1", unit_price: "0", vat_rate_id: null, item_type: "forfait", free: true },
+    ]);
+
+  const removeLine = (uid: string) => setItems((arr) => arr.filter((it) => it.uid !== uid));
+
+  const updateLine = (uid: string, patch: Partial<DraftItem>) =>
+    setItems((arr) => arr.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
+
+  // Choix d'une prestation catalogue → pré-remplit label/prix/TVA/type/product_id
+  const pickProduct = (uid: string, productIdStr: string) => {
+    const pid = parseInt(productIdStr, 10);
+    const p = products?.data.find((x) => x.id === pid);
+    if (!p) return;
+    updateLine(uid, {
+      product_id: p.id,
+      label: p.name,
+      unit_price: String(p.price ?? 0),
+      vat_rate_id: p.vat_rate_id ?? null,
+      item_type: productTypeToItemType(p.type),
     });
-    setItems([{ label: "", quantity: "1", unit_price: "0" }]);
+  };
+
+  // Charge une ligne par client_prestation de la mission sélectionnée.
+  // unit_price = custom_price ?? base_price ?? product.price.
+  const loadMissionPrestations = () => {
+    if (!missionPrestations || missionPrestations.length === 0) {
+      toast.error("Cette mission n'a aucune prestation contractualisée.");
+      return;
+    }
+    const loaded: DraftItem[] = missionPrestations.map((pr) => {
+      const price = pr.custom_price ?? pr.base_price ?? pr.product?.price ?? 0;
+      // TVA reprise du product catalogue lié à la prestation
+      const catalogProduct = pr.product_id
+        ? products?.data.find((x) => x.id === pr.product_id)
+        : undefined;
+      return {
+        uid: nextUid(),
+        product_id: pr.product_id ?? null,
+        label: pr.label,
+        quantity: "1",
+        unit_price: String(Number(price) || 0),
+        vat_rate_id: catalogProduct?.vat_rate_id ?? null,
+        item_type: productTypeToItemType(catalogProduct?.type ?? pr.billing_type),
+        free: false,
+      };
+    });
+    setItems((arr) => [...arr, ...loaded]);
+    toast.success(`${loaded.length} prestation(s) chargée(s) depuis la mission.`);
+  };
+
+  // Sélection d'un type de devis → pré-remplit la nature depuis le type
+  const handleQuoteTypeChange = (value: string) => {
+    setQuoteTypeId(value);
+    if (value !== "none") {
+      const qt = quoteTypes?.find((t) => String(t.id) === value);
+      if (qt?.nature) setNature(qt.nature);
+    }
+  };
+
+  // Changement de client → reset mission (les missions appartiennent au client)
+  const handleClientChange = (value: string) => {
+    setClientId(value);
+    setMissionId("none");
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation métier au clic (jamais de submit disabled — cf. convention projet)
+    const errors: string[] = [];
+    if (!clientId) errors.push("Le client est requis.");
+    if (!quoteDate) errors.push("La date du devis est requise.");
+    const validItems = items.filter((it) => it.label.trim());
+    if (validItems.length === 0) errors.push("Ajoutez au moins une ligne avec une désignation.");
+    validItems.forEach((it, i) => {
+      const q = parseFloat(it.quantity);
+      const u = parseFloat(it.unit_price);
+      if (isNaN(q) || q <= 0) errors.push(`Ligne ${i + 1} : quantité invalide.`);
+      if (isNaN(u) || u < 0) errors.push(`Ligne ${i + 1} : prix unitaire invalide.`);
+    });
+    if (errors.length > 0) {
+      toast.error(errors.join(" "));
+      return;
+    }
+
     try {
       await create.mutateAsync({
-        client_id: parseInt(form.client_id, 10),
-        entity_id: parseInt(form.entity_id, 10),
-        quote_date: form.quote_date,
-        validity_date: form.validity_date || null,
-        nature: form.nature,
-        items: items
-          .filter((it) => it.label.trim())
-          .map((it) => ({
-            label: it.label,
-            quantity: parseFloat(it.quantity || "0"),
-            unit_price: parseFloat(it.unit_price || "0"),
-            item_type: "forfait",
-          })),
+        client_id: parseInt(clientId, 10),
+        // entity_id volontairement absent → dérivé du client côté backend
+        quote_type_id: quoteTypeId === "none" ? null : parseInt(quoteTypeId, 10),
+        mission_id: nature === "regular" && missionId !== "none" ? parseInt(missionId, 10) : null,
+        quote_date: quoteDate,
+        validity_date: validityDate || null,
+        nature,
+        comment: comment.trim() || null,
+        items: validItems.map((it) => ({
+          label: it.label.trim(),
+          quantity: parseFloat(it.quantity),
+          unit_price: parseFloat(it.unit_price),
+          item_type: it.item_type,
+          vat_rate_id: it.vat_rate_id,
+          product_id: it.product_id,
+        })),
       });
       toast.success("Devis créé");
-      reset();
       onClose();
-    } catch {
-      toast.error("Échec de la création du devis");
+    } catch (err) {
+      // toast.error explicite + console.error avec payload pour debug (cf. convention projet)
+      toast.error(apiErrorMessage(err, "Échec de la création du devis"));
+      console.error("Création devis échouée", err);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:!max-w-xl">
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nouveau devis</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Client *</Label>
-            <select value={form.client_id} onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9 cursor-pointer" required>
-              <option value="">— Choisir —</option>
-              {clientsData?.data?.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
-            </select>
-          </div>
+        <form onSubmit={submit} className="space-y-4">
+          {/* --- Client + Type --- */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Date du devis *</Label>
-              <Input type="date" value={form.quote_date} onChange={(e) => setForm((f) => ({ ...f, quote_date: e.target.value }))} required />
+              <Label className="text-xs text-muted-foreground">Client *</Label>
+              <Select value={clientId} onValueChange={handleClientChange}>
+                <SelectTrigger><SelectValue placeholder="— Choisir un client —" /></SelectTrigger>
+                <SelectContent>
+                  {clientsData?.data?.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.company?.company_name ?? c.display_name ?? c.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Validité</Label>
-              <Input type="date" value={form.validity_date} onChange={(e) => setForm((f) => ({ ...f, validity_date: e.target.value }))} />
+              <Label className="text-xs text-muted-foreground">Type de devis</Label>
+              <Select value={quoteTypeId} onValueChange={handleQuoteTypeChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Aucun —</SelectItem>
+                  {quoteTypes?.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* --- Nature --- */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nature</Label>
+            <Select value={nature} onValueChange={(v) => { setNature(v as "regular" | "punctual"); if (v !== "regular") setMissionId("none"); }}>
+              <SelectTrigger className="sm:w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="regular">Régulière (depuis une mission)</SelectItem>
+                <SelectItem value="punctual">Ponctuelle</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* --- Origine : mission (uniquement si régulière) --- */}
+          {nature === "regular" && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5" /> Mission d'origine
+              </Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select
+                  value={missionId}
+                  onValueChange={setMissionId}
+                  disabled={!clientId}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder={clientId ? "— Aucune mission —" : "Choisir un client d'abord"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Aucune mission —</SelectItem>
+                    {missions?.map((m) => (
+                      <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={loadMissionPrestations}
+                  disabled={missionId === "none"}
+                  className="cursor-pointer shrink-0"
+                >
+                  <PackagePlus className="h-3.5 w-3.5 mr-1.5" /> Charger les prestations
+                </Button>
+              </div>
+              {missions && missions.length === 0 && clientId && (
+                <p className="text-xs text-muted-foreground">Ce client n'a aucune mission.</p>
+              )}
+            </div>
+          )}
+
+          {/* --- Lignes --- */}
+          <div className="space-y-2 border-t pt-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Lignes du devis</Label>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={addCatalogLine} className="cursor-pointer">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Prestation du catalogue
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={addFreeLine} className="cursor-pointer">
+                  <PencilLine className="h-3.5 w-3.5 mr-1" /> Ligne libre
+                </Button>
+              </div>
+            </div>
+
+            {items.length === 0 && (
+              <p className="text-xs text-muted-foreground py-3 text-center border rounded-lg border-dashed">
+                Aucune ligne. Ajoutez une prestation du catalogue, une ligne libre,
+                ou chargez les prestations d'une mission.
+              </p>
+            )}
+
+            {items.map((it) => (
+              <div key={it.uid} className="rounded-lg border p-2.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  {it.free ? (
+                    <Badge variant="secondary" className="text-[10px] shrink-0">Libre</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] shrink-0">Catalogue</Badge>
+                  )}
+                  {it.free ? (
+                    <Input
+                      placeholder="Désignation (ex : frais de déplacement, remise…)"
+                      value={it.label}
+                      onChange={(e) => updateLine(it.uid, { label: e.target.value })}
+                      className="flex-1"
+                    />
+                  ) : (
+                    <Select
+                      value={it.product_id ? String(it.product_id) : ""}
+                      onValueChange={(v) => pickProduct(it.uid, v)}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="— Choisir une prestation —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products?.data.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name} — {Number(p.price).toFixed(2)} €
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeLine(it.uid)}
+                    className="text-destructive hover:bg-destructive/10 p-1.5 rounded shrink-0 cursor-pointer"
+                    title="Supprimer la ligne"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
+                  {/* Le label catalogue reste éditable une fois la prestation choisie */}
+                  {!it.free && (
+                    <Input
+                      placeholder="Désignation"
+                      value={it.label}
+                      onChange={(e) => updateLine(it.uid, { label: e.target.value })}
+                    />
+                  )}
+                  {it.free && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
+                  <Input
+                    type="number" step="0.01" min="0" placeholder="Qté"
+                    value={it.quantity}
+                    onChange={(e) => updateLine(it.uid, { quantity: e.target.value })}
+                  />
+                  <Input
+                    type="number" step="0.01" min="0" placeholder="PU €"
+                    value={it.unit_price}
+                    onChange={(e) => updateLine(it.uid, { unit_price: e.target.value })}
+                  />
+                  <Select
+                    value={it.vat_rate_id ? String(it.vat_rate_id) : "none"}
+                    onValueChange={(v) => updateLine(it.uid, { vat_rate_id: v === "none" ? null : parseInt(v, 10) })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="TVA" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— TVA —</SelectItem>
+                      {vatRates?.map((v) => (
+                        <SelectItem key={v.id} value={String(v.id)}>{v.rate}%</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-right text-xs text-muted-foreground">
+                  Sous-total ligne : {(parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0")).toFixed(2)} €
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* --- Dates + commentaire --- */}
+          <div className="grid grid-cols-2 gap-3 border-t pt-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Date du devis *</Label>
+              <Input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Date de validité</Label>
+              <Input type="date" value={validityDate} onChange={(e) => setValidityDate(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Nature</Label>
-            <select value={form.nature} onChange={(e) => setForm((f) => ({ ...f, nature: e.target.value }))}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9 cursor-pointer">
-              <option value="regular">Régulière</option>
-              <option value="punctual">Ponctuelle</option>
-            </select>
-          </div>
-
-          <div className="space-y-2 border-t pt-3">
-            <Label className="flex items-center gap-2">
-              <FileText className="h-3.5 w-3.5" /> Lignes
-            </Label>
-            {items.map((it, i) => (
-              <div key={i} className="grid grid-cols-[1fr_80px_100px_30px] gap-2 items-center">
-                <Input placeholder="Désignation" value={it.label} onChange={(e) => updateItem(i, "label", e.target.value)} />
-                <Input type="number" step="0.01" placeholder="Qté" value={it.quantity} onChange={(e) => updateItem(i, "quantity", e.target.value)} />
-                <Input type="number" step="0.01" placeholder="PU €" value={it.unit_price} onChange={(e) => updateItem(i, "unit_price", e.target.value)} />
-                <button type="button" onClick={() => removeItem(i)} className="text-destructive p-1 cursor-pointer">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" onClick={addItem} className="cursor-pointer">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Ajouter une ligne
-            </Button>
+            <Label className="text-xs text-muted-foreground">Commentaire</Label>
+            <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Note interne ou client (optionnel)" />
           </div>
 
           <div className="text-right text-lg font-semibold border-t pt-3">
-            Total : {total.toFixed(2)} €
+            Total HT : {total.toFixed(2)} €
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} className="cursor-pointer">Annuler</Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={create.isPending} className="cursor-pointer">
+              Annuler
+            </Button>
             <Button type="submit" disabled={create.isPending}
               className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer">
-              Créer
+              {create.isPending ? "Création…" : "Créer le devis"}
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ===========================================================================
+// 2026-05-20 refonte devis — Gestion des types de devis (CRUD inline)
+// ===========================================================================
+
+const QT_NATURE_LABELS: Record<string, string> = {
+  regular: "Régulière",
+  punctual: "Ponctuelle",
+};
+
+const QT_CALC_LABELS: Record<string, string> = {
+  per_week: "Par semaine",
+  per_month: "Par mois",
+  per_unit: "À l'unité",
+};
+
+// Forme d'édition d'un type de devis (tous les champs en string pour les inputs)
+type QuoteTypeDraft = {
+  label: string;
+  nature: string;          // "regular" | "punctual" | "none"
+  modality: string;
+  billing_mode: string;
+  quote_calculation: string; // "per_week" | "per_month" | "per_unit" | "none"
+  commitment_duration: string;
+  billing_rhythm: string;
+  deposit_percent: string;
+  status: "active" | "inactive";
+};
+
+function emptyQuoteTypeDraft(): QuoteTypeDraft {
+  return {
+    label: "", nature: "none", modality: "", billing_mode: "",
+    quote_calculation: "none", commitment_duration: "", billing_rhythm: "",
+    deposit_percent: "", status: "active",
+  };
+}
+
+function draftFromQuoteType(qt: QuoteTypeModel): QuoteTypeDraft {
+  return {
+    label: qt.label ?? "",
+    nature: qt.nature ?? "none",
+    modality: qt.modality ?? "",
+    billing_mode: qt.billing_mode ?? "",
+    quote_calculation: qt.quote_calculation ?? "none",
+    commitment_duration: qt.commitment_duration ?? "",
+    billing_rhythm: qt.billing_rhythm ?? "",
+    deposit_percent: qt.deposit_percent != null ? String(qt.deposit_percent) : "",
+    status: qt.status,
+  };
+}
+
+function QuoteTypesDialog({ onClose }: { onClose: () => void }) {
+  // On liste TOUS les types (actifs + inactifs) pour permettre la réactivation.
+  const { data: types, isLoading } = useQuoteTypes();
+  const createMut = useCreateQuoteType();
+  const updateMut = useUpdateQuoteType();
+  const deleteMut = useDeleteQuoteType();
+
+  // editing : null = pas de form, "new" = création, number = édition de cet id
+  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [draft, setDraft] = useState<QuoteTypeDraft>(emptyQuoteTypeDraft());
+
+  const busy = createMut.isPending || updateMut.isPending || deleteMut.isPending;
+
+  const startCreate = () => { setDraft(emptyQuoteTypeDraft()); setEditing("new"); };
+  const startEdit = (qt: QuoteTypeModel) => { setDraft(draftFromQuoteType(qt)); setEditing(qt.id); };
+  const cancelEdit = () => { setEditing(null); setDraft(emptyQuoteTypeDraft()); };
+
+  const buildPayload = (): Partial<QuoteTypeModel> => ({
+    label: draft.label.trim(),
+    nature: draft.nature === "none" ? null : (draft.nature as "regular" | "punctual"),
+    modality: draft.modality.trim() || null,
+    billing_mode: draft.billing_mode.trim() || null,
+    quote_calculation: draft.quote_calculation === "none"
+      ? null
+      : (draft.quote_calculation as "per_week" | "per_month" | "per_unit"),
+    commitment_duration: draft.commitment_duration.trim() || null,
+    billing_rhythm: draft.billing_rhythm.trim() || null,
+    deposit_percent: draft.deposit_percent.trim() === "" ? null : Number(draft.deposit_percent),
+    status: draft.status,
+  });
+
+  const handleSave = async () => {
+    if (!draft.label.trim()) {
+      toast.error("Le libellé du type de devis est requis.");
+      return;
+    }
+    if (draft.deposit_percent.trim() !== "") {
+      const dp = Number(draft.deposit_percent);
+      if (isNaN(dp) || dp < 0 || dp > 100) {
+        toast.error("L'acompte doit être un pourcentage entre 0 et 100.");
+        return;
+      }
+    }
+    try {
+      if (editing === "new") {
+        await createMut.mutateAsync(buildPayload());
+        toast.success("Type de devis créé.");
+      } else if (typeof editing === "number") {
+        await updateMut.mutateAsync({ id: editing, patch: buildPayload() });
+        toast.success("Type de devis mis à jour.");
+      }
+      cancelEdit();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de l'enregistrement."));
+      console.error("Enregistrement type de devis échoué", err);
+    }
+  };
+
+  const handleDeactivate = async (qt: QuoteTypeModel) => {
+    if (!confirm(`Désactiver le type « ${qt.label} » ? Il ne sera plus proposé dans les nouveaux devis.`)) return;
+    try {
+      await deleteMut.mutateAsync(qt.id);
+      toast.success("Type de devis désactivé.");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de la désactivation."));
+      console.error("Désactivation type de devis échouée", err);
+    }
+  };
+
+  const handleReactivate = async (qt: QuoteTypeModel) => {
+    try {
+      await updateMut.mutateAsync({ id: qt.id, patch: { status: "active" } });
+      toast.success("Type de devis réactivé.");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de la réactivation."));
+      console.error("Réactivation type de devis échouée", err);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Types de devis</DialogTitle>
+        </DialogHeader>
+
+        {/* Formulaire création / édition inline */}
+        {editing !== null ? (
+          <div className="rounded-lg border p-3 space-y-3">
+            <p className="text-sm font-medium">
+              {editing === "new" ? "Nouveau type de devis" : "Modifier le type de devis"}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs text-muted-foreground">Libellé *</Label>
+                <Input
+                  value={draft.label}
+                  onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
+                  placeholder="ex : Devis ménage régulier"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Nature</Label>
+                <Select value={draft.nature} onValueChange={(v) => setDraft((d) => ({ ...d, nature: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Indéfinie —</SelectItem>
+                    <SelectItem value="regular">Régulière</SelectItem>
+                    <SelectItem value="punctual">Ponctuelle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Statut</Label>
+                <Select value={draft.status} onValueChange={(v) => setDraft((d) => ({ ...d, status: v as "active" | "inactive" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Actif</SelectItem>
+                    <SelectItem value="inactive">Inactif</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Modalité</Label>
+                <Input
+                  value={draft.modality}
+                  onChange={(e) => setDraft((d) => ({ ...d, modality: e.target.value }))}
+                  placeholder="ex : prélèvement"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Mode de facturation</Label>
+                <Input
+                  value={draft.billing_mode}
+                  onChange={(e) => setDraft((d) => ({ ...d, billing_mode: e.target.value }))}
+                  placeholder="ex : forfaitaire"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Calcul du devis</Label>
+                <Select value={draft.quote_calculation} onValueChange={(v) => setDraft((d) => ({ ...d, quote_calculation: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Non défini —</SelectItem>
+                    <SelectItem value="per_week">Par semaine</SelectItem>
+                    <SelectItem value="per_month">Par mois</SelectItem>
+                    <SelectItem value="per_unit">À l'unité</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Rythme de facturation</Label>
+                <Input
+                  value={draft.billing_rhythm}
+                  onChange={(e) => setDraft((d) => ({ ...d, billing_rhythm: e.target.value }))}
+                  placeholder="ex : mensuel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Durée d'engagement</Label>
+                <Input
+                  value={draft.commitment_duration}
+                  onChange={(e) => setDraft((d) => ({ ...d, commitment_duration: e.target.value }))}
+                  placeholder="ex : 12 mois"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Acompte (%)</Label>
+                <Input
+                  type="number" step="0.01" min="0" max="100"
+                  value={draft.deposit_percent}
+                  onChange={(e) => setDraft((d) => ({ ...d, deposit_percent: e.target.value }))}
+                  placeholder="ex : 30"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={cancelEdit} disabled={busy} className="cursor-pointer">
+                Annuler
+              </Button>
+              <Button type="button" size="sm" onClick={handleSave} disabled={busy} className="cursor-pointer">
+                {editing === "new" ? "Créer" : "Enregistrer"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button type="button" variant="outline" size="sm" onClick={startCreate} className="cursor-pointer self-start">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Nouveau type
+          </Button>
+        )}
+
+        {/* Liste des types existants */}
+        <div className="rounded-lg border overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Libellé</TableHead>
+                <TableHead>Nature</TableHead>
+                <TableHead>Calcul</TableHead>
+                <TableHead>Acompte</TableHead>
+                <TableHead>Statut</TableHead>
+                <TableHead className="w-28 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={6}><Skeleton className="h-4 w-full" /></TableCell>
+                </TableRow>
+              )}
+              {!isLoading && (types?.length ?? 0) === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                    Aucun type de devis. Crée le premier avec « Nouveau type ».
+                  </TableCell>
+                </TableRow>
+              )}
+              {types?.map((qt) => (
+                <TableRow key={qt.id}>
+                  <TableCell className="font-medium">{qt.label}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {qt.nature ? QT_NATURE_LABELS[qt.nature] : "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {qt.quote_calculation ? QT_CALC_LABELS[qt.quote_calculation] : "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {qt.deposit_percent != null && qt.deposit_percent !== "" ? `${qt.deposit_percent} %` : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={qt.status === "active" ? "default" : "secondary"}>
+                      {qt.status === "active" ? "Actif" : "Inactif"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        type="button" size="sm" variant="outline"
+                        className="h-7 w-7 p-0 cursor-pointer" title="Modifier"
+                        onClick={() => startEdit(qt)} disabled={busy}
+                      >
+                        <PencilLine className="h-3.5 w-3.5" />
+                      </Button>
+                      {qt.status === "active" ? (
+                        <Button
+                          type="button" size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-destructive hover:bg-destructive/10"
+                          title="Désactiver"
+                          onClick={() => handleDeactivate(qt)} disabled={busy}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button" size="sm" variant="outline"
+                          className="h-7 px-2 cursor-pointer text-xs"
+                          title="Réactiver"
+                          onClick={() => handleReactivate(qt)} disabled={busy}
+                        >
+                          Réactiver
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
