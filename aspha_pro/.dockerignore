@@ -1,0 +1,25 @@
+# Dépendances réinstallées dans l'image
+backend/vendor
+frontend/node_modules
+frontend/dist
+
+# Base SQLite locale + caches Laravel — jamais embarqués
+backend/database/*.sqlite
+backend/database/*.sqlite-journal
+backend/storage/logs/*
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/bootstrap/cache/*.php
+
+# Secrets locaux — les vraies valeurs viennent des env vars Render
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Divers
+.git
+.gitignore
+**/.DS_Store
+tasks
+*.md

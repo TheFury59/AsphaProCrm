@@ -1,0 +1,5 @@
+# Force les fins de ligne LF pour les fichiers exécutés en environnement Linux
+# (un script .sh en CRLF casse dans un conteneur Docker).
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.dockerfile text eol=lf

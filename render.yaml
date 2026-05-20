@@ -1,0 +1,67 @@
+# Render Blueprint — Aspha Pro
+# Déploiement de test : 1 service web (Laravel + SPA React) + 1 base PostgreSQL.
+# Render lit ce fichier via « New > Blueprint » et provisionne tout.
+#
+# Après la 1re création, renseigner dans le dashboard les 3 variables
+# marquées « sync: false » (valeurs fournies dans le guide de déploiement).
+
+databases:
+  - name: aspha-db
+    databaseName: aspha
+    user: aspha
+    plan: free
+    region: frankfurt
+
+services:
+  - type: web
+    name: aspha-pro
+    runtime: docker
+    plan: free
+    region: frankfurt
+    # Le code applicatif vit dans le sous-dossier aspha_pro/ du dépôt.
+    dockerfilePath: ./aspha_pro/Dockerfile
+    dockerContext: ./aspha_pro
+    healthCheckPath: /api/v1/ping
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: "Aspha Pro"
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      # base64:... — à coller manuellement (fournie dans le guide)
+      - key: APP_KEY
+        sync: false
+      # https://<votre-url>.onrender.com — à renseigner après création
+      - key: APP_URL
+        sync: false
+      # domaine Render sans https (ex: aspha-pro.onrender.com)
+      # nécessaire à Sanctum pour traiter l'auth en mode session/cookie
+      - key: SANCTUM_STATEFUL_DOMAINS
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      # Base PostgreSQL — valeurs injectées automatiquement depuis aspha-db
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        fromDatabase: { name: aspha-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: aspha-db, property: port }
+      - key: DB_DATABASE
+        fromDatabase: { name: aspha-db, property: database }
+      - key: DB_USERNAME
+        fromDatabase: { name: aspha-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: aspha-db, property: password }
+      # Sessions / cache en base — survivent aux redémarrages du conteneur
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      # Jobs exécutés en synchrone — pas de worker séparé pour un test
+      - key: QUEUE_CONNECTION
+        value: sync
