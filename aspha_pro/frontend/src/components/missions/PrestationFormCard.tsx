@@ -672,6 +672,7 @@ export function PrestationFormCard({
               startDatetime={`${p.start_date || todayStr()}T${p.recurrence_start_time ?? "09:00"}:00`}
               endDatetime={`${p.start_date || todayStr()}T${p.recurrence_end_time ?? "11:00"}:00`}
               clientId={clientId}
+              selectedEmployeeId={p.default_employee_id}
               onAssign={(employeeId, employeeName) => {
                 onChange({
                   default_employee_id: employeeId,

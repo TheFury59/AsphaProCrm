@@ -95,7 +95,7 @@ function FitToCircle({ centerLat, centerLng, radiusKm }: {
  *  6. Clic → sélection → bouton "Affecter cet intervenant"
  */
 export function AvailableEmployeesMap({
-  startDatetime, endDatetime, clientId, onAssign,
+  startDatetime, endDatetime, clientId, onAssign, selectedEmployeeId,
 }: {
   startDatetime: string;
   endDatetime: string;
@@ -106,6 +106,12 @@ export function AvailableEmployeesMap({
    * immédiatement le nom sans refetch.
    */
   onAssign: (employeeId: number, employeeName?: string) => void;
+  /**
+   * Intervenant déjà affecté côté appelant. La carte synchronise son état
+   * « sélectionné » dessus : si l'appelant retire l'intervenant (→ null),
+   * la carte ne le montre plus sélectionné. 2026-05-21.
+   */
+  selectedEmployeeId?: number | null;
 }) {
   const { data, isLoading } = useAvailableEmployees({
     start_datetime: startDatetime,
@@ -115,8 +121,14 @@ export function AvailableEmployeesMap({
 
   const [radiusKm, setRadiusKm] = useState<number | null>(10);
   const [hideUnavailable, setHideUnavailable] = useState(false);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(selectedEmployeeId ?? null);
   const [hovered, setHovered] = useState<number | null>(null);
+
+  // Synchronise l'état "sélectionné" sur l'intervenant fourni par l'appelant
+  // (notamment quand celui-ci le retire → selectedEmployeeId devient null).
+  useEffect(() => {
+    setSelected(selectedEmployeeId ?? null);
+  }, [selectedEmployeeId]);
 
   // ⚠️ TOUS les hooks DOIVENT être appelés avant les early returns
   // (sinon "Rendered more hooks than during the previous render" car
