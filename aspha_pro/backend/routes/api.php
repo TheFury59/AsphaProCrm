@@ -169,6 +169,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('quotes/{quote}/pdf', [QuoteController::class, 'pdf']); // 2026-05-20 PDF B2B
     Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);
     Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice']);
+    // Conversion devis validé → mission + prestations (workflow 2026-05-21)
+    Route::post('quotes/{quote}/convert-to-mission', [QuoteController::class, 'convertToMission']);
     Route::apiResource('invoices', InvoiceController::class);
     Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']); // 2026-05-20 PDF B2B
@@ -273,6 +275,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('profile', 'clientProfile');
         Route::get('invoices', 'clientInvoices');
         Route::get('quotes', 'clientQuotes');
+        // Validation des devis par le client (workflow 2026-05-21).
+        // Ownership strict : le devis doit appartenir au client lié au
+        // portal_user_id de l'utilisateur connecté (cf. audit 2026-05-19).
+        Route::post('quotes/{quote}/accept', 'acceptClientQuote');
+        Route::post('quotes/{quote}/refuse', 'refuseClientQuote');
+        Route::get('quotes/{quote}/pdf', 'clientQuotePdf');
         Route::get('prestations', 'clientPrestations');
         Route::get('tickets', 'clientTickets');
         Route::post('tickets', 'createClientTicket');

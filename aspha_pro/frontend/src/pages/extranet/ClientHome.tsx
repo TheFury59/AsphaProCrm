@@ -5,18 +5,19 @@ import {
 import {
   ClientGreetingHeader, StatCard,
   ClientInvoicesSection, ClientPrestationsSection, ClientTicketsSection,
+  ClientQuotesSection,
 } from "./client-sections";
 
 /**
  * Accueil de l'extranet client — vue d'overview.
  *
- * Affiche en compact : header + 4 stat cards + les 3 sections principales
- * (Tickets, Factures, Prestations) pour que le client voie tout son état
- * sur une seule page.
+ * Affiche en compact : header + 4 stat cards + les sections principales
+ * (Tickets, Devis, Factures, Prestations) pour que le client voie tout son
+ * état sur une seule page.
  *
  * Pour une vue détaillée, le client clique sur les onglets du menu top
- * (Factures, Prestations, Mes demandes) qui pointent vers les pages
- * dédiées (ClientInvoicesPage, etc.).
+ * (Devis, Factures, Prestations, Mes demandes) qui pointent vers les pages
+ * dédiées (ClientQuotesPage, ClientInvoicesPage, etc.).
  */
 export function ClientHome() {
   const { data: invoices = [] } = useClientInvoices();
@@ -24,13 +25,16 @@ export function ClientHome() {
   const { data: prestations = [] } = useClientPrestations();
   const { data: tickets = [] } = useClientTickets();
 
+  // Devis « à valider » = ceux au statut `sent` (en attente d'une action client).
+  const pendingQuotes = quotes.filter((q: any) => q.status === "sent").length;
+
   return (
     <div className="space-y-4">
       <ClientGreetingHeader />
 
       <div className="grid md:grid-cols-4 gap-3">
+        <StatCard label="Devis à valider" value={pendingQuotes} icon={FileText} />
         <StatCard label="Factures" value={invoices.length} icon={Receipt} />
-        <StatCard label="Devis" value={quotes.length} icon={FileText} />
         <StatCard
           label="Prestations actives"
           value={prestations.filter((p: any) => !p.end_date).length}
@@ -44,6 +48,7 @@ export function ClientHome() {
       </div>
 
       <ClientTicketsSection />
+      <ClientQuotesSection />
       <ClientInvoicesSection />
       <ClientPrestationsSection />
     </div>

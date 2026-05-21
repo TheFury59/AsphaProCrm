@@ -10,6 +10,7 @@ import {
   useMarkAllRead, useMarkRead, useNotifications, useUnreadCount,
 } from "@/hooks/use-operations";
 import { getNotificationStyle, getNotificationLink } from "@/lib/notification-styles";
+import { useAuthStore } from "@/stores/auth";
 
 /**
  * Cloche de notifications avec rendu typé.
@@ -26,6 +27,10 @@ export function NotificationsBell() {
   const { data: unreadCount = 0 } = useUnreadCount();
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
+  // Les rôles non-admin ne peuvent pas naviguer vers les routes du CRM admin :
+  // en contexte extranet, les deep-links pointent vers l'espace client.
+  const role = useAuthStore((s) => s.user?.role);
+  const isExtranet = role === "client" || role === "intervenant";
 
   return (
     <Popover>
@@ -71,7 +76,7 @@ export function NotificationsBell() {
                 const code = n.notificationType?.code ?? n.notification_type?.code;
                 const style = getNotificationStyle(code);
                 const Icon = style.icon;
-                const link = getNotificationLink(n.target_type, n.target_id);
+                const link = getNotificationLink(n.target_type, n.target_id, isExtranet);
 
                 return (
                   <li

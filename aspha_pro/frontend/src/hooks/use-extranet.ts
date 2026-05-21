@@ -53,6 +53,33 @@ export function useClientQuotes() {
   });
 }
 
+/**
+ * Validation d'un devis par le client depuis l'extranet : `sent` → `accepted`.
+ * Le backend vérifie l'ownership (le devis appartient bien à ce client).
+ */
+export function useAcceptClientQuote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (quoteId: number) =>
+      (await api.post(`/extranet/client/quotes/${quoteId}/accept`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "client", "quotes"] });
+    },
+  });
+}
+
+/** Refus d'un devis par le client : `sent` → `refused`. */
+export function useRefuseClientQuote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (quoteId: number) =>
+      (await api.post(`/extranet/client/quotes/${quoteId}/refuse`)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "client", "quotes"] });
+    },
+  });
+}
+
 export function useClientPrestations() {
   return useQuery({
     queryKey: ["extranet", "client", "prestations"],

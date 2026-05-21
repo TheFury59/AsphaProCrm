@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
   Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
-  Settings2, PackagePlus, PencilLine, Layers,
+  Settings2, PackagePlus, PencilLine, Layers, Briefcase, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
 import {
-  useQuotes, useCreateQuote, useDeleteQuote, useConvertQuoteToInvoice, useQuote,
+  useQuotes, useCreateQuote, useDeleteQuote, useConvertQuoteToInvoice,
+  useConvertQuoteToMission, useQuote,
   type Quote as QuoteType,
 } from "@/hooks/use-phase3";
 import { useSyncQuotePennylane } from "@/hooks/use-payments";
@@ -323,6 +325,30 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
 
 function QuoteDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuote(id);
+  const convertToMission = useConvertQuoteToMission();
+  const navigate = useNavigate();
+
+  // Le devis est validé par le client → l'admin peut générer la mission.
+  const canCreateMission = data?.status === "accepted";
+
+  const handleCreateMission = async () => {
+    if (!data) return;
+    try {
+      const { mission, alreadyExisted } = await convertToMission.mutateAsync(data.id);
+      toast.success(
+        alreadyExisted
+          ? "Une mission existait déjà pour ce devis — ouverture en édition."
+          : "Mission créée depuis le devis — vous pouvez l'ajuster.",
+      );
+      onClose();
+      // Ouvre la mission en édition pour que l'admin révise/affine
+      // (nature, récurrence, intervenant…).
+      navigate(`/clients/${mission.client_id}/missions/${mission.id}`);
+    } catch (err) {
+      console.error("Conversion devis → mission échouée", err);
+      toast.error(apiErrorMessage(err, "Échec de la création de la mission"));
+    }
+  };
 
   return (
     <Dialog open={!!id} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -384,7 +410,21 @@ function QuoteDetailDialog({ id, onClose }: { id: number | null; onClose: () => 
             )}
           </div>
         )}
-        <DialogFooter>
+        <DialogFooter className="gap-2">
+          {canCreateMission && (
+            <Button
+              onClick={handleCreateMission}
+              disabled={convertToMission.isPending}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer mr-auto"
+            >
+              {convertToMission.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Briefcase className="h-4 w-4 mr-2" />
+              )}
+              Créer la mission
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
         </DialogFooter>
       </DialogContent>

@@ -46,7 +46,9 @@ class NotificationTypesSeeder extends Seeder
             ['code' => 'invoice_paid', 'label' => 'Facture réglée', 'module' => 'sales', 'default_channels' => 'push'],
             ['code' => 'invoice_overdue', 'label' => 'Facture en retard', 'module' => 'sales', 'default_channels' => 'email'],
             ['code' => 'invoice_issued', 'label' => 'Nouvelle facture', 'module' => 'sales', 'default_channels' => 'push,email'],
-            ['code' => 'quote_sent', 'label' => 'Nouveau devis', 'module' => 'sales', 'default_channels' => 'push,email'],
+            ['code' => 'quote_sent', 'label' => 'Devis à valider', 'module' => 'sales', 'default_channels' => 'push,email'],
+            // Devis validé par le client → notifie les admins (workflow 2026-05-21)
+            ['code' => 'quote_accepted', 'label' => 'Devis validé', 'module' => 'sales', 'default_channels' => 'push,email'],
 
             // Tickets
             ['code' => 'client_request_status', 'label' => 'Ticket mis à jour', 'module' => 'portal', 'default_channels' => 'push'],

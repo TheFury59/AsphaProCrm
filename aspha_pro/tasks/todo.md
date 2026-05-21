@@ -1,5 +1,46 @@
 # Aspha Pro — Todo
 
+## ✅ 2026-05-21 — Workflow de validation des devis par le client (extranet)
+
+Objectif : admin envoie un devis (`sent`) → client notifié → client consulte +
+valide depuis l'extranet (`accepted`) → admin notifié → conversion en mission.
+
+### Plan
+- [x] Étape 1 — Backend validation : `POST /extranet/client/quotes/{quote}/accept`
+      + `refuse` + `GET /extranet/client/quotes/{quote}/pdf` (ownership strict)
+- [x] Étape 2 — Notifications : QuoteObserver texte « Devis à valider » ;
+      nouveau type `quote_accepted` ; notif admins à la validation
+- [x] Étape 3 — `POST /quotes/{quote}/convert-to-mission` (mission + prestations
+      depuis les lignes, anti-doublon `missions.quote_id`, devis `accepted` only)
+- [x] Étape 4 — Frontend extranet : section Devis + page dédiée, boutons
+      consulter/valider/refuser/PDF, hooks `useAcceptClientQuote` etc.
+- [x] Étape 4bis — Bell deep-link extranet-aware + bouton « Créer la mission »
+      admin sur devis `accepted`
+
+### Review (vérifié end-to-end via tinker)
+- **Endpoints créés** :
+  - `POST /extranet/client/quotes/{quote}/accept` — ownership strict
+    (`quote.client_id` == client du `portal_user_id`), 409 si pas `sent`.
+  - `POST /extranet/client/quotes/{quote}/refuse` — symétrique → `refused`.
+  - `GET /extranet/client/quotes/{quote}/pdf` — `QuotePdfGenerator`, ownership.
+  - `POST /quotes/{quote}/convert-to-mission` — admin, `accepted` only,
+    anti-doublon `missions.quote_id`, mapping items → prestations.
+- **Notifications** : `QuoteObserver` réécrit — `sent` → client « Devis à
+  valider » ; `accepted` → admins « Devis validé » (exclut l'auteur). Nouveau
+  type `quote_accepted` (seeder relancé, idempotent).
+- **Tests tinker** : devis sent → notif client OK ; accept → `accepted` +
+  notif admin OK, client non auto-notifié ; convert → mission + 2 prestations
+  (forfait/default/base, frais/custom/custom) ; anti-doublon (2e appel = même
+  mission, status 200, `already_existed`) ; gardes 409 (draft, déjà accepted)
+  et 403 (accept/PDF cross-client) ; PDF propriétaire 200 (879 KB).
+- **Frontend** : section/page « Mes devis » extranet (consulter/valider/
+  refuser/PDF blob), hooks `useAcceptClientQuote`/`useRefuseClientQuote`/
+  `useConvertQuoteToMission`, bell deep-link extranet-aware (client → pages
+  extranet, jamais routes admin), bouton « Créer la mission » sur le devis
+  admin `accepted` → ouvre `EditMissionPage`.
+- `php -l` 0 erreur, `tsc --noEmit` 0 erreur, `migrate:status` OK (aucune
+  migration nécessaire — colonnes existantes réutilisées).
+
 ## 🐛 2026-05-21 — Bug édition de mission : la sauvegarde ne persiste rien (perçu)
 
 ### Causes racines (vérifiées via preview + tinker)

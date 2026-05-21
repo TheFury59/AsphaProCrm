@@ -447,6 +447,28 @@ export function useConvertQuoteToInvoice() {
   });
 }
 
+/**
+ * Convertit un devis VALIDÉ (`accepted`) en mission + prestations.
+ * Renvoie `{ data: Mission, already_existed: boolean }` : si une mission a
+ * déjà été créée depuis ce devis, le backend la renvoie sans en recréer.
+ */
+export function useConvertQuoteToMission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (quoteId: number) => {
+      const res = await api.post(`/quotes/${quoteId}/convert-to-mission`);
+      return {
+        mission: res.data.data as { id: number; client_id: number; name: string },
+        alreadyExisted: !!res.data.already_existed,
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quotes"] });
+      qc.invalidateQueries({ queryKey: ["missions"] });
+    },
+  });
+}
+
 // =========================================================================
 // INVOICES (Phase 3)
 // =========================================================================

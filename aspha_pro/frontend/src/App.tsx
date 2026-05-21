@@ -33,10 +33,14 @@ import { IntervenantPlanning } from "@/pages/extranet/IntervenantPlanning";
 import { IntervenantProfil } from "@/pages/extranet/IntervenantProfil";
 import { IntervenantTicketsPage } from "@/pages/extranet/IntervenantTicketsPage";
 import { ClientHome } from "@/pages/extranet/ClientHome";
+import { ClientQuotesPage } from "@/pages/extranet/ClientQuotesPage";
 import { ClientInvoicesPage } from "@/pages/extranet/ClientInvoicesPage";
 import { ClientPrestationsPage } from "@/pages/extranet/ClientPrestationsPage";
 import { ClientTicketsPage } from "@/pages/extranet/ClientTicketsPage";
-import { Home, UserCog, Receipt, Briefcase, Ticket, MessageSquare as MsgIcon } from "lucide-react";
+import {
+  Home, UserCog, Receipt, Briefcase, Ticket, FileText,
+  MessageSquare as MsgIcon,
+} from "lucide-react";
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
@@ -92,6 +96,7 @@ export default function App() {
                       variant="client"
                       tabs={[
                         { to: "/extranet/client", label: "Accueil", icon: Home },
+                        { to: "/extranet/client/devis", label: "Devis", icon: FileText },
                         { to: "/extranet/client/factures", label: "Factures", icon: Receipt },
                         { to: "/extranet/client/prestations", label: "Prestations", icon: Briefcase },
                         { to: "/extranet/client/demandes", label: "Mes demandes", icon: Ticket },
@@ -102,6 +107,7 @@ export default function App() {
               }
             >
               <Route path="/extranet/client" element={<ClientHome />} />
+              <Route path="/extranet/client/devis" element={<ClientQuotesPage />} />
               <Route path="/extranet/client/factures" element={<ClientInvoicesPage />} />
               <Route path="/extranet/client/prestations" element={<ClientPrestationsPage />} />
               <Route path="/extranet/client/demandes" element={<ClientTicketsPage />} />

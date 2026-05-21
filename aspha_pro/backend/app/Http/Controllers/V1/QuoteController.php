@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientPrestation;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Mission;
 use App\Models\Quote;
 use App\Models\QuoteItem;
 use App\Services\DocumentSequenceService;
@@ -267,6 +269,107 @@ class QuoteController extends Controller
 
         $invoice->load(['client.company', 'invoiceItems']);
         return response()->json(['data' => $invoice], 201);
+    }
+
+    /**
+     * POST /api/v1/quotes/{quote}/convert-to-mission
+     *
+     * Crée une mission rattachée au client du devis, avec une
+     * `client_prestation` par ligne du devis (workflow validation 2026-05-21).
+     *
+     * Règles :
+     *  - réservé aux devis `accepted` (validés par le client) ;
+     *  - anti-doublon : si une mission a déjà été créée depuis ce devis
+     *    (`missions.quote_id`), on la renvoie sans en recréer une ;
+     *  - mapping `quote_items` → `client_prestations` : label, product_id,
+     *    prix → base_price/custom_price, billing_type dérivé d'item_type ;
+     *  - nature par défaut `punctual` (l'admin ajuste ensuite via l'édition
+     *    de mission, notamment pour passer une prestation en récurrent).
+     *
+     * L'admin pourra réviser la mission via `EditMissionPage`.
+     */
+    public function convertToMission(Request $request, Quote $quote)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        abort_if(
+            $quote->status !== 'accepted',
+            409,
+            "Seul un devis validé par le client peut être converti en mission.",
+        );
+
+        // Anti-doublon : une mission déjà issue de ce devis → on la renvoie.
+        $existing = Mission::where('quote_id', $quote->id)->first();
+        if ($existing) {
+            return response()->json([
+                'data' => $existing->load('clientPrestations'),
+                'already_existed' => true,
+            ], 200);
+        }
+
+        $quote->load(['items', 'client.company']);
+        abort_if(! $quote->client_id, 422, "Ce devis n'est rattaché à aucun client.");
+
+        $mission = DB::transaction(function () use ($quote) {
+            $clientName = $quote->client?->company?->company_name
+                ?? ($quote->client ? "Client {$quote->client->code}" : 'Client');
+
+            $mission = Mission::create([
+                'client_id' => $quote->client_id,
+                'quote_id' => $quote->id,
+                'name' => 'Mission ' . ($quote->reference ?? "devis #{$quote->id}")
+                    . " — {$clientName}",
+                'status' => 'active',
+                'billing_rhythm' => $quote->billing_rhythm,
+            ]);
+
+            foreach ($quote->items as $item) {
+                $price = $item->unit_price !== null ? (float) $item->unit_price : null;
+
+                ClientPrestation::create([
+                    'client_id' => $quote->client_id,
+                    'mission_id' => $mission->id,
+                    'product_id' => $item->product_id,
+                    'quote_id' => $quote->id,
+                    'label' => $item->label,
+                    'billing_type' => $this->itemTypeToBillingType($item->item_type),
+                    // Pas de produit catalogue → prix custom (le prix vient du
+                    // devis, pas du catalogue). Avec produit → tarif du catalogue
+                    // conservé en base_price + prix devis en custom_price si
+                    // différent serait du sur-engineering : on prend le prix du
+                    // devis comme base_price, l'admin ajuste ensuite.
+                    'pricing_type' => $item->product_id ? 'default' : 'custom',
+                    'base_price' => $item->product_id ? $price : null,
+                    'custom_price' => $item->product_id ? null : $price,
+                    // Nature par défaut ponctuelle : pas de génération auto
+                    // d'intervention récurrente. L'admin bascule en régulier
+                    // via l'édition de mission s'il le souhaite.
+                    'nature' => 'punctual',
+                ]);
+            }
+
+            return $mission;
+        });
+
+        return response()->json([
+            'data' => $mission->load('clientPrestations'),
+            'already_existed' => false,
+        ], 201);
+    }
+
+    /**
+     * Mappe un `item_type` de QuoteItem vers un `billing_type` de
+     * ClientPrestation. Les énums ne sont pas 1:1 :
+     *  - QuoteItem : hourly|forfait|frais|remise|produit|carte|adjustment
+     *  - ClientPrestation : hourly|forfait|frais|remise|carte|exceptional
+     * 'produit'/'adjustment' (sans équivalent) retombent sur 'forfait'.
+     */
+    private function itemTypeToBillingType(?string $itemType): string
+    {
+        return match ($itemType) {
+            'hourly', 'forfait', 'frais', 'remise', 'carte' => $itemType,
+            default => 'forfait',
+        };
     }
 
     /**

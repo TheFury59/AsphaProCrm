@@ -5,7 +5,9 @@ namespace App\Http\Controllers\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Employee;
+use App\Models\Quote;
 use App\Services\InterventionExpander;
+use App\Services\QuotePdfGenerator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -95,7 +97,92 @@ class ExtranetController extends Controller
     {
         $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
-        return ['data' => \App\Models\Quote::where('client_id', $client->id)->orderByDesc('id')->get()];
+        return ['data' => Quote::where('client_id', $client->id)
+            ->with('items')
+            ->orderByDesc('id')
+            ->get()];
+    }
+
+    /**
+     * Résout le devis demandé en garantissant qu'il appartient bien au client
+     * lié au `portal_user_id` de l'utilisateur connecté.
+     *
+     * Garde d'ownership stricte (cf. audit sécurité 2026-05-19 — un client ne
+     * doit JAMAIS accéder au devis d'un autre client). On ne s'appuie pas sur
+     * le route-model-binding seul : on re-vérifie `quote.client_id` contre le
+     * client résolu via `portal_user_id`.
+     */
+    private function resolveOwnedQuote(Request $request, Quote $quote): array
+    {
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
+        abort_unless($client, 404, 'Profil client introuvable');
+        abort_unless((int) $quote->client_id === (int) $client->id, 403, 'Ce devis ne vous appartient pas.');
+
+        return [$client, $quote];
+    }
+
+    /**
+     * POST /api/v1/extranet/client/quotes/{quote}/accept
+     *
+     * Le client valide SON devis depuis l'extranet. Le devis doit être au
+     * statut `sent` (en attente de validation). Passe le statut à `accepted`.
+     *
+     * La notification aux admins (« Devis validé ») est émise par
+     * QuoteObserver::updated (point d'émission unique — cf. LRN 2026-05-18).
+     */
+    public function acceptClientQuote(Request $request, Quote $quote)
+    {
+        [, $quote] = $this->resolveOwnedQuote($request, $quote);
+
+        abort_if(
+            $quote->status !== 'sent',
+            409,
+            "Ce devis n'est pas en attente de validation.",
+        );
+
+        $quote->update(['status' => 'accepted']);
+
+        return ['data' => $quote->fresh(['items'])];
+    }
+
+    /**
+     * POST /api/v1/extranet/client/quotes/{quote}/refuse
+     *
+     * Symétrique de `accept` : le client refuse son devis → statut `refused`.
+     */
+    public function refuseClientQuote(Request $request, Quote $quote)
+    {
+        [, $quote] = $this->resolveOwnedQuote($request, $quote);
+
+        abort_if(
+            $quote->status !== 'sent',
+            409,
+            "Ce devis n'est pas en attente de validation.",
+        );
+
+        $quote->update(['status' => 'refused']);
+
+        return ['data' => $quote->fresh(['items'])];
+    }
+
+    /**
+     * GET /api/v1/extranet/client/quotes/{quote}/pdf
+     *
+     * Téléchargement du PDF du devis depuis l'extranet client. Réutilise le
+     * `QuotePdfGenerator` (même rendu que la route admin) mais avec une garde
+     * d'ownership client — on NE pointe PAS l'extranet vers `/quotes/{id}/pdf`
+     * (route admin protégée par la permission `sales.quotes.view`).
+     */
+    public function clientQuotePdf(Request $request, Quote $quote, QuotePdfGenerator $generator)
+    {
+        [, $quote] = $this->resolveOwnedQuote($request, $quote);
+
+        $pdf = $generator->generate($quote);
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . ($quote->reference ?? "devis-{$quote->id}") . '.pdf"',
+        ]);
     }
 
     public function clientPrestations(Request $request)

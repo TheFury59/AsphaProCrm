@@ -4,6 +4,7 @@ import { fr } from "date-fns/locale";
 import {
   Receipt, Briefcase, Download, Ticket as TicketIcon, Plus,
   AlertCircle, MessageSquare, PackageOpen, Send,
+  FileText, CheckCircle2, XCircle, Eye, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -24,9 +26,10 @@ import {
 import { EntityAvatar } from "@/components/EntityAvatar";
 import {
   useClientInvoices, useClientPrestations, useClientProfile,
-  useClientTickets, useCreateClientTicket,
+  useClientQuotes, useClientTickets, useCreateClientTicket,
+  useAcceptClientQuote, useRefuseClientQuote,
 } from "@/hooks/use-extranet";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 
 /**
  * Bibliotheque de sections reutilisables pour l'extranet client.
@@ -147,6 +150,333 @@ export function ClientInvoicesSection() {
         </Table>
       </CardContent>
     </Card>
+  );
+}
+
+// =========================================================================
+// Section : Mes devis (consultation + validation)
+// =========================================================================
+
+const QUOTE_STATUS_LABEL = (s: string): string => ({
+  draft: "Brouillon",
+  sent: "À valider",
+  accepted: "Validé",
+  refused: "Refusé",
+  expired: "Expiré",
+} as Record<string, string>)[s] ?? s;
+
+const QUOTE_STATUS_VARIANT = (
+  s: string,
+): "default" | "secondary" | "destructive" | "outline" => ({
+  draft: "secondary",
+  sent: "outline",
+  accepted: "default",
+  refused: "destructive",
+  expired: "secondary",
+} as Record<string, "default" | "secondary" | "destructive" | "outline">)[s] ?? "secondary";
+
+/** Télécharge le PDF d'un devis via l'endpoint extranet (blob → conserve l'auth Sanctum). */
+async function downloadClientQuotePdf(quoteId: number, reference: string | null) {
+  try {
+    const res = await api.get(`/extranet/client/quotes/${quoteId}/pdf`, {
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${reference ?? `devis-${quoteId}`}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Téléchargement PDF devis échoué", err);
+    toast.error("Téléchargement du PDF impossible");
+  }
+}
+
+export function ClientQuotesSection() {
+  const { data: quotes = [] } = useClientQuotes();
+  const [reviewId, setReviewId] = useState<number | null>(null);
+
+  const reviewQuote = quotes.find((q: any) => q.id === reviewId) ?? null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileText className="h-4 w-4" /> Mes devis ({quotes.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>N°</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead className="text-right">Montant</TableHead>
+              <TableHead>Statut</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {quotes.map((q: any) => (
+              <TableRow key={q.id}>
+                <TableCell className="font-mono text-xs">{q.reference ?? `QUO-${q.id}`}</TableCell>
+                <TableCell className="text-xs">
+                  {q.quote_date && format(new Date(q.quote_date), "dd/MM/yyyy", { locale: fr })}
+                </TableCell>
+                <TableCell className="text-right text-sm font-medium">
+                  {Number(q.total ?? 0).toFixed(2)} €
+                </TableCell>
+                <TableCell>
+                  <Badge variant={QUOTE_STATUS_VARIANT(q.status)}>
+                    {QUOTE_STATUS_LABEL(q.status)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => downloadClientQuotePdf(q.id, q.reference ?? null)}
+                    >
+                      <Download className="h-3 w-3 mr-1" /> PDF
+                    </Button>
+                    {q.status === "sent" ? (
+                      <Button
+                        size="sm"
+                        className="bg-gradient-aspha text-white border-0 hover:opacity-95"
+                        onClick={() => setReviewId(q.id)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" /> Consulter et valider
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setReviewId(q.id)}>
+                        <Eye className="h-3 w-3 mr-1" /> Détail
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {quotes.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                  Aucun devis pour le moment.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+
+      {reviewQuote && (
+        <QuoteReviewDialog quote={reviewQuote} onClose={() => setReviewId(null)} />
+      )}
+    </Card>
+  );
+}
+
+// =========================================================================
+// Dialog : consulter un devis + valider / refuser
+// =========================================================================
+
+function QuoteReviewDialog({
+  quote,
+  onClose,
+}: {
+  quote: any;
+  onClose: () => void;
+}) {
+  const accept = useAcceptClientQuote();
+  const refuse = useRefuseClientQuote();
+  const [confirmRefuse, setConfirmRefuse] = useState(false);
+  const busy = accept.isPending || refuse.isPending;
+  const pending = quote.status === "sent";
+  const items: any[] = quote.items ?? [];
+
+  const handleAccept = async () => {
+    try {
+      await accept.mutateAsync(quote.id);
+      toast.success("Devis validé — merci ! Notre équipe prépare la suite.");
+      onClose();
+    } catch (err) {
+      console.error("Validation devis échouée", err);
+      toast.error(apiErrorMessage(err, "Validation impossible"));
+    }
+  };
+
+  const handleRefuse = async () => {
+    try {
+      await refuse.mutateAsync(quote.id);
+      toast.success("Devis refusé. Notre équipe en est informée.");
+      onClose();
+    } catch (err) {
+      console.error("Refus devis échoué", err);
+      toast.error(apiErrorMessage(err, "Refus impossible"));
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
+      <DialogContent className="sm:!max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            Devis {quote.reference ?? `#${quote.id}`}
+          </DialogTitle>
+          <DialogDescription>
+            {pending
+              ? "Vérifiez le détail puis validez ou refusez ce devis."
+              : `Statut : ${QUOTE_STATUS_LABEL(quote.status)}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Date</p>
+              <p className="font-medium">
+                {quote.quote_date
+                  ? format(new Date(quote.quote_date), "dd/MM/yyyy", { locale: fr })
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Validité</p>
+              <p className="font-medium">
+                {quote.validity_date
+                  ? format(new Date(quote.validity_date), "dd/MM/yyyy", { locale: fr })
+                  : "—"}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+              Détail des prestations
+            </p>
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Désignation</TableHead>
+                    <TableHead className="text-right w-20">Qté</TableHead>
+                    <TableHead className="text-right w-24">PU</TableHead>
+                    <TableHead className="text-right w-28">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                        Aucune ligne sur ce devis.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {items.map((it) => (
+                    <TableRow key={it.id}>
+                      <TableCell>{it.label}</TableCell>
+                      <TableCell className="text-right">{Number(it.quantity ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{Number(it.unit_price ?? 0).toFixed(2)} €</TableCell>
+                      <TableCell className="text-right font-medium">{Number(it.total ?? 0).toFixed(2)} €</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="text-right text-base font-semibold mt-2">
+              Total : {Number(quote.total ?? 0).toFixed(2)} €
+            </div>
+          </div>
+
+          {quote.comment && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                Commentaire
+              </p>
+              <p className="text-sm">{quote.comment}</p>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => downloadClientQuotePdf(quote.id, quote.reference ?? null)}
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Télécharger le PDF du devis
+          </Button>
+        </div>
+
+        <DialogFooter className="gap-2">
+          {pending ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10"
+                disabled={busy}
+                onClick={() => setConfirmRefuse(true)}
+              >
+                {refuse.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Refuser
+              </Button>
+              <Button
+                type="button"
+                className="bg-gradient-aspha text-white border-0 hover:opacity-95"
+                disabled={busy}
+                onClick={handleAccept}
+              >
+                {accept.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Valider le devis
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" onClick={onClose}>
+              Fermer
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+
+      {/* Confirmation du refus (action irréversible côté workflow) */}
+      <Dialog open={confirmRefuse} onOpenChange={(o) => { if (!o) setConfirmRefuse(false); }}>
+        <DialogContent className="sm:!max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-rose-600" />
+              Refuser le devis
+            </DialogTitle>
+            <DialogDescription>
+              Le devis {quote.reference ?? `#${quote.id}`} sera marqué comme refusé
+              et notre équipe en sera informée. Vous pourrez nous recontacter pour
+              une nouvelle proposition.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setConfirmRefuse(false)}>
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              disabled={refuse.isPending}
+              onClick={() => { setConfirmRefuse(false); handleRefuse(); }}
+            >
+              Confirmer le refus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
   );
 }
 

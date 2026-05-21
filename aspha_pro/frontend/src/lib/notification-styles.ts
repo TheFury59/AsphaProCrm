@@ -2,7 +2,7 @@ import {
   Calendar, CalendarX, RotateCw, Users as UsersIcon,
   Briefcase, GraduationCap, PackageOpen, AlertCircle,
   MessageSquare, Clock, AlarmClockOff, Wallet,
-  Receipt, Sparkles, Bell,
+  Receipt, Sparkles, Bell, FileText, CheckCircle2, FileSignature,
 } from "lucide-react";
 
 /**
@@ -126,6 +126,55 @@ const STYLES: Record<string, NotificationStyle> = {
     border: "border-l-rose-500",
     module: "Impayé",
   },
+  invoice_issued: {
+    icon: Receipt,
+    color: "text-indigo-600",
+    bg: "bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300",
+    border: "border-l-indigo-500",
+    module: "Facture",
+  },
+  // Devis envoyé → invitation à valider (côté client)
+  quote_sent: {
+    icon: FileText,
+    color: "text-amber-600",
+    bg: "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300",
+    border: "border-l-amber-500",
+    module: "Devis",
+  },
+  // Devis validé par le client (côté admin)
+  quote_accepted: {
+    icon: CheckCircle2,
+    color: "text-emerald-600",
+    bg: "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300",
+    border: "border-l-emerald-500",
+    module: "Devis validé",
+  },
+
+  // === Missions ===
+  mission_created: {
+    icon: FileSignature,
+    color: "text-violet-600",
+    bg: "bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300",
+    border: "border-l-violet-500",
+    module: "Mission",
+  },
+
+  // === Tickets — mise à jour de statut ===
+  client_request_status: {
+    icon: AlertCircle,
+    color: "text-sky-600",
+    bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300",
+    border: "border-l-sky-500",
+    module: "Ticket",
+  },
+  // RDV à pourvoir (intervention sans intervenant)
+  intervention_unassigned: {
+    icon: UsersIcon,
+    color: "text-orange-600",
+    bg: "bg-orange-100 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300",
+    border: "border-l-orange-500",
+    module: "À pourvoir",
+  },
 
   // === Messagerie ===
   new_message: {
@@ -167,10 +216,16 @@ export function getNotificationStyle(code?: string | null): NotificationStyle {
  *  - "client_request" si le model est dans la morphMap (recommandé)
  *  - "App\\Models\\ClientRequest" en fallback (legacy)
  * On gère les deux pour être tolérant aux notifs déjà en BDD.
+ *
+ * `isExtranet` : la cloche est partagée entre le CRM admin et les extranets
+ * client/intervenant. Un client ne peut PAS naviguer vers une route admin
+ * (`/devis`, `/factures`…). En contexte extranet, les deep-links pointent
+ * donc vers les pages de l'espace client.
  */
 export function getNotificationLink(
   targetType: string | null,
   targetId: number | null,
+  isExtranet = false,
 ): string | null {
   if (!targetType || !targetId) return null;
 
@@ -178,6 +233,16 @@ export function getNotificationLink(
   const short = targetType.includes("\\")
     ? targetType.split("\\").pop()!.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()
     : targetType;
+
+  if (isExtranet) {
+    // Espace client : on dirige vers les pages de l'extranet. La page liste
+    // suffit (le client y consulte/valide via le dialog) — pas de focus par id.
+    switch (short) {
+      case "quote": return "/extranet/client/devis";
+      case "invoice": return "/extranet/client/factures";
+      default: return null;
+    }
+  }
 
   switch (short) {
     case "intervention": return `/planning?focus=${targetId}`;
@@ -187,6 +252,7 @@ export function getNotificationLink(
     case "employee": return `/intervenants/${targetId}`;
     case "invoice": return `/factures?focus=${targetId}`;
     case "quote": return `/devis?focus=${targetId}`;
+    case "mission": return `/missions`;
     default: return null;
   }
 }
