@@ -15,14 +15,17 @@ import { useContractSummary } from "@/hooks/use-planning-summary";
  *  - available = max(0, window - planned)
  *  - fill_rate = planned / window
  */
-export function ContractSummaryPanel({ from, to, employeeFilter }: {
+export function ContractSummaryPanel({ from, to, employeeFilter, clientFilter }: {
   from: string;
   to: string;
   employeeFilter: number | null;
+  /** Si défini : ne montre que les intervenants ayant un RDV avec ce client. */
+  clientFilter?: number | null;
 }) {
   const { data, isLoading } = useContractSummary({
     from, to,
     employee_id: employeeFilter ?? undefined,
+    client_id: clientFilter ?? undefined,
   });
 
   return (

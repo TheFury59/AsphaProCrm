@@ -663,6 +663,7 @@ export function PlanningPage() {
           from={window.from}
           to={window.to}
           employeeFilter={employeeFilter}
+          clientFilter={clientFilter}
         />
         <TripSummaryPanel
           from={window.from}

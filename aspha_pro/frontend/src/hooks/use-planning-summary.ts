@@ -24,7 +24,7 @@ export type LongAbsence = {
   days: number;
 };
 
-export function useContractSummary(params: { from: string; to: string; employee_id?: number | null }) {
+export function useContractSummary(params: { from: string; to: string; employee_id?: number | null; client_id?: number | null }) {
   return useQuery({
     queryKey: ["planning", "contract-summary", params],
     queryFn: async () => {

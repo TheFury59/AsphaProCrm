@@ -56,25 +56,45 @@ class PlanningSummaryController extends Controller
             'from' => ['required', 'date'],
             'to' => ['required', 'date'],
             'employee_id' => ['nullable', 'integer'],
+            // Filtre client : ne lister que les intervenants ayant au moins
+            // un RDV assigné avec ce client sur la fenêtre. 2026-05-21.
+            'client_id' => ['nullable', 'integer'],
         ]);
         $data['employee_id'] = $this->enforceEmployeeScope($request, $data['employee_id'] ?? null);
+        $clientId = $data['client_id'] ?? null;
 
         $from = Carbon::parse($data['from'])->startOfDay();
         $to = Carbon::parse($data['to'])->endOfDay();
         $daysInWindow = $from->diffInDays($to) + 1;
         $weeksInWindow = $daysInWindow / 7;
 
+        // Expand toutes les interventions sur la fenêtre (réutilise le service récurrence)
+        $events = $expander->expandWindow($from, $to);
+        $eventsByEmployee = $events->groupBy('employee.id');
+
+        // Si filtre client : on ne garde que les intervenants RÉELLEMENT
+        // assignés à un RDV de ce client (un RDV "à pourvoir" sans intervenant
+        // n'ajoute personne). Sans ce filtre, le bloc affichait des
+        // intervenants sans lien avec le client sélectionné. 2026-05-21.
+        $employeeIdsForClient = null;
+        if ($clientId) {
+            $employeeIdsForClient = $events
+                ->filter(fn ($ev) => ((int) ($ev['client']['id'] ?? 0)) === (int) $clientId)
+                ->pluck('employee.id')
+                ->filter()        // retire les RDV "à pourvoir" (employee.id null)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
         // NB : employees n'a pas de colonne `status` — le soft delete (deleted_at)
         // sert d'archive. Le model Employee use SoftDeletes → get() exclut
         // déjà les archivés automatiquement.
         $employees = Employee::query()
             ->when(! empty($data['employee_id']), fn ($q) => $q->where('id', $data['employee_id']))
+            ->when($employeeIdsForClient !== null, fn ($q) => $q->whereIn('id', $employeeIdsForClient))
             ->with(['currentContract:id,employee_id,weekly_duration,monthly_duration,position'])
             ->get();
-
-        // Expand toutes les interventions sur la fenêtre (réutilise le service récurrence)
-        $events = $expander->expandWindow($from, $to);
-        $eventsByEmployee = $events->groupBy('employee.id');
 
         $summary = $employees->map(function (Employee $e) use ($eventsByEmployee, $weeksInWindow) {
             $contractHours = (float) ($e->currentContract?->weekly_duration ?? 0);
