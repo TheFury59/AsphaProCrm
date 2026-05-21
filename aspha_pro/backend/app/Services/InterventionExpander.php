@@ -401,8 +401,13 @@ class InterventionExpander
             'is_exception' => $isException,
             'is_recurring' => (bool) $iv->is_recurring,
             'occurrence_date' => $startC->toDateString(),
-            'start_datetime' => $startC->toIso8601String(),
-            'end_datetime' => $endC->toIso8601String(),
+            // ⚠️ Datetime NAÏF sans offset (YYYY-MM-DDTHH:MM:SS). Cf. doc de
+            // cette méthode + convention projet (localISO côté front).
+            // `toIso8601String()` ajoutait `+00:00` (l'app tourne en UTC) :
+            // le navigateur réinterprétait alors l'heure en TZ locale et
+            // décalait toutes les occurrences de +2h (Paris été). 2026-05-21.
+            'start_datetime' => $startC->format('Y-m-d\TH:i:s'),
+            'end_datetime' => $endC->format('Y-m-d\TH:i:s'),
             'status' => $iv->status,
             'client' => $client,
             'employee' => $iv->relationLoaded('employee') && $iv->employee ? [
