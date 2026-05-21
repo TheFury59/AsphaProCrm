@@ -88,6 +88,10 @@ class SettingsController extends Controller
             'stock_alert_default_threshold' => AppSetting::get('stock_alert_default_threshold', 10),
             'silae_api_enabled' => (bool) AppSetting::get('silae_api_enabled', false),
             'google_maps_enabled' => (bool) AppSetting::get('google_maps_api_key'),
+            // Pennylane est configuré via .env (PENNYLANE_API_KEY), pas via
+            // app_settings : on expose juste la présence de la clé pour que
+            // le dashboard affiche un statut réel (et non un mock codé en dur).
+            'pennylane_enabled' => (bool) config('services.pennylane.api_key'),
         ];
 
         // silae_portal_url : seulement pour admin + intervenant

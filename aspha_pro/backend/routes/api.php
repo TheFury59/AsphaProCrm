@@ -19,6 +19,7 @@ use App\Http\Controllers\V1\MessagingController;
 use App\Http\Controllers\V1\ClientPortalAccessController;
 use App\Http\Controllers\V1\EmployeePortalAccessController;
 use App\Http\Controllers\V1\ClientRequestController;
+use App\Http\Controllers\V1\DashboardController;
 use App\Http\Controllers\V1\MediaUploadController;
 use App\Http\Controllers\V1\MissionController;
 use App\Http\Controllers\V1\NotificationController;
@@ -276,6 +277,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('tickets', 'clientTickets');
         Route::post('tickets', 'createClientTicket');
     });
+
+    // === Tableau de bord (KPI agrégés, admins uniquement) ===
+    Route::get('dashboard/stats', [DashboardController::class, 'stats']);
 
     // === Settings ===
     Route::get('settings/public', [SettingsController::class, 'publicSettings']);

@@ -57,6 +57,7 @@ export type PublicSettings = {
   silae_portal_url: string | null;
   silae_api_enabled: boolean;
   google_maps_enabled: boolean;
+  pennylane_enabled: boolean;
 };
 
 export type TripWaypoint = {

@@ -6,26 +6,27 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/stores/auth";
-import { useClients } from "@/hooks/use-clients";
-import { useEmployees } from "@/hooks/use-employees";
-import { useInterventions } from "@/hooks/use-phase3";
+import { useDashboardStats } from "@/hooks/use-dashboard";
+import { usePublicSettings } from "@/hooks/use-planning-summary";
 
-const fmt = (d: Date) => d.toISOString().slice(0, 10);
+const eur = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
 
 /**
  * Dashboard Aspha — pleine largeur, blocs lisibles, 3D doux.
+ *
+ * Tous les chiffres proviennent d'un endpoint backend dédié
+ * (`GET /dashboard/stats`) — aucun KPI ni statut n'est codé en dur.
  */
 export function DashboardPage() {
   const { user } = useAuthStore();
-  const { data: clientsData, isLoading: clientsLoading } = useClients({ per_page: 1 });
-  const { data: employeesData, isLoading: empLoading } = useEmployees({ per_page: 1 });
-  const today = fmt(new Date());
-  const weekFromNow = fmt(new Date(Date.now() + 7 * 86400000));
-  const interventions = useInterventions({ from: today, to: weekFromNow });
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: settings } = usePublicSettings();
 
-  const clientsCount = (clientsData as any)?.meta?.total ?? clientsData?.data?.length ?? 0;
-  const employeesCount = (employeesData as any)?.meta?.total ?? employeesData?.data?.length ?? 0;
-  const intervCount = interventions.data?.length ?? 0;
+  const upcoming = stats?.interventions_upcoming_30d ?? 0;
 
   return (
     <div className="space-y-6">
@@ -47,7 +48,7 @@ export function DashboardPage() {
               Bonjour {user?.name?.split(" ")[0] ?? ""} 👋
             </h1>
             <p className="text-white/85 mt-3 text-base lg:text-lg leading-relaxed">
-              Voici un aperçu de votre activité. {intervCount} intervention{intervCount > 1 ? "s" : ""} planifiée{intervCount > 1 ? "s" : ""} cette semaine.
+              Voici un aperçu de votre activité. {upcoming} intervention{upcoming > 1 ? "s" : ""} à venir dans les 30 prochains jours.
             </p>
           </div>
 
@@ -69,43 +70,74 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* === KPI cards pleine largeur === */}
+      {/* === KPI cards pleine largeur — chiffres réels (GET /dashboard/stats) === */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Clients actifs"
-          value={String(clientsCount)}
+          value={String(stats?.clients_active ?? 0)}
           icon={Users}
           to="/clients"
           accent="primary"
-          trend="+12% ce mois"
-          loading={clientsLoading}
+          loading={statsLoading}
         />
         <KpiCard
           label="Intervenants"
-          value={String(employeesCount)}
+          value={String(stats?.employees_count ?? 0)}
           icon={UserCog}
           to="/intervenants"
           accent="sky"
-          trend="3 nouveaux"
-          loading={empLoading}
+          loading={statsLoading}
         />
         <KpiCard
-          label="Interventions 7 jours"
-          value={String(intervCount)}
+          label="Interventions 30 jours"
+          value={String(stats?.interventions_upcoming_30d ?? 0)}
           icon={Calendar}
           to="/planning"
           accent="orange"
-          trend="Cette semaine"
-          loading={interventions.isLoading}
+          trend={
+            (stats?.interventions_to_fill ?? 0) > 0
+              ? `${stats!.interventions_to_fill} à pourvoir`
+              : undefined
+          }
+          loading={statsLoading}
         />
         <KpiCard
-          label="Factures ouvertes"
-          value="—"
+          label="Factures impayées"
+          value={String(stats?.unpaid_invoices_count ?? 0)}
           icon={Receipt}
           to="/factures"
           accent="violet"
-          trend="En attente"
-          loading={false}
+          trend={
+            (stats?.unpaid_invoices_total ?? 0) > 0
+              ? `${eur.format(stats!.unpaid_invoices_total)} dus`
+              : undefined
+          }
+          loading={statsLoading}
+        />
+      </div>
+
+      {/* === Seconde rangée KPI : devis + CA du mois === */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <KpiCard
+          label="Devis en attente"
+          value={String(stats?.pending_quotes_count ?? 0)}
+          icon={FileText}
+          to="/devis"
+          accent="sky"
+          loading={statsLoading}
+        />
+        <KpiCard
+          label="CA facturé ce mois"
+          value={eur.format(stats?.revenue_this_month ?? 0)}
+          icon={Receipt}
+          to="/factures"
+          accent="primary"
+          trend={
+            stats?.revenue_trend_pct != null
+              ? `${stats.revenue_trend_pct > 0 ? "+" : ""}${stats.revenue_trend_pct}% vs mois dernier`
+              : undefined
+          }
+          loading={statsLoading}
         />
       </div>
 
@@ -148,10 +180,21 @@ export function DashboardPage() {
             <StatusRow label="API V1" ok />
             <StatusRow label="Authentification" ok />
             <StatusRow label="Géocodage BAN" ok />
-            <StatusRow label="Pennylane" ok={false} note="mock" />
-            <StatusRow label="Google Maps" ok={false} note="non config" />
-            <StatusRow label="Notifications FCM" ok={false} note="non config" />
-            <StatusRow label="Silae" ok={false} note="non config" />
+            <StatusRow
+              label="Pennylane"
+              ok={!!settings?.pennylane_enabled}
+              note="non config"
+            />
+            <StatusRow
+              label="Google Maps"
+              ok={!!settings?.google_maps_enabled}
+              note="non config"
+            />
+            <StatusRow
+              label="Silae"
+              ok={!!settings?.silae_api_enabled}
+              note="non config"
+            />
           </ul>
         </div>
       </div>
@@ -173,7 +216,7 @@ const ACCENT_ICON: Record<string, string> = {
 };
 
 function KpiCard({ label, value, icon: Icon, to, accent, trend, loading }: {
-  label: string; value: string; icon: any; to: string; accent: keyof typeof ACCENT_BG; trend: string; loading?: boolean;
+  label: string; value: string; icon: any; to: string; accent: keyof typeof ACCENT_BG; trend?: string; loading?: boolean;
 }) {
   return (
     <Link to={to} className="group block cursor-pointer">
@@ -191,7 +234,7 @@ function KpiCard({ label, value, icon: Icon, to, accent, trend, loading }: {
           ) : (
             <div className="text-4xl font-semibold tracking-tight leading-none">{value}</div>
           )}
-          <div className="text-xs text-muted-foreground pt-1">{trend}</div>
+          {trend && <div className="text-xs text-muted-foreground pt-1">{trend}</div>}
         </div>
       </div>
     </Link>
