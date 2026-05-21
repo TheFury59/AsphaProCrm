@@ -21,6 +21,29 @@ export type Message = {
   sender?: { id: number; name: string };
 };
 
+export type MessageableUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: "super_admin" | "admin" | "intervenant";
+  avatar_url: string | null;
+};
+
+/**
+ * Utilisateurs invitables dans une conversation : tout le personnel
+ * (super_admin + admin + intervenant). Les clients sont exclus côté serveur.
+ */
+export function useMessageableUsers() {
+  return useQuery({
+    queryKey: ["messaging", "users"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: MessageableUser[] }>("/messaging/users");
+      return data.data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 export function useThreads() {
   return useQuery({
     queryKey: ["messaging", "threads"],
@@ -38,9 +61,55 @@ export function useThread(id: number | null) {
     enabled: !!id,
     queryFn: async () => {
       const { data } = await api.get(`/messaging/threads/${id}`);
-      return data.data as { thread: any; messages: { data: Message[] } };
+      return data.data as {
+        thread: any;
+        messages: { data: Message[] };
+        can_manage: boolean;
+      };
     },
     refetchInterval: 10_000,
+  });
+}
+
+/** Ajoute des participants à une conversation existante. */
+export function useAddParticipants() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, userIds }: { threadId: number; userIds: number[] }) => {
+      const { data } = await api.post(`/messaging/threads/${threadId}/participants`, {
+        participant_ids: userIds,
+      });
+      return data.data;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["messaging", "thread", vars.threadId] });
+      qc.invalidateQueries({ queryKey: ["messaging", "threads"] });
+    },
+  });
+}
+
+/** Retire un participant d'une conversation. */
+export function useRemoveParticipant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, userId }: { threadId: number; userId: number }) => {
+      await api.delete(`/messaging/threads/${threadId}/participants/${userId}`);
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["messaging", "thread", vars.threadId] });
+      qc.invalidateQueries({ queryKey: ["messaging", "threads"] });
+    },
+  });
+}
+
+/** Supprime définitivement une conversation. */
+export function useDeleteThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (threadId: number) => {
+      await api.delete(`/messaging/threads/${threadId}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["messaging"] }),
   });
 }
 

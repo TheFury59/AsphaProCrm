@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\Message;
 use App\Models\MessageThread;
 use App\Models\MessageThreadParticipant;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -84,6 +86,9 @@ class MessagingController extends Controller
             'data' => [
                 'thread' => $thread,
                 'messages' => $messages,
+                // Le front affiche les boutons de gestion (ajout/retrait de
+                // participants, suppression) selon ce flag.
+                'can_manage' => $this->canManage($request->user(), $thread),
             ],
         ];
     }
@@ -134,6 +139,83 @@ class MessagingController extends Controller
 
             return response()->json(['data' => $thread->load('messageThreadParticipants.user', 'messages')], 201);
         });
+    }
+
+    /**
+     * Ajoute des participants à une conversation existante.
+     * Réservé au créateur de la conversation ou à un admin/super_admin.
+     */
+    public function addParticipants(Request $request, MessageThread $thread)
+    {
+        $this->ensureCanManage($request, $thread);
+
+        $data = $request->validate([
+            'participant_ids' => ['required', 'array', 'min:1'],
+            'participant_ids.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        $existing = MessageThreadParticipant::where('thread_id', $thread->id)
+            ->pluck('user_id')
+            ->all();
+
+        $added = 0;
+        foreach ($data['participant_ids'] as $uid) {
+            if (in_array($uid, $existing, true)) {
+                continue; // déjà dans la conversation — idempotent
+            }
+            MessageThreadParticipant::create([
+                'thread_id' => $thread->id,
+                'user_id' => $uid,
+                // last_read_at à null : le nouveau verra l'historique non lu.
+                'last_read_at' => null,
+            ]);
+            $added++;
+        }
+
+        $thread->load('messageThreadParticipants.user:id,name,email', 'createdBy:id,name');
+
+        return ['data' => ['thread' => $thread, 'added' => $added]];
+    }
+
+    /**
+     * Retire un participant d'une conversation.
+     * Réservé au créateur ou à un admin/super_admin. Le créateur de la
+     * conversation ne peut pas être retiré (il en reste le propriétaire).
+     */
+    public function removeParticipant(Request $request, MessageThread $thread, User $user)
+    {
+        $this->ensureCanManage($request, $thread);
+
+        abort_if(
+            $thread->created_by === $user->id,
+            422,
+            "Le créateur de la conversation ne peut pas en être retiré.",
+        );
+
+        MessageThreadParticipant::where('thread_id', $thread->id)
+            ->where('user_id', $user->id)
+            ->delete();
+
+        return ['data' => ['removed' => true]];
+    }
+
+    /**
+     * Supprime définitivement une conversation (messages + participants).
+     * Réservé au créateur ou à un admin/super_admin.
+     */
+    public function destroy(Request $request, MessageThread $thread)
+    {
+        $this->ensureCanManage($request, $thread);
+
+        DB::transaction(function () use ($thread) {
+            // Ordre imposé par les FK (PostgreSQL refuse l'orphelinage) :
+            // messages → participants → thread.
+            Message::where('thread_id', $thread->id)->delete();
+            MessageThreadParticipant::where('thread_id', $thread->id)->delete();
+            $thread->delete();
+        });
+
+        return ['data' => ['deleted' => true]];
     }
 
     /**
@@ -196,11 +278,74 @@ class MessagingController extends Controller
         return ['count' => $total];
     }
 
+    /**
+     * Liste des utilisateurs invitables dans une conversation.
+     *
+     * La messagerie interne est ouverte à TOUT le personnel : super_admin,
+     * admin ET intervenant peuvent discuter ensemble. Seuls les `client`
+     * en sont exclus (ils ont les tickets pour échanger avec l'agence).
+     *
+     * On renvoie l'`avatar_url` quand l'utilisateur a une fiche employé liée,
+     * sinon `null` (cas des comptes admin sans fiche intervenant).
+     */
+    public function messageableUsers(Request $request)
+    {
+        $currentId = $request->user()->id;
+
+        $users = User::query()
+            ->where('id', '!=', $currentId)
+            ->where(fn ($q) => $q->whereNull('status')
+                ->orWhere('status', '!=', User::STATUS_INACTIVE))
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', [
+                'super_admin', 'admin', 'intervenant',
+            ]))
+            ->with('roles:id,name')
+            ->orderBy('name')
+            ->get();
+
+        // Avatars : une seule requête pour toutes les fiches employé liées.
+        $avatars = Employee::query()
+            ->whereIn('user_id', $users->pluck('id'))
+            ->get(['id', 'user_id', 'avatar_path'])
+            ->keyBy('user_id');
+
+        return [
+            'data' => $users->map(function (User $u) use ($avatars) {
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'email' => $u->email,
+                    'role' => $u->getRoleNames()->first(),
+                    'avatar_url' => $avatars->get($u->id)?->avatar_url,
+                ];
+            })->values(),
+        ];
+    }
+
     private function ensureParticipant(Request $request, MessageThread $thread): void
     {
         $isParticipant = MessageThreadParticipant::where('thread_id', $thread->id)
             ->where('user_id', $request->user()->id)
             ->exists();
         abort_unless($isParticipant, 403, 'Vous ne participez pas à cette conversation.');
+    }
+
+    /**
+     * Le créateur de la conversation OU n'importe quel admin/super_admin
+     * peut gérer la conversation (ajouter/retirer des participants, supprimer).
+     */
+    private function canManage(User $user, MessageThread $thread): bool
+    {
+        return $thread->created_by === $user->id
+            || $user->hasAnyRole(['admin', 'super_admin']);
+    }
+
+    private function ensureCanManage(Request $request, MessageThread $thread): void
+    {
+        abort_unless(
+            $this->canManage($request->user(), $thread),
+            403,
+            "Seul le créateur de la conversation ou un administrateur peut la gérer.",
+        );
     }
 }

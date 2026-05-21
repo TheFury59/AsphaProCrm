@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageSquarePlus, Send, Users, Search, Check } from "lucide-react";
-import { useEmployees } from "@/hooks/use-employees";
+import {
+  MessageSquarePlus, Send, Users, Search, Check,
+  Settings2, UserPlus, Trash2, X, Crown,
+} from "lucide-react";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -17,7 +19,8 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  useCreateThread, useMarkThreadRead, usePostMessage, useThread, useThreads,
+  useAddParticipants, useCreateThread, useDeleteThread, useMarkThreadRead,
+  useMessageableUsers, usePostMessage, useRemoveParticipant, useThread, useThreads,
 } from "@/hooks/use-messaging";
 import { useAuthStore } from "@/stores/auth";
 import { apiErrorMessage } from "@/lib/api";
@@ -97,7 +100,10 @@ export function MessagingPage() {
         </Card>
 
         {activeThreadId ? (
-          <ThreadView threadId={activeThreadId} />
+          <ThreadView
+            threadId={activeThreadId}
+            onDeleted={() => setActiveThreadId(null)}
+          />
         ) : (
           <Card className="flex items-center justify-center">
             <CardContent>
@@ -110,10 +116,11 @@ export function MessagingPage() {
   );
 }
 
-function ThreadView({ threadId }: { threadId: number }) {
+function ThreadView({ threadId, onDeleted }: { threadId: number; onDeleted: () => void }) {
   const { data, isLoading } = useThread(threadId);
   const post = usePostMessage();
   const [body, setBody] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const user = useAuthStore((s) => s.user);
 
@@ -132,16 +139,31 @@ function ThreadView({ threadId }: { threadId: number }) {
 
   return (
     <Card className="flex flex-col overflow-hidden">
-      <CardHeader className="py-3 border-b">
-        <CardTitle className="text-base flex items-center gap-2">
-          {data?.thread.subject ?? "(sans sujet)"}
+      <CardHeader className="py-3 border-b flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-base flex items-center gap-2 min-w-0">
+          <span className="truncate">{data?.thread.subject ?? "(sans sujet)"}</span>
           {data?.thread.messageThreadParticipants && (
-            <Badge variant="outline" className="ml-2 gap-1">
+            <Badge variant="outline" className="gap-1 shrink-0">
               <Users className="h-3 w-3" />
               {data.thread.messageThreadParticipants.length}
             </Badge>
           )}
         </CardTitle>
+        {data?.can_manage && (
+          <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="shrink-0">
+                <Settings2 className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Gérer</span>
+              </Button>
+            </DialogTrigger>
+            <ManageThreadDialog
+              threadId={threadId}
+              thread={data.thread}
+              onDeleted={() => { setManageOpen(false); onDeleted(); }}
+            />
+          </Dialog>
+        )}
       </CardHeader>
       <ScrollArea className="flex-1" ref={scrollRef as any}>
         <div className="p-4 space-y-3">
@@ -190,44 +212,54 @@ function ThreadView({ threadId }: { threadId: number }) {
 }
 
 /**
- * Création de conversation — picker multi-sélect intervenants avec photo.
+ * Création de conversation — picker multi-sélect du personnel avec photo.
  *
- * Le backend MessagingController exige `participant_ids` = liste d'IDs `users`.
- * Comme on choisit visuellement des intervenants (Employee), on envoie leur
- * `user_id` (Employee.user_id pointe vers users.id). Les employees sans user_id
- * (= pas encore d'accès portail) sont affichés mais désactivés.
+ * La messagerie interne est ouverte à TOUT le personnel : on peut inviter
+ * super_admin, admin ET intervenant dans la même conversation. Les clients
+ * en sont exclus côté serveur (endpoint `/messaging/users` ne les renvoie
+ * jamais — ils utilisent les tickets). Les IDs sélectionnés sont déjà des
+ * `users.id`, directement acceptés par le backend (plus de traduction).
  */
+const ROLE_LABEL: Record<string, string> = {
+  super_admin: "Super-administrateur",
+  admin: "Administrateur",
+  intervenant: "Intervenant",
+};
+
 function CreateThreadDialog({ onCreated }: { onCreated: (id: number) => void }) {
   const [subject, setSubject] = useState("");
   const [search, setSearch] = useState("");
-  // Set d'employee IDs sélectionnés. On stocke par employee.id pour l'UI,
-  // on traduit en user_id à la soumission.
+  // Set d'IDs `users` sélectionnés — directement utilisables à la soumission.
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [initialMessage, setInitialMessage] = useState("");
   const create = useCreateThread();
-  // On récupère 100 intervenants max — pour les fichiers > 100 personnes,
-  // on s'appuiera sur le filtre `search` côté serveur.
-  const { data: empData, isLoading } = useEmployees({ per_page: 100, search });
-  const employees = useMemo(() => empData?.data ?? [], [empData]);
+  const { data: allUsers = [], isLoading } = useMessageableUsers();
 
-  const toggle = (empId: number) => {
+  // Filtrage côté client : la liste du personnel est bornée (les clients
+  // n'y figurent pas), pas besoin d'aller-retour serveur sur la recherche.
+  const users = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter(
+      (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+    );
+  }, [allUsers, search]);
+
+  const toggle = (userId: number) => {
     setSelected((s) => {
       const next = new Set(s);
-      if (next.has(empId)) next.delete(empId);
-      else next.add(empId);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
       return next;
     });
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Traduit les Employee.id sélectionnés en user_id (le seul accepté par le backend)
-    const userIds = employees
-      .filter((emp: any) => selected.has(emp.id) && emp.user_id)
-      .map((emp: any) => emp.user_id as number);
+    const userIds = [...selected];
 
     if (userIds.length === 0) {
-      toast.error("Sélectionne au moins un intervenant ayant un accès portail");
+      toast.error("Sélectionne au moins un participant");
       return;
     }
 
@@ -271,7 +303,7 @@ function CreateThreadDialog({ onCreated }: { onCreated: (id: number) => void }) 
           <div className="grid gap-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs">
-                Intervenants à inviter *{" "}
+                Participants à inviter *{" "}
                 {selected.size > 0 && (
                   <span className="text-primary font-medium">({selected.size} sélectionné{selected.size > 1 ? "s" : ""})</span>
                 )}
@@ -289,7 +321,7 @@ function CreateThreadDialog({ onCreated }: { onCreated: (id: number) => void }) 
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Rechercher un intervenant…"
+                placeholder="Rechercher un membre du personnel…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9"
@@ -300,41 +332,35 @@ function CreateThreadDialog({ onCreated }: { onCreated: (id: number) => void }) 
               {isLoading && (
                 <div className="p-4 text-xs text-muted-foreground italic">Chargement…</div>
               )}
-              {!isLoading && employees.length === 0 && (
+              {!isLoading && users.length === 0 && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
-                  Aucun intervenant trouvé.
+                  Aucun membre du personnel trouvé.
                 </div>
               )}
-              {employees.map((emp: any) => {
-                const hasUser = !!emp.user_id;
-                const isSelected = selected.has(emp.id);
+              {users.map((u) => {
+                const isSelected = selected.has(u.id);
                 return (
                   <button
-                    key={emp.id}
+                    key={u.id}
                     type="button"
-                    onClick={() => hasUser && toggle(emp.id)}
-                    disabled={!hasUser}
+                    onClick={() => toggle(u.id)}
                     className={
                       "w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors " +
                       (isSelected
                         ? "bg-primary/10 hover:bg-primary/15"
-                        : hasUser
-                          ? "hover:bg-muted/60 cursor-pointer"
-                          : "opacity-50 cursor-not-allowed")
+                        : "hover:bg-muted/60 cursor-pointer")
                     }
                   >
                     <EntityAvatar
-                      src={emp.avatar_url}
-                      name={emp.full_name}
+                      src={u.avatar_url ?? undefined}
+                      name={u.name}
                       variant="employee"
                       size="sm"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{emp.full_name}</div>
+                      <div className="text-sm font-medium truncate">{u.name}</div>
                       <div className="text-[10px] text-muted-foreground truncate">
-                        {hasUser
-                          ? (emp.classification === "cadre" ? "Cadre" : "Non-cadre")
-                          : "⚠ Pas d'accès portail — ne peut pas recevoir de messages"}
+                        {ROLE_LABEL[u.role] ?? u.role} · {u.email}
                       </div>
                     </div>
                     <div
@@ -374,6 +400,267 @@ function CreateThreadDialog({ onCreated }: { onCreated: (id: number) => void }) 
           </Button>
         </DialogFooter>
       </form>
+    </DialogContent>
+  );
+}
+
+/**
+ * Gestion d'une conversation existante (WhatsApp-like).
+ *
+ * Visible uniquement quand le backend renvoie `can_manage: true` — soit le
+ * créateur de la conversation, soit un admin/super_admin. Permet d'ajouter
+ * des participants, d'en retirer (sauf le créateur) et de supprimer la
+ * conversation. Toutes les actions sont re-vérifiées côté serveur.
+ */
+function ManageThreadDialog({
+  threadId, thread, onDeleted,
+}: {
+  threadId: number;
+  thread: any;
+  onDeleted: () => void;
+}) {
+  const participants: any[] = thread.messageThreadParticipants ?? [];
+  const creatorId: number | null = thread.created_by ?? null;
+  const currentUser = useAuthStore((s) => s.user);
+
+  const { data: allUsers = [] } = useMessageableUsers();
+  const addParticipants = useAddParticipants();
+  const removeParticipant = useRemoveParticipant();
+  const deleteThread = useDeleteThread();
+
+  const [toAdd, setToAdd] = useState<Set<number>>(new Set());
+  const [search, setSearch] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // IDs déjà dans la conversation — on les exclut du picker d'ajout.
+  const presentIds = useMemo(
+    () => new Set(participants.map((p) => p.user_id ?? p.user?.id)),
+    [participants],
+  );
+
+  const candidates = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allUsers.filter(
+      (u) =>
+        !presentIds.has(u.id) &&
+        (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)),
+    );
+  }, [allUsers, presentIds, search]);
+
+  const toggleAdd = (id: number) => {
+    setToAdd((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleAdd = () => {
+    const ids = [...toAdd];
+    if (ids.length === 0) return;
+    addParticipants.mutate(
+      { threadId, userIds: ids },
+      {
+        onSuccess: () => {
+          toast.success(`${ids.length} participant(s) ajouté(s)`);
+          setToAdd(new Set());
+          setSearch("");
+        },
+        onError: (e) => toast.error(apiErrorMessage(e)),
+      },
+    );
+  };
+
+  const handleRemove = (userId: number) => {
+    removeParticipant.mutate(
+      { threadId, userId },
+      {
+        onSuccess: () => toast.success("Participant retiré"),
+        onError: (e) => toast.error(apiErrorMessage(e)),
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    deleteThread.mutate(threadId, {
+      onSuccess: () => {
+        toast.success("Conversation supprimée");
+        onDeleted();
+      },
+      onError: (e) => toast.error(apiErrorMessage(e)),
+    });
+  };
+
+  return (
+    <DialogContent className="sm:!max-w-lg">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-primary" />
+          Gérer la conversation
+        </DialogTitle>
+      </DialogHeader>
+
+      <div className="grid gap-4 py-2">
+        {/* Participants actuels */}
+        <div className="grid gap-1.5">
+          <Label className="text-xs">Participants ({participants.length})</Label>
+          <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
+            {participants.map((p) => {
+              const u = p.user ?? {};
+              const uid = p.user_id ?? u.id;
+              const isCreator = creatorId != null && uid === creatorId;
+              const isMe = currentUser?.id === uid;
+              return (
+                <div key={uid} className="px-3 py-2 flex items-center gap-3">
+                  <EntityAvatar name={u.name ?? "?"} variant="employee" size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {u.name ?? "Utilisateur"}
+                      {isMe && <span className="text-muted-foreground"> (moi)</span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{u.email}</div>
+                  </div>
+                  {isCreator ? (
+                    <Badge variant="outline" className="gap-1 shrink-0 text-[10px]">
+                      <Crown className="h-3 w-3" />Créateur
+                    </Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      disabled={removeParticipant.isPending}
+                      onClick={() => handleRemove(uid)}
+                      title="Retirer de la conversation"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Ajout de participants */}
+        <div className="grid gap-1.5">
+          <Label className="text-xs">
+            Ajouter des participants
+            {toAdd.size > 0 && (
+              <span className="text-primary font-medium">
+                {" "}({toAdd.size} sélectionné{toAdd.size > 1 ? "s" : ""})
+              </span>
+            )}
+          </Label>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher un membre du personnel…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+          </div>
+          <div className="rounded-lg border divide-y max-h-40 overflow-y-auto">
+            {candidates.length === 0 && (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                Aucun membre du personnel à ajouter.
+              </div>
+            )}
+            {candidates.map((u) => {
+              const isSel = toAdd.has(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => toggleAdd(u.id)}
+                  className={
+                    "w-full text-left px-3 py-2 flex items-center gap-3 transition-colors " +
+                    (isSel ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-muted/60 cursor-pointer")
+                  }
+                >
+                  <EntityAvatar
+                    src={u.avatar_url ?? undefined}
+                    name={u.name}
+                    variant="employee"
+                    size="sm"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{u.name}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {ROLE_LABEL[u.role] ?? u.role}
+                    </div>
+                  </div>
+                  <div
+                    className={
+                      "h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition " +
+                      (isSel
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground/30")
+                    }
+                  >
+                    {isSel && <Check className="h-3 w-3" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={toAdd.size === 0 || addParticipants.isPending}
+            onClick={handleAdd}
+          >
+            <UserPlus className="h-4 w-4 mr-1.5" />
+            {addParticipants.isPending ? "Ajout…" : "Ajouter à la conversation"}
+          </Button>
+        </div>
+
+        {/* Zone danger — suppression */}
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+          {!confirmDelete ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Supprimer la conversation
+            </Button>
+          ) : (
+            <div className="grid gap-2">
+              <p className="text-xs text-destructive font-medium">
+                Action irréversible — tous les messages seront définitivement perdus. Confirmer&nbsp;?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1"
+                  disabled={deleteThread.isPending}
+                  onClick={handleDelete}
+                >
+                  {deleteThread.isPending ? "Suppression…" : "Oui, supprimer"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Annuler
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </DialogContent>
   );
 }

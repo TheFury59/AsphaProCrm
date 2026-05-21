@@ -260,9 +260,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // === Phase 7 — Messagerie ===
     Route::prefix('messaging')->controller(MessagingController::class)->group(function () {
+        Route::get('users', 'messageableUsers');
         Route::get('threads', 'index');
         Route::post('threads', 'store');
         Route::get('threads/{thread}', 'show');
+        Route::delete('threads/{thread}', 'destroy');
+        Route::post('threads/{thread}/participants', 'addParticipants');
+        Route::delete('threads/{thread}/participants/{user}', 'removeParticipant');
         Route::post('threads/{thread}/messages', 'postMessage');
         Route::post('threads/{thread}/read', 'markRead');
         Route::get('unread-total', 'totalUnread');
