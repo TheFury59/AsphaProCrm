@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientPrestation;
 use App\Models\Mission;
+use App\Models\MissionStockItem;
+use App\Services\MissionStockService;
 use App\Services\RecurringInterventionGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -294,6 +296,108 @@ class MissionController extends Controller
                 ->each->delete();  // soft delete
             $prestation->delete();
         });
+
+        return response()->noContent();
+    }
+
+    // ========== PRODUITS / CONSOMMABLES DE LA MISSION (avec décompte stock) ==========
+
+    /**
+     * GET /api/v1/missions/{mission}/stock-items
+     * Liste les produits de stock / lignes libres rattachés à la mission.
+     */
+    public function listStockItems(Request $request, Mission $mission)
+    {
+        abort_unless($request->user()?->can('clients.view'), 403);
+
+        return ['data' => $mission->stockItems()
+            ->with('stockProduct:id,name,reference,unit,current_quantity')
+            ->orderBy('id')
+            ->get()];
+    }
+
+    /**
+     * POST /api/v1/missions/{mission}/stock-items
+     *
+     * Ajoute un produit du stock (ou une ligne libre) à la mission.
+     * Si `stock_product_id` est renseigné → mouvement de SORTIE immédiat
+     * (décompte du stock). Ligne libre → aucun mouvement.
+     *
+     * Garde-fou stock insuffisant : NON bloquant (le commerce passe avant —
+     * cf. StockMovementService). L'info est renvoyée dans `low_stock`.
+     */
+    public function storeStockItem(Request $request, Mission $mission, MissionStockService $service)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $data = $request->validate([
+            'stock_product_id' => ['nullable', 'exists:stock_products,id'],
+            'label' => ['required', 'string', 'max:255'],
+            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'unit_price' => ['nullable', 'numeric', 'min:0'],
+        ]);
+        $data['unit_price'] = $data['unit_price'] ?? 0;
+
+        $userId = $request->user()->id;
+
+        $item = DB::transaction(fn () => $service->addItem($mission, $data, $userId));
+
+        $item->load('stockProduct:id,name,reference,unit,current_quantity');
+
+        return response()->json([
+            'data' => $item,
+            // Info non bloquante : le produit est-il maintenant sous le seuil ?
+            'low_stock' => $item->stockProduct
+                && $item->stockProduct->current_quantity <= ($item->stockProduct->alert_threshold ?? 0),
+        ], 201);
+    }
+
+    /**
+     * PATCH /api/v1/missions/{mission}/stock-items/{id}
+     *
+     * Modifie une ligne. Un changement de quantité (ou de produit) ajuste le
+     * stock par un mouvement de la différence (cf. MissionStockService).
+     */
+    public function updateStockItem(Request $request, Mission $mission, int $id, MissionStockService $service)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $item = MissionStockItem::where('mission_id', $mission->id)->findOrFail($id);
+
+        $data = $request->validate([
+            'stock_product_id' => ['sometimes', 'nullable', 'exists:stock_products,id'],
+            'label' => ['sometimes', 'string', 'max:255'],
+            'quantity' => ['sometimes', 'numeric', 'min:0.01'],
+            'unit_price' => ['sometimes', 'numeric', 'min:0'],
+        ]);
+
+        $userId = $request->user()->id;
+
+        $item = DB::transaction(fn () => $service->updateItem($item, $data, $userId));
+
+        $item->load('stockProduct:id,name,reference,unit,current_quantity');
+
+        return [
+            'data' => $item,
+            'low_stock' => $item->stockProduct
+                && $item->stockProduct->current_quantity <= ($item->stockProduct->alert_threshold ?? 0),
+        ];
+    }
+
+    /**
+     * DELETE /api/v1/missions/{mission}/stock-items/{id}
+     *
+     * Retire une ligne. Si elle référençait un produit de stock → mouvement
+     * d'ENTRÉE (le stock est restitué).
+     */
+    public function destroyStockItem(Request $request, Mission $mission, int $id, MissionStockService $service)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $item = MissionStockItem::where('mission_id', $mission->id)->findOrFail($id);
+        $userId = $request->user()->id;
+
+        DB::transaction(fn () => $service->removeItem($item, $userId));
 
         return response()->noContent();
     }

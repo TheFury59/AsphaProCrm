@@ -25,6 +25,11 @@ import {
   PrestationFormCard, emptyPrestation, validatePrestation, serializePrestation,
   PAYMENT_METHODS, BILLING_RHYTHMS,
 } from "@/components/missions/PrestationFormCard";
+import {
+  MissionStockSectionDraft, validateStockItem, serializeStockItem,
+  type StockItemDraft,
+} from "@/components/missions/MissionStockSection";
+import { api } from "@/lib/api";
 
 /**
  * Page de création d'une mission — flow Xelya/Ximi :
@@ -63,6 +68,9 @@ export function CreateMissionPage() {
   const [onlinePaymentEnabled, setOnlinePaymentEnabled] = useState(false);
   const [noInterventionNoBill, setNoInterventionNoBill] = useState(true);
   const [prestations, setPrestations] = useState<PrestationDraft[]>([emptyPrestation()]);
+  // Produits / consommables : collectés en local, persistés APRÈS la création
+  // de la mission (le décompte de stock a alors lieu côté serveur).
+  const [stockItems, setStockItems] = useState<StockItemDraft[]>([]);
 
   // -- Helpers prestation --------------------------------------------------
   const updatePrestation = (idx: number, patch: Partial<PrestationDraft>) => {
@@ -103,6 +111,9 @@ export function CreateMissionPage() {
     prestations.forEach((p, i) => {
       errs.push(...validatePrestation(p, `Prestation ${i + 1}`));
     });
+    stockItems.forEach((s, i) => {
+      errs.push(...validateStockItem(s, `Produit ${i + 1}`));
+    });
     return errs;
   };
 
@@ -130,13 +141,33 @@ export function CreateMissionPage() {
         no_intervention_no_bill: noInterventionNoBill,
         prestations: prestations.map(serializePrestation),
       });
+
+      // Produits / consommables : persistés APRÈS la création de la mission.
+      // Chaque POST référençant un produit du stock déclenche le décompte
+      // (mouvement de sortie) côté serveur.
+      let stockOk = 0;
+      let stockFail = 0;
+      for (const s of stockItems) {
+        try {
+          await api.post(`/missions/${mission.id}/stock-items`, serializeStockItem(s));
+          stockOk++;
+        } catch (e) {
+          console.error("Ajout produit mission échoué", e);
+          stockFail++;
+        }
+      }
+
       const recurringCount = prestations.filter((p) => p.nature === "regular").length;
       toast.success(
         `Mission "${mission.name}" créée avec ${prestations.length} prestation(s)` +
           (recurringCount > 0
             ? ` · ${recurringCount} RDV récurrent(s) à pourvoir généré(s)`
-            : ""),
+            : "") +
+          (stockOk > 0 ? ` · ${stockOk} produit(s) (stock décompté)` : ""),
       );
+      if (stockFail > 0) {
+        toast.error(`${stockFail} produit(s) n'ont pas pu être ajoutés — vérifie la mission.`);
+      }
       navigate(`/clients/${clientId}#missions`);
     } catch (err: any) {
       const msg = err.response?.data?.message ?? "Création impossible";
@@ -283,6 +314,9 @@ export function CreateMissionPage() {
               ))}
             </CardContent>
           </Card>
+
+          {/* SECTION 4 — Produits / consommables (décompte de stock à la création) */}
+          <MissionStockSectionDraft items={stockItems} onChange={setStockItems} />
         </div>
 
         {/* ============================================================== */}
@@ -389,15 +423,24 @@ export function CreateMissionPage() {
                 }
               />
               <RecapRow
+                label="Produits / consommables"
+                value={<span className="font-mono">{stockItems.length}</span>}
+              />
+              <RecapRow
                 label="Total HT estimé"
                 value={
                   <span className="font-semibold tabular-nums">
-                    {prestations
-                      .reduce((sum, p) => {
+                    {(
+                      prestations.reduce((sum, p) => {
                         const price = p.pricing_type === "custom" ? p.custom_price : p.base_price;
                         return sum + Number(price ?? 0);
-                      }, 0)
-                      .toFixed(2)}{" "}
+                      }, 0) +
+                      stockItems.reduce(
+                        (sum, s) =>
+                          sum + parseFloat(s.quantity || "0") * parseFloat(s.unit_price || "0"),
+                        0,
+                      )
+                    ).toFixed(2)}{" "}
                     €
                   </span>
                 }

@@ -46,6 +46,15 @@ class Mission extends Model
         return $this->hasMany(ClientPrestation::class, 'mission_id');
     }
 
+    /**
+     * Produits de stock (consommables/matériel) rattachés à la mission.
+     * Ajouter une ligne avec un stock_product_id décompte le stock (2026-05-21).
+     */
+    public function stockItems(): HasMany
+    {
+        return $this->hasMany(MissionStockItem::class, 'mission_id');
+    }
+
     public function interventions(): HasMany
     {
         return $this->hasMany(Intervention::class, 'mission_id');

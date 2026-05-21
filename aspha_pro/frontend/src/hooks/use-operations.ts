@@ -160,6 +160,34 @@ export function useStockProducts(params: Record<string, any> = {}) {
   });
 }
 
+/** Produit du stock allégé — sélecteurs devis/missions. */
+export type StockProductOption = {
+  id: number;
+  entity_id: number;
+  category_id: number | null;
+  name: string;
+  reference: string | null;
+  unit: string | null;
+  current_quantity: number;
+};
+
+/**
+ * Liste plate (non paginée) des produits de stock actifs, pour les sélecteurs
+ * (devis, missions). Filtrable par entité.
+ */
+export function useStockProductOptions(entityId?: number | null) {
+  return useQuery({
+    queryKey: ["stock", "options", entityId ?? null],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: StockProductOption[] }>(
+        "/stock/products/options",
+        { params: entityId ? { entity_id: entityId } : {} },
+      );
+      return data.data;
+    },
+  });
+}
+
 export function useStockAlerts() {
   return useQuery({
     queryKey: ["stock", "alerts"],

@@ -44,7 +44,7 @@ class QuoteController extends Controller
     public function show(Request $request, Quote $quote)
     {
         abort_unless($request->user()?->can('sales.quotes.view'), 403);
-        $quote->load(['client.company', 'quoteType', 'address', 'ownerUser:id,name', 'items']);
+        $quote->load(['client.company', 'quoteType', 'address', 'ownerUser:id,name', 'items.stockProduct:id,name,reference']);
         return ['data' => $quote];
     }
 
@@ -75,6 +75,10 @@ class QuoteController extends Controller
             // product_id : prestation du catalogue dont vient la ligne
             // (null = ligne libre saisie à la main). 2026-05-20.
             'items.*.product_id' => ['nullable', 'exists:products,id'],
+            // stock_product_id : produit du stock chiffré sur la ligne
+            // (null = ligne libre / prestation). 2026-05-21. Chiffrage SEUL :
+            // un devis ne déclenche AUCUN mouvement de stock.
+            'items.*.stock_product_id' => ['nullable', 'exists:stock_products,id'],
         ]);
 
         $client = \App\Models\Client::findOrFail($data['client_id']);
@@ -120,6 +124,7 @@ class QuoteController extends Controller
                 QuoteItem::create([
                     'quote_id' => $quote->id,
                     'product_id' => $item['product_id'] ?? null, // 2026-05-20 traçabilité
+                    'stock_product_id' => $item['stock_product_id'] ?? null, // 2026-05-21 — chiffrage seul, 0 mouvement
                     'label' => $item['label'],
                     'item_type' => $item['item_type'] ?? 'forfait',
                     'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
@@ -168,6 +173,7 @@ class QuoteController extends Controller
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19
             'items.*.product_id' => ['nullable', 'exists:products,id'], // 2026-05-20
+            'items.*.stock_product_id' => ['nullable', 'exists:stock_products,id'], // 2026-05-21
         ]);
 
         DB::transaction(function () use ($data, $quote) {
@@ -184,6 +190,7 @@ class QuoteController extends Controller
                     QuoteItem::create([
                         'quote_id' => $quote->id,
                         'product_id' => $item['product_id'] ?? null, // 2026-05-20
+                        'stock_product_id' => $item['stock_product_id'] ?? null, // 2026-05-21
                         'label' => $item['label'],
                         'item_type' => $item['item_type'] ?? 'forfait',
                         'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
@@ -246,6 +253,7 @@ class QuoteController extends Controller
                 InvoiceItem::create([
                     'invoice_id' => $invoice->id,
                     'product_id' => $qi->product_id, // 2026-05-20 — propage la prestation source
+                    'stock_product_id' => $qi->stock_product_id, // 2026-05-21 — propage le produit de stock
                     'label' => $qi->label,
                     'item_type' => $qi->item_type ?? 'forfait',
                     'vat_rate_id' => $qi->vat_rate_id, // audit 2026-05-19 — propage la TVA par ligne
@@ -286,9 +294,14 @@ class QuoteController extends Controller
      *  - nature par défaut `punctual` (l'admin ajuste ensuite via l'édition
      *    de mission, notamment pour passer une prestation en récurrent).
      *
+     * 2026-05-21 — les lignes du devis qui référencent un produit de stock
+     * (`stock_product_id` non null) ne deviennent PAS des prestations mais
+     * des `mission_stock_items` ; le décompte de stock est alors déclenché
+     * par `MissionStockService` (mouvement de sortie).
+     *
      * L'admin pourra réviser la mission via `EditMissionPage`.
      */
-    public function convertToMission(Request $request, Quote $quote)
+    public function convertToMission(Request $request, Quote $quote, \App\Services\MissionStockService $stockService)
     {
         abort_unless($request->user()?->can('clients.edit'), 403);
 
@@ -302,7 +315,7 @@ class QuoteController extends Controller
         $existing = Mission::where('quote_id', $quote->id)->first();
         if ($existing) {
             return response()->json([
-                'data' => $existing->load('clientPrestations'),
+                'data' => $existing->load(['clientPrestations', 'stockItems']),
                 'already_existed' => true,
             ], 200);
         }
@@ -310,7 +323,9 @@ class QuoteController extends Controller
         $quote->load(['items', 'client.company']);
         abort_if(! $quote->client_id, 422, "Ce devis n'est rattaché à aucun client.");
 
-        $mission = DB::transaction(function () use ($quote) {
+        $userId = $request->user()->id;
+
+        $mission = DB::transaction(function () use ($quote, $stockService, $userId) {
             $clientName = $quote->client?->company?->company_name
                 ?? ($quote->client ? "Client {$quote->client->code}" : 'Client');
 
@@ -325,6 +340,18 @@ class QuoteController extends Controller
 
             foreach ($quote->items as $item) {
                 $price = $item->unit_price !== null ? (float) $item->unit_price : null;
+
+                // Ligne « produit de stock » → mission_stock_item + décompte.
+                // (le devis n'a déclenché aucun mouvement ; la mission, si.)
+                if ($item->stock_product_id) {
+                    $stockService->addItem($mission, [
+                        'stock_product_id' => $item->stock_product_id,
+                        'label' => $item->label,
+                        'quantity' => $item->quantity !== null ? (float) $item->quantity : 1,
+                        'unit_price' => $price ?? 0,
+                    ], $userId);
+                    continue;
+                }
 
                 ClientPrestation::create([
                     'client_id' => $quote->client_id,
@@ -352,7 +379,7 @@ class QuoteController extends Controller
         });
 
         return response()->json([
-            'data' => $mission->load('clientPrestations'),
+            'data' => $mission->load(['clientPrestations', 'stockItems']),
             'already_existed' => false,
         ], 201);
     }

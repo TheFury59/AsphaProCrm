@@ -28,6 +28,7 @@ import {
   PrestationFormCard, emptyPrestation, validatePrestation, serializePrestation,
   toDateInput, PAYMENT_METHODS, BILLING_RHYTHMS,
 } from "@/components/missions/PrestationFormCard";
+import { MissionStockSectionLive } from "@/components/missions/MissionStockSection";
 
 /**
  * Page d'édition d'une mission existante.
@@ -489,6 +490,9 @@ export function EditMissionPage() {
               ))}
             </CardContent>
           </Card>
+
+          {/* SECTION 3 — Produits / consommables (avec décompte de stock) */}
+          <MissionStockSectionLive missionId={missionId} />
         </div>
 
         {/* ============================================================== */}

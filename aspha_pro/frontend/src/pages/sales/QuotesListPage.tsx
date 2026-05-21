@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
   Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
   Settings2, PackagePlus, PencilLine, Layers, Briefcase, Loader2,
+  Boxes,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -17,6 +18,8 @@ import { useClients } from "@/hooks/use-clients";
 // 2026-05-20 refonte devis — catalogue, missions, types de devis, TVA
 import { useProducts, useVatRates } from "@/hooks/use-products";
 import { useClientMissions, useMissionPrestations } from "@/hooks/use-missions";
+// 2026-05-21 — produits de stock dans les devis (chiffrage seul, 0 mouvement)
+import { useStockProductOptions } from "@/hooks/use-operations";
 import {
   useQuoteTypes, useCreateQuoteType, useUpdateQuoteType, useDeleteQuoteType,
   type QuoteType as QuoteTypeModel,
@@ -456,16 +459,20 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 //  - entity_id NON envoyé (dérivé du client côté backend)
 //  - le composant est monté avec une `key` par le parent → reset propre
 
-// Une ligne du devis en cours d'édition. `product_id` null = ligne libre.
+// Une ligne du devis en cours d'édition.
+// kind : 'catalog' = prestation du catalogue, 'free' = ligne libre,
+//        'stock'   = produit du stock (chiffrage seul, AUCUN mouvement).
+type LineKind = "catalog" | "free" | "stock";
 type DraftItem = {
   uid: string;            // clé React stable (pas l'index)
-  product_id: number | null;
+  kind: LineKind;
+  product_id: number | null;       // prestation catalogue (kind = catalog)
+  stock_product_id: number | null; // produit du stock (kind = stock)
   label: string;
   quantity: string;
   unit_price: string;
   vat_rate_id: number | null;
   item_type: string;
-  free: boolean;          // true = ligne libre (pas de select prestation)
 };
 
 let _uidSeq = 0;
@@ -493,6 +500,9 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
   const { data: products } = useProducts({ status: "active", per_page: 100 });
   const { data: vatRates } = useVatRates();
   const { data: quoteTypes } = useQuoteTypes({ status: "active" });
+  // 2026-05-21 — produits du stock (consommables/matériel). Chiffrage SEUL :
+  // un devis ne déclenche aucun mouvement de stock.
+  const { data: stockOptions } = useStockProductOptions();
 
   const [clientId, setClientId] = useState("");
   const [quoteTypeId, setQuoteTypeId] = useState("none");
@@ -520,17 +530,15 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
   );
 
   // --- Lignes ---------------------------------------------------------------
-  const addCatalogLine = () =>
-    setItems((arr) => [
-      ...arr,
-      { uid: nextUid(), product_id: null, label: "", quantity: "1", unit_price: "0", vat_rate_id: null, item_type: "forfait", free: false },
-    ]);
+  const blankLine = (kind: LineKind): DraftItem => ({
+    uid: nextUid(), kind, product_id: null, stock_product_id: null,
+    label: "", quantity: "1", unit_price: "0", vat_rate_id: null,
+    item_type: kind === "stock" ? "produit" : "forfait",
+  });
 
-  const addFreeLine = () =>
-    setItems((arr) => [
-      ...arr,
-      { uid: nextUid(), product_id: null, label: "", quantity: "1", unit_price: "0", vat_rate_id: null, item_type: "forfait", free: true },
-    ]);
+  const addCatalogLine = () => setItems((arr) => [...arr, blankLine("catalog")]);
+  const addFreeLine = () => setItems((arr) => [...arr, blankLine("free")]);
+  const addStockLine = () => setItems((arr) => [...arr, blankLine("stock")]);
 
   const removeLine = (uid: string) => setItems((arr) => arr.filter((it) => it.uid !== uid));
 
@@ -551,6 +559,19 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
     });
   };
 
+  // Choix d'un produit du stock → pré-remplit le label depuis le produit.
+  // Le prix n'est pas porté par stock_products (consommable) → laissé à saisir.
+  const pickStockProduct = (uid: string, stockIdStr: string) => {
+    const sid = parseInt(stockIdStr, 10);
+    const sp = stockOptions?.find((x) => x.id === sid);
+    if (!sp) return;
+    updateLine(uid, {
+      stock_product_id: sp.id,
+      label: sp.reference ? `${sp.name} (${sp.reference})` : sp.name,
+      item_type: "produit",
+    });
+  };
+
   // Charge une ligne par client_prestation de la mission sélectionnée.
   // unit_price = custom_price ?? base_price ?? product.price.
   const loadMissionPrestations = () => {
@@ -566,13 +587,14 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         : undefined;
       return {
         uid: nextUid(),
+        kind: "catalog" as LineKind,
         product_id: pr.product_id ?? null,
+        stock_product_id: null,
         label: pr.label,
         quantity: "1",
         unit_price: String(Number(price) || 0),
         vat_rate_id: catalogProduct?.vat_rate_id ?? null,
         item_type: productTypeToItemType(catalogProduct?.type ?? pr.billing_type),
-        free: false,
       };
     });
     setItems((arr) => [...arr, ...loaded]);
@@ -631,6 +653,8 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
           item_type: it.item_type,
           vat_rate_id: it.vat_rate_id,
           product_id: it.product_id,
+          // 2026-05-21 — produit du stock chiffré (chiffrage seul, 0 mouvement)
+          stock_product_id: it.stock_product_id,
         })),
       });
       toast.success("Devis créé");
@@ -730,9 +754,12 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
           <div className="space-y-2 border-t pt-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Lignes du devis</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={addCatalogLine} className="cursor-pointer">
                   <Plus className="h-3.5 w-3.5 mr-1" /> Prestation du catalogue
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={addStockLine} className="cursor-pointer">
+                  <Boxes className="h-3.5 w-3.5 mr-1" /> Produit du stock
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={addFreeLine} className="cursor-pointer">
                   <PencilLine className="h-3.5 w-3.5 mr-1" /> Ligne libre
@@ -742,27 +769,34 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
 
             {items.length === 0 && (
               <p className="text-xs text-muted-foreground py-3 text-center border rounded-lg border-dashed">
-                Aucune ligne. Ajoutez une prestation du catalogue, une ligne libre,
-                ou chargez les prestations d'une mission.
+                Aucune ligne. Ajoutez une prestation du catalogue, un produit du
+                stock, une ligne libre, ou chargez les prestations d'une mission.
               </p>
             )}
 
             {items.map((it) => (
               <div key={it.uid} className="rounded-lg border p-2.5 space-y-2">
                 <div className="flex items-center gap-2">
-                  {it.free ? (
+                  {it.kind === "free" && (
                     <Badge variant="secondary" className="text-[10px] shrink-0">Libre</Badge>
-                  ) : (
+                  )}
+                  {it.kind === "catalog" && (
                     <Badge variant="outline" className="text-[10px] shrink-0">Catalogue</Badge>
                   )}
-                  {it.free ? (
+                  {it.kind === "stock" && (
+                    <Badge className="text-[10px] shrink-0 bg-amber-500/15 text-amber-700 border-amber-500/30">
+                      Stock
+                    </Badge>
+                  )}
+                  {it.kind === "free" && (
                     <Input
                       placeholder="Désignation (ex : frais de déplacement, remise…)"
                       value={it.label}
                       onChange={(e) => updateLine(it.uid, { label: e.target.value })}
                       className="flex-1"
                     />
-                  ) : (
+                  )}
+                  {it.kind === "catalog" && (
                     <Select
                       value={it.product_id ? String(it.product_id) : ""}
                       onValueChange={(v) => pickProduct(it.uid, v)}
@@ -779,6 +813,32 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
                       </SelectContent>
                     </Select>
                   )}
+                  {it.kind === "stock" && (
+                    <Select
+                      value={it.stock_product_id ? String(it.stock_product_id) : ""}
+                      onValueChange={(v) => pickStockProduct(it.uid, v)}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="— Choisir un produit du stock —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(stockOptions ?? []).length === 0 && (
+                          <SelectItem value="__none" disabled>
+                            Aucun produit en stock actif
+                          </SelectItem>
+                        )}
+                        {stockOptions?.map((sp) => (
+                          <SelectItem key={sp.id} value={String(sp.id)}>
+                            {sp.name}
+                            {sp.reference ? ` · ${sp.reference}` : ""}
+                            <span className="text-muted-foreground ml-1">
+                              (stock : {sp.current_quantity})
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeLine(it.uid)}
@@ -789,15 +849,15 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
                 <div className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
-                  {/* Le label catalogue reste éditable une fois la prestation choisie */}
-                  {!it.free && (
+                  {/* Le label catalogue/stock reste éditable une fois l'item choisi */}
+                  {it.kind !== "free" && (
                     <Input
                       placeholder="Désignation"
                       value={it.label}
                       onChange={(e) => updateLine(it.uid, { label: e.target.value })}
                     />
                   )}
-                  {it.free && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
+                  {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
                   <Input
                     type="number" step="0.01" min="0" placeholder="Qté"
                     value={it.quantity}
@@ -821,6 +881,12 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
                     </SelectContent>
                   </Select>
                 </div>
+                {it.kind === "stock" && (
+                  <p className="text-[10px] text-amber-700">
+                    Produit du stock — chiffrage seul : le devis ne décompte
+                    aucun stock. Le décompte aura lieu en l'ajoutant à la mission.
+                  </p>
+                )}
                 <p className="text-right text-xs text-muted-foreground">
                   Sous-total ligne : {(parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0")).toFixed(2)} €
                 </p>

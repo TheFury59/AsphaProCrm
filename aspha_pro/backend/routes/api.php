@@ -92,6 +92,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('missions/{mission}/prestations', [MissionController::class, 'storePrestation']);
     Route::patch('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'updatePrestation']);
     Route::delete('missions/{mission}/prestations/{prestationId}', [MissionController::class, 'destroyPrestation']);
+    // Produits / consommables de la mission (décompte de stock automatique)
+    Route::get('missions/{mission}/stock-items', [MissionController::class, 'listStockItems']);
+    Route::post('missions/{mission}/stock-items', [MissionController::class, 'storeStockItem']);
+    Route::patch('missions/{mission}/stock-items/{id}', [MissionController::class, 'updateStockItem']);
+    Route::delete('missions/{mission}/stock-items/{id}', [MissionController::class, 'destroyStockItem']);
 
     // === Tickets clients (réclamations, signalements, commandes consommables) ===
     Route::apiResource('client-requests', ClientRequestController::class)
@@ -210,6 +215,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // === Phase 6 — Stock par entité ===
     Route::prefix('stock')->controller(StockController::class)->group(function () {
         Route::get('products', 'index');
+        // Liste plate (non paginée) pour les sélecteurs devis/missions
+        Route::get('products/options', 'options');
         Route::post('products', 'store');
         Route::patch('products/{stockProduct}', 'update');
         Route::delete('products/{stockProduct}', 'destroy');

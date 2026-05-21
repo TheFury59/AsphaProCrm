@@ -1,5 +1,76 @@
 # Aspha Pro — Todo
 
+## 📦 2026-05-21 — Produits de stock dans les devis et les missions
+
+Objectif : ajouter des produits de stock (consommables/matériel) aux devis
+(chiffrage seul, 0 mouvement) et aux missions (décompte immédiat du stock).
+
+### Plan
+- [x] Étape 0 — Exploration (StockController, modèles, QuoteController, MissionController)
+- [x] Étape 1a — Migration : `stock_product_id` nullable sur `quote_items` + `invoice_items`
+- [x] Étape 1b — Modèles QuoteItem/InvoiceItem : fillable + relation `stockProduct`
+- [x] Étape 1c — QuoteController store/update : accepter/persister `stock_product_id` (0 mouvement)
+- [x] Étape 1d — convertToInvoice / convertToMission : propager les lignes produit stock
+- [x] Étape 1e — CreateQuoteDialog : 3e bouton « Produit du stock »
+- [x] Étape 2a — Migration : table `mission_stock_items`
+- [x] Étape 2b — Modèle MissionStockItem + relation `Mission::stockItems()`
+- [x] Étape 2c — Services `StockMovementService` + `MissionStockService` (factorisation)
+- [x] Étape 2d — Endpoints REST `missions/{mission}/stock-items` (GET/POST/PATCH/DELETE)
+      avec décompte automatique en transaction
+- [x] Étape 2e — Hooks frontend `use-mission-stock` + `useStockProductOptions`
+- [x] Étape 2f — Zone « Produits / consommables » dans Create + EditMissionPage
+- [x] Étape 3 — Vérif : php -l, tsc, migrate, tinker, navigateur réel
+
+### Review (vérifié end-to-end via tinker + navigateur)
+
+**Migrations** (idempotentes, PostgreSQL/SQLite, rollback+up testé) :
+- `2026_05_21_150000_add_stock_product_to_quote_and_invoice_items` — FK nullable
+  `stock_product_id` (`nullOnDelete`) sur `quote_items` ET `invoice_items`.
+- `2026_05_21_150100_create_mission_stock_items_table` — table de liaison
+  `mission_stock_items` : `mission_id` (cascade), `stock_product_id` (nullable
+  `nullOnDelete` — null = ligne libre), `label`, `quantity` decimal, `unit_price`
+  decimal, timestamps.
+
+**Backend** :
+- `StockMovementService` — factorise l'application d'un mouvement (delta +
+  `current_quantity` clampée à 0). `MissionStockService` — add/update/remove
+  d'une ligne mission AVEC décompte (sortie à l'ajout, entrée au retrait,
+  ajustement par delta à la modif de quantité ; ligne libre = 0 mouvement).
+- DEVIS : `QuoteController::store/update` accepte `items.*.stock_product_id`.
+  AUCUN mouvement de stock. `convertToInvoice` propage `stock_product_id` ;
+  `convertToMission` transforme les lignes produit-stock en `mission_stock_items`
+  (et déclenche alors le décompte) — les autres lignes restent des prestations.
+- MISSION : 4 endpoints `GET/POST/PATCH/DELETE /missions/{mission}/stock-items`.
+  Décompte en transaction. Stock insuffisant NON bloquant (clamp à 0, cohérent
+  avec `StockController` existant) — info `low_stock` renvoyée.
+- `StockController::options` + route `GET /stock/products/options` (liste plate
+  pour les sélecteurs).
+
+**Frontend** :
+- `CreateQuoteDialog` : 3e bouton « Produit du stock » à côté de « Prestation du
+  catalogue » / « Ligne libre ». Sélecteur catalogue stock, badge « Stock »,
+  hint « chiffrage seul ». `stock_product_id` envoyé dans le payload.
+- `MissionStockSection` (composant partagé, 2 modes) : `Draft` pour
+  CreateMissionPage (collecté en local, persisté après création de la mission),
+  `Live` pour EditMissionPage (mutations immédiates → décompte temps réel).
+- Hooks `use-mission-stock.ts` (CRUD) + `useStockProductOptions`.
+
+**Preuve des tests** :
+- tinker service : add (100→88, 1 mvt out), update 12→20 (→80), 20→5 (→95),
+  remove (→100), ligne libre (0 mvt), devis avec produit stock (0 mvt),
+  stock insuffisant 250/100 (clamp à 0, pas d'exception). 7/7 OK.
+- tinker HTTP : POST/GET/PATCH/DELETE stock-items (201/200/200/204), décompte
+  50→42→47→50, options 200. OK.
+- tinker conversion : devis accepté → mission, ligne produit-stock devient
+  `mission_stock_item` + 1 mouvement, ligne prestation reste `client_prestation`,
+  devis lui-même 0 mouvement. OK.
+- Navigateur réel : CreateMissionPage → mission créée avec produit stock,
+  `stock_products.current_quantity` 40→39 ; EditMissionPage affiche la zone
+  produits + delete → 39→40. Validation « choisis un produit du stock » OK.
+  0 erreur console.
+- `php -l` 0 erreur (11 fichiers), `tsc --noEmit` 0 erreur, `migrate` OK,
+  suite de tests passe (2/2).
+
 ## ✅ 2026-05-21 — Workflow de validation des devis par le client (extranet)
 
 Objectif : admin envoie un devis (`sent`) → client notifié → client consulte +

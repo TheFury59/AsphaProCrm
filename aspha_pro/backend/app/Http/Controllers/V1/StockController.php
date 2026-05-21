@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1;
 use App\Http\Controllers\Controller;
 use App\Models\StockMovement;
 use App\Models\StockProduct;
+use App\Services\StockMovementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -103,6 +104,8 @@ class StockController extends Controller
         ]);
 
         return DB::transaction(function () use ($data, $stockProduct, $request) {
+            // L'ajustement n'a pas d'équivalent dans le service (delta calculé
+            // par rapport à la quantité actuelle) : conservé en local.
             $delta = match ($data['movement_type']) {
                 'in' => $data['quantity'],
                 'out' => -$data['quantity'],
@@ -131,6 +134,30 @@ class StockController extends Controller
                 ],
             ], 201);
         });
+    }
+
+    /**
+     * GET /api/v1/stock/products/all — liste plate (non paginée) des produits
+     * de stock actifs, pour les sélecteurs (devis, missions).
+     *
+     * Permission `stock.view` requise comme `index`.
+     */
+    public function options(Request $request)
+    {
+        abort_unless($request->user()?->can('stock.view'), 403);
+
+        $query = StockProduct::query()
+            ->where('status', 'active')
+            ->with('category:id,label')
+            ->orderBy('name');
+
+        if ($entityId = $request->integer('entity_id')) {
+            $query->where('entity_id', $entityId);
+        }
+
+        return ['data' => $query->get([
+            'id', 'entity_id', 'category_id', 'name', 'reference', 'unit', 'current_quantity',
+        ])];
     }
 
     /**
