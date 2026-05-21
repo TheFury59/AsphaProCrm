@@ -87,7 +87,10 @@ class ExtranetController extends Controller
     {
         $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
+        // Factures en brouillon (`draft`) non visibles du client tant que
+        // l'admin ne les a pas envoyées. 2026-05-21.
         $invoices = \App\Models\Invoice::where('client_id', $client->id)
+            ->where('status', '!=', 'draft')
             ->orderByDesc('invoice_date')
             ->get();
         return ['data' => $invoices];
@@ -97,7 +100,10 @@ class ExtranetController extends Controller
     {
         $client = Client::where('portal_user_id', $request->user()->id)->first();
         abort_unless($client, 404);
+        // Devis en brouillon (`draft`) non visibles du client : il ne voit
+        // que les devis envoyés / validés / refusés. 2026-05-21.
         return ['data' => Quote::where('client_id', $client->id)
+            ->where('status', '!=', 'draft')
             ->with('items')
             ->orderByDesc('id')
             ->get()];

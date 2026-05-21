@@ -616,9 +616,11 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
     setMissionId("none");
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  // 2026-05-21 — deux modes d'enregistrement :
+  //  - 'draft' : brouillon, NON visible côté client
+  //  - 'sent'  : envoyé → visible côté client « en attente de validation »,
+  //              + notification au client (gérée par QuoteObserver)
+  const handleSave = async (status: "draft" | "sent") => {
     // Validation métier au clic (jamais de submit disabled — cf. convention projet)
     const errors: string[] = [];
     if (!clientId) errors.push("Le client est requis.");
@@ -645,6 +647,7 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         quote_date: quoteDate,
         validity_date: validityDate || null,
         nature,
+        status,
         comment: comment.trim() || null,
         items: validItems.map((it) => ({
           label: it.label.trim(),
@@ -656,13 +659,15 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
           // 2026-05-21 — produit du stock chiffré (chiffrage seul, 0 mouvement)
           stock_product_id: it.stock_product_id,
         })),
-      });
-      toast.success("Devis créé");
+      } as any);
+      toast.success(status === "sent"
+        ? "Devis envoyé au client (en attente de validation)"
+        : "Devis enregistré en brouillon");
       onClose();
     } catch (err) {
       // toast.error explicite + console.error avec payload pour debug (cf. convention projet)
-      toast.error(apiErrorMessage(err, "Échec de la création du devis"));
-      console.error("Création devis échouée", err);
+      toast.error(apiErrorMessage(err, "Échec de l'enregistrement du devis"));
+      console.error("Enregistrement devis échoué", err);
     }
   };
 
@@ -670,7 +675,7 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:!max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nouveau devis</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleSave("draft"); }} className="space-y-4">
           {/* --- Client + Type --- */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -914,13 +919,18 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
             Total HT : {total.toFixed(2)} €
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={create.isPending} className="cursor-pointer">
               Annuler
             </Button>
-            <Button type="submit" disabled={create.isPending}
+            <Button type="button" variant="outline" disabled={create.isPending}
+              onClick={() => handleSave("draft")} className="cursor-pointer">
+              {create.isPending ? "Enregistrement…" : "Enregistrer en brouillon"}
+            </Button>
+            <Button type="button" disabled={create.isPending}
+              onClick={() => handleSave("sent")}
               className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer">
-              {create.isPending ? "Création…" : "Créer le devis"}
+              {create.isPending ? "Envoi…" : "Enregistrer et envoyer au client"}
             </Button>
           </DialogFooter>
         </form>
