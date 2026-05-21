@@ -133,10 +133,29 @@ export type StockProduct = {
   unit: "unit" | "liter" | "kg" | "pack";
   alert_threshold: number;
   current_quantity: number;
+  purchase_price: number | string | null;
+  selling_price: number | string | null;
+  supplier_id: number | null;
   status: "active" | "inactive";
   category?: { id: number; label: string } | null;
+  supplier?: { id: number; name: string } | null;
   [k: string]: any;
 };
+
+/** Fournisseur allégé — sélecteur produit de stock. */
+export type SupplierOption = { id: number; name: string };
+
+/** Liste des fournisseurs actifs pour les sélecteurs (produits de stock). */
+export function useSuppliers() {
+  return useQuery({
+    queryKey: ["referentials", "suppliers"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: SupplierOption[] }>("/referentials/suppliers");
+      return data.data;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
 
 export type StockMovement = {
   id: number;

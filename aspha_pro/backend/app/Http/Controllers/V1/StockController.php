@@ -56,9 +56,12 @@ class StockController extends Controller
             'unit' => ['required', 'in:unit,liter,kg,pack'],
             'alert_threshold' => ['required', 'integer', 'min:0'],
             'current_quantity' => ['required', 'integer', 'min:0'],
+            'purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'selling_price' => ['nullable', 'numeric', 'min:0'],
+            'supplier_id' => ['nullable', 'exists:suppliers,id'],
         ]);
         $product = StockProduct::create($data + ['status' => 'active']);
-        return response()->json(['data' => $product->load('category:id,label')], 201);
+        return response()->json(['data' => $product->load(['category:id,label', 'supplier:id,name'])], 201);
     }
 
     public function update(Request $request, StockProduct $stockProduct)
@@ -70,9 +73,12 @@ class StockController extends Controller
             'unit' => ['sometimes', 'in:unit,liter,kg,pack'],
             'alert_threshold' => ['sometimes', 'integer', 'min:0'],
             'category_id' => ['sometimes', 'nullable', 'exists:stock_categories,id'],
+            'purchase_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'selling_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'supplier_id' => ['sometimes', 'nullable', 'exists:suppliers,id'],
             'status' => ['sometimes', 'in:active,inactive'],
         ]));
-        return ['data' => $stockProduct->fresh()];
+        return ['data' => $stockProduct->fresh(['category:id,label', 'supplier:id,name'])];
     }
 
     public function destroy(Request $request, StockProduct $stockProduct)

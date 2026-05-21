@@ -16,6 +16,9 @@ class StockProduct extends Model
         'unit',
         'alert_threshold',
         'current_quantity',
+        'purchase_price',
+        'selling_price',
+        'supplier_id',
         'status',
     ];
 
@@ -23,6 +26,8 @@ class StockProduct extends Model
     {
         return [
             'created_at' => 'datetime',
+            'purchase_price' => 'decimal:2',
+            'selling_price' => 'decimal:2',
         ];
     }
 
@@ -34,6 +39,11 @@ class StockProduct extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(StockCategory::class, 'category_id');
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
     }
 
     public function consumableReorders(): HasMany

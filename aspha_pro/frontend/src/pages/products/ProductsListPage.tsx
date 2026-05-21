@@ -31,16 +31,12 @@ const TYPE_LABELS: Record<string, string> = {
   exceptional: "Exceptionnel",
 };
 
-// Note : la « nature » (régulier/ponctuel) n'est plus une propriété du
-// catalogue depuis 2026-05-21. Elle dépend du contrat client et se gère
-// désormais sur la prestation contractualisée d'une mission.
-
-const BILLING_MODE_LABELS: Record<string, string> = {
-  per_intervention: "Par intervention",
-  per_month: "Par mois",
-  per_week: "Par semaine",
-  per_unit: "À l'unité",
-};
+// Note : la « nature » (régulier/ponctuel) et le « mode de facturation »
+// (per_intervention / per_month / per_week / per_unit) ne sont plus des
+// propriétés du catalogue depuis 2026-05-21. Ils se choisissent au moment du
+// devis / de la mission. La colonne `products.billing_mode` reste en BDD pour
+// la rétro-compat (devis/missions existants) ; le backend lui applique un
+// défaut neutre côté store.
 
 export function ProductsListPage() {
   const [search, setSearch] = useState("");
@@ -159,7 +155,6 @@ function ProductFormDialog({ product, onClose }: {
   const [status, setStatus] = useState(product?.status ?? "active");
   const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
   const [type, setType] = useState(product?.type ?? "hourly");
-  const [billingMode, setBillingMode] = useState(product?.billing_mode ?? "per_intervention");
   const [categoryId, setCategoryId] = useState<string>(product?.category_id ? String(product.category_id) : "none");
   const [duration, setDuration] = useState<string>(product?.default_duration_minutes != null ? String(product.default_duration_minutes) : "");
   const [price, setPrice] = useState<string>(product?.price != null ? String(product.price) : "");
@@ -200,7 +195,6 @@ function ProductFormDialog({ product, onClose }: {
       status,
       entity_id: entityId === "none" ? null : Number(entityId),
       type,
-      billing_mode: billingMode,
       category_id: categoryId === "none" ? null : Number(categoryId),
       default_duration_minutes: duration === "" ? null : Number(duration),
       price: Number(price),
@@ -291,24 +285,14 @@ function ProductFormDialog({ product, onClose }: {
           </div>
 
           {/* Classification */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Facturation">
-              <Select value={billingMode} onValueChange={setBillingMode}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(BILLING_MODE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
+          <Field label="Type">
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Catégorie">

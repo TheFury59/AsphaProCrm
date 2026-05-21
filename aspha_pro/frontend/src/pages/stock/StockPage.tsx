@@ -37,6 +37,7 @@ import {
   useCreateStockProduct,
   useStockAlerts,
   useStockProducts,
+  useSuppliers,
   type StockProduct,
 } from "@/hooks/use-operations";
 import { apiErrorMessage } from "@/lib/api";
@@ -191,12 +192,40 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
     unit: "unit" as "unit" | "liter" | "kg" | "pack",
     alert_threshold: 10,
     current_quantity: 0,
+    purchase_price: "",
+    selling_price: "",
+    supplier_id: "none",
   });
   const create = useCreateStockProduct();
+  const { data: suppliers } = useSuppliers();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    create.mutate(form, {
+    // Validation métier : prix optionnels, mais s'ils sont saisis ils doivent
+    // être des nombres positifs (submit jamais disabled — on valide au clic).
+    const errors: string[] = [];
+    if (form.purchase_price !== "" && (isNaN(Number(form.purchase_price)) || Number(form.purchase_price) < 0))
+      errors.push("Le prix d'achat doit être un nombre positif.");
+    if (form.selling_price !== "" && (isNaN(Number(form.selling_price)) || Number(form.selling_price) < 0))
+      errors.push("Le prix de vente doit être un nombre positif.");
+    if (errors.length > 0) {
+      toast.error(errors.join(" "));
+      return;
+    }
+
+    const payload = {
+      entity_id: form.entity_id,
+      name: form.name,
+      reference: form.reference,
+      unit: form.unit,
+      alert_threshold: form.alert_threshold,
+      current_quantity: form.current_quantity,
+      purchase_price: form.purchase_price === "" ? null : Number(form.purchase_price),
+      selling_price: form.selling_price === "" ? null : Number(form.selling_price),
+      supplier_id: form.supplier_id === "none" ? null : Number(form.supplier_id),
+    };
+
+    create.mutate(payload, {
       onSuccess: () => {
         toast.success("Produit créé");
         onClose();
@@ -275,6 +304,45 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setForm({ ...form, alert_threshold: +e.target.value })}
               />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1">
+              <Label>Prix d'achat (€)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                placeholder="—"
+                value={form.purchase_price}
+                onChange={(e) => setForm({ ...form, purchase_price: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>Prix de vente (€)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                placeholder="—"
+                value={form.selling_price}
+                onChange={(e) => setForm({ ...form, selling_price: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid gap-1">
+            <Label>Fournisseur</Label>
+            <Select
+              value={form.supplier_id}
+              onValueChange={(v) => setForm({ ...form, supplier_id: v })}
+            >
+              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— Aucun —</SelectItem>
+                {suppliers?.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

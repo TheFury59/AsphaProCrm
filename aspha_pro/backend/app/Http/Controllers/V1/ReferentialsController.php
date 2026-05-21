@@ -9,6 +9,7 @@ use App\Models\Entity;
 use App\Models\JobReference;
 use App\Models\ProductCategory;
 use App\Models\Skill;
+use App\Models\Supplier;
 use App\Models\VatRate;
 use Illuminate\Http\Request;
 
@@ -52,5 +53,10 @@ class ReferentialsController extends Controller
     public function productCategories(Request $request)
     {
         return ['data' => ProductCategory::where('status', 'active')->orderBy('label')->get()];
+    }
+
+    public function suppliers(Request $request)
+    {
+        return ['data' => Supplier::where('status', 'active')->orderBy('name')->get(['id', 'name'])];
     }
 }

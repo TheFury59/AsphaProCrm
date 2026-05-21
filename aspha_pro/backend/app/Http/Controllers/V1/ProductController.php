@@ -60,6 +60,13 @@ class ProductController extends Controller
         // (devis/factures historiques) ; on lui donne un défaut neutre 'regular'.
         $data['nature'] = $data['nature'] ?? 'regular';
 
+        // `billing_mode` n'est plus saisi dans le catalogue (refonte 2026-05-21 :
+        // le mode de facturation se choisit au moment du devis / de la mission,
+        // pas du produit). La colonne `products.billing_mode` est conservée en
+        // BDD pour la rétro-compat (devis/missions existants) ; défaut neutre
+        // 'per_intervention'.
+        $data['billing_mode'] = $data['billing_mode'] ?? 'per_intervention';
+
         $product = DB::transaction(function () use ($data, $tiers) {
             $product = Product::create($data);
             $this->syncPriceTiers($product, $tiers, $data['has_degressive_pricing'] ?? false);
@@ -144,7 +151,11 @@ class ProductController extends Controller
             // désormais au niveau de la prestation contractualisée (mission),
             // pas du catalogue. Conservée en `nullable` pour la rétro-compat.
             'nature' => ['nullable', 'in:regular,punctual'],
-            'billing_mode' => [$req('required'), 'in:per_intervention,per_month,per_week,per_unit'],
+            // `billing_mode` n'est plus saisi dans le catalogue (refonte
+            // 2026-05-21) : le mode de facturation se choisit au moment du
+            // devis / de la mission. Conservé en `nullable` pour la rétro-compat
+            // ; défaut neutre 'per_intervention' appliqué au store().
+            'billing_mode' => ['nullable', 'in:per_intervention,per_month,per_week,per_unit'],
             'category_id' => ['nullable', 'exists:product_categories,id'],
             'default_duration_minutes' => ['nullable', 'integer', 'min:0'],
             'price' => [$req('required'), 'numeric', 'min:0'],

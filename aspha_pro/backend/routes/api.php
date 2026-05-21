@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/referentials/job-references', [ReferentialsController::class, 'jobReferences']);
     Route::get('/referentials/vat-rates', [ReferentialsController::class, 'vatRates']);
     Route::get('/referentials/product-categories', [ReferentialsController::class, 'productCategories']);
+    Route::get('/referentials/suppliers', [ReferentialsController::class, 'suppliers']);
 
     // Clients
     Route::apiResource('clients', ClientController::class);
@@ -101,6 +102,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // === Tickets clients (réclamations, signalements, commandes consommables) ===
     Route::apiResource('client-requests', ClientRequestController::class)
         ->parameters(['client-requests' => 'clientRequest']);
+    // Fil de discussion + affectation d'intervenant(s) sur un ticket.
+    Route::get('client-requests/{clientRequest}/messages', [ClientRequestController::class, 'listMessages']);
+    Route::post('client-requests/{clientRequest}/messages', [ClientRequestController::class, 'storeMessage']);
+    Route::post('client-requests/{clientRequest}/employees', [ClientRequestController::class, 'attachEmployee']);
+    Route::delete('client-requests/{clientRequest}/employees/{employeeId}', [ClientRequestController::class, 'detachEmployee']);
+    // Tickets d'un intervenant (affectés OU créés) — onglet fiche intervenant admin.
+    Route::get('employees/{employee}/client-requests', [ClientRequestController::class, 'forEmployee']);
 
     // === Accès extranet client (création / reset / email / révocation) ===
     Route::post('clients/{client}/portal-access', [ClientPortalAccessController::class, 'create']);
@@ -277,6 +285,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('my-clients', 'intervenantMyClients');
         Route::get('tickets', 'intervenantTickets');
         Route::post('tickets', 'createIntervenantTicket');
+        // Fil de discussion d'un ticket — ownership strict (créateur ou affecté).
+        Route::get('tickets/{ticket}/messages', 'intervenantTicketMessages');
+        Route::post('tickets/{ticket}/messages', 'postIntervenantTicketMessage');
     });
     Route::prefix('extranet/client')->controller(ExtranetController::class)->group(function () {
         Route::get('profile', 'clientProfile');
@@ -291,6 +302,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('prestations', 'clientPrestations');
         Route::get('tickets', 'clientTickets');
         Route::post('tickets', 'createClientTicket');
+        // Fil de discussion d'un ticket — ownership strict (le ticket
+        // appartient au client lié au portal_user_id de l'utilisateur).
+        Route::get('tickets/{ticket}/messages', 'clientTicketMessages');
+        Route::post('tickets/{ticket}/messages', 'postClientTicketMessage');
     });
 
     // === Tableau de bord (KPI agrégés, admins uniquement) ===

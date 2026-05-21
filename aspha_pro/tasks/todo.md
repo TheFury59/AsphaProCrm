@@ -1,5 +1,70 @@
 # Aspha Pro — Todo
 
+## 🎯 2026-05-21 — Missions / devis / RDV ponctuels (agent dédié)
+
+### TÂCHE 1 — Bug format horaire à la modification de mission
+- [ ] Backend `MissionController` : `date_format:H:i,H:i:s` sur `recurrence_start_time`
+      et `recurrence_end_time` (lignes 214-215 `updatePrestation` + 255-256 `prestationRules`)
+- [ ] Frontend `PrestationFormCard` : helper `toTimeInput(v) => v?.slice(0,5)` ;
+      `EditMissionPage::toDraft` normalise les heures rechargées en `HH:MM`
+
+### TÂCHE 2 — Mission créée → devis brouillon auto
+- [ ] Service `MissionQuoteGenerator` : génère un `Quote` draft à la création de
+      mission avec prestations (1 `QuoteItem` par prestation, réf `QUO`, anti-doublon)
+- [ ] `MissionController::store` appelle le service en transaction ; le devis
+      pointe la mission via `missions.quote_id`
+
+### TÂCHE 3 — RDV ponctuel → mission + devis auto
+- [ ] `CreateInterventionDialog` : étape « Prestations » (multi-sélection catalogue)
+      pour le mode ponctuel non rattaché à une mission
+- [ ] `InterventionController::store` : si prestations choisies → crée mission active
+      + `client_prestations` (nature `punctual`) + devis draft + lie l'intervention
+- [ ] RDV sans prestation = comportement actuel inchangé
+
+### Vérification
+- [ ] `php -l`, `npx tsc --noEmit`, `php artisan migrate` → 0 erreur
+- [ ] tinker : modif mission (plus de 422), mission → devis draft, RDV ponctuel → mission+devis+intervention
+
+## 💰 2026-05-21 — Champs produits stock + retrait billing_mode catalogue
+
+### Tâche 1 — Champs produits de stock
+- [x] Migration idempotente : purchase_price, selling_price, supplier_id sur stock_products
+- [x] Modèle StockProduct : fillable + casts decimal + relation supplier()
+- [x] StockController::store + update : valider/persister les 3 champs
+- [x] Endpoint référentiel suppliers + route
+- [x] Hook useSuppliers
+- [x] Formulaire StockPage : 2 champs prix + Select fournisseur
+- [x] Type StockProduct frontend
+
+### Tâche 2 — Retrait billing_mode catalogue
+- [x] ProductsListPage : retirer champ Facturation + BILLING_MODE_LABELS
+- [x] ProductController : billing_mode nullable + défaut per_intervention
+- [x] Vérifier devis/missions non cassés
+
+### Vérification
+- [x] php -l (5 fichiers) 0 erreur, tsc --noEmit 0 erreur, migrate OK, suite 2/2
+
+### Review
+- Migration `2026_05_21_160000_add_prices_and_supplier_to_stock_products` :
+  `purchase_price`/`selling_price` decimal(12,2) nullable + `supplier_id` FK
+  nullable `nullOnDelete` vers `suppliers`. Idempotente (`Schema::hasColumn`),
+  pas de SQL spécifique → OK PostgreSQL/SQLite. Appliquée (batch 25).
+- `StockProduct` : 3 champs au `$fillable`, casts `decimal:2`, relation
+  `supplier()`. `StockController::store` (nullable numeric/exists) + `update`
+  (sometimes nullable) persistent les 3 champs ; eager-load `supplier:id,name`.
+- Endpoint `GET /referentials/suppliers` (fournisseurs actifs id+name) + route.
+- Front : hook `useSuppliers` (use-operations.ts), type `StockProduct` enrichi,
+  `CreateProductDialog` : 2 champs prix + Select fournisseur (« — Aucun — »),
+  validation au clic des prix (toast, submit jamais disabled).
+- Tâche 2 : `billing_mode` retiré du `ProductFormDialog` (champ Facturation,
+  state, payload, constante `BILLING_MODE_LABELS`). `ProductController` :
+  `billing_mode` passé `required`→`nullable`, défaut `per_intervention` au
+  store. Colonne `products.billing_mode` CONSERVÉE (rétro-compat) ;
+  `ProductResource`/`Product` model/type front intacts → devis/missions OK.
+- Tests tinker : StockProduct + 3 champs (relation supplier OK) ; StockCtrl
+  store 201 (prix+fournisseur) + update (prix modifié, supplier nulé) ;
+  ProductCtrl store sans billing_mode → 201, défaut `per_intervention` appliqué.
+
 ## 📦 2026-05-21 — Produits de stock dans les devis et les missions
 
 Objectif : ajouter des produits de stock (consommables/matériel) aux devis
@@ -566,3 +631,24 @@ Tout le travail "additionnel" qui n'est pas du code dans le repo :
 - Matching : score composite hardcodé 40/30/20/10 → simple et expliquable, ajustable plus tard
 - Géocodage : observer sur le model Address → transparent pour toutes les sources (création, update, import)
 - Messagerie : participants comme model standard (pas Pivot Spatie/Eloquent) → besoin d'updater last_read_at indépendamment
+
+## 🎫 2026-05-21 — Fil de discussion dans les tickets (ClientRequest)
+
+Objectif : transformer les tickets en outil d'échange avec fil de discussion,
+affectation d'intervenant(s), accès des 3 publics (admin/client/intervenant).
+
+### Plan
+- [ ] Migration `client_request_messages` (chat) — idempotente PG/SQLite
+- [ ] Migration `client_request_employee` (pivot affectation) — unique composite
+- [ ] Modèle `ClientRequestMessage` + relations `ClientRequest::messages()` / `assignedEmployees()`
+- [ ] `ClientRequestMessageObserver` → notifie tous les participants sauf l'auteur
+- [ ] `NotificationTypesSeeder` : type `client_request_message` (idempotent)
+- [ ] Endpoints admin : GET/POST messages + attach/detach intervenants
+- [ ] Endpoints extranet client : list/post message (ownership strict)
+- [ ] Endpoints extranet intervenant : list tickets affectés/créés + list/post message
+- [ ] Routes api.php
+- [ ] Frontend : hooks messages + intervenants + extranet
+- [ ] Frontend : fil de discussion dans TicketDetailPage (admin) + gestion intervenants
+- [ ] Frontend : fil dans extranet client + intervenant
+- [ ] Frontend : onglet tickets fiche intervenant (admin)
+- [ ] Vérif : php -l, tsc, migrate, tinker, navigateur
