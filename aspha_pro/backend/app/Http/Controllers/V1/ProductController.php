@@ -54,6 +54,12 @@ class ProductController extends Controller
         $tiers = $data['price_tiers'] ?? null;
         unset($data['price_tiers']);
 
+        // `nature` n'est plus saisie dans le catalogue (refonte 2026-05-21 :
+        // la nature régulier/ponctuel dépend du contrat client, pas du produit).
+        // La colonne `products.nature` est conservée en BDD pour la rétro-compat
+        // (devis/factures historiques) ; on lui donne un défaut neutre 'regular'.
+        $data['nature'] = $data['nature'] ?? 'regular';
+
         $product = DB::transaction(function () use ($data, $tiers) {
             $product = Product::create($data);
             $this->syncPriceTiers($product, $tiers, $data['has_degressive_pricing'] ?? false);
@@ -134,7 +140,10 @@ class ProductController extends Controller
             'name' => [$req('required'), 'string', 'max:255'],
             'entity_id' => ['nullable', 'exists:entities,id'],
             'type' => [$req('required'), 'in:hourly,forfait,frais,remise,carte,exceptional'],
-            'nature' => [$req('required'), 'in:regular,punctual'],
+            // `nature` n'est plus requise : la nature régulier/ponctuel se gère
+            // désormais au niveau de la prestation contractualisée (mission),
+            // pas du catalogue. Conservée en `nullable` pour la rétro-compat.
+            'nature' => ['nullable', 'in:regular,punctual'],
             'billing_mode' => [$req('required'), 'in:per_intervention,per_month,per_week,per_unit'],
             'category_id' => ['nullable', 'exists:product_categories,id'],
             'default_duration_minutes' => ['nullable', 'integer', 'min:0'],

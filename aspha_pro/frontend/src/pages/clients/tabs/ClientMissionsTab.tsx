@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   Briefcase, Plus, ChevronDown, ChevronRight, Trash2,
-  Package, FileText, MoreHorizontal,
+  Package, FileText, MoreHorizontal, Repeat, Lock, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -244,6 +244,14 @@ function PrestationRow({
         )}
       </div>
 
+      {prestation.nature === "regular" ? (
+        <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 h-5 text-[10px] gap-0.5">
+          <Repeat className="h-2.5 w-2.5" /> Récurrente
+        </Badge>
+      ) : (
+        <Badge variant="secondary" className="h-5 text-[10px]">Ponctuelle</Badge>
+      )}
+
       {prestation.billing_type && (
         <Badge variant="outline" className="text-[10px] h-5">{prestation.billing_type}</Badge>
       )}
@@ -295,6 +303,22 @@ function PrestationRow({
 // ADD PRESTATION DIALOG
 // =========================================================================
 
+// Jours de la semaine — codes alignés sur le moteur InterventionExpander.
+const WEEKDAYS = [
+  { code: "mon", label: "L" },
+  { code: "tue", label: "M" },
+  { code: "wed", label: "M" },
+  { code: "thu", label: "J" },
+  { code: "fri", label: "V" },
+  { code: "sat", label: "S" },
+  { code: "sun", label: "D" },
+] as const;
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function AddPrestationDialog({
   missionId,
   clientId,
@@ -311,28 +335,91 @@ function AddPrestationDialog({
   const [form, setForm] = useState({
     product_id: "",
     label: "",
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: todayStr(),
     end_date: "",
     billing_type: "hourly" as Prestation["billing_type"],
     pricing_type: "default" as "default" | "custom",
     custom_price: "",
     base_price: "",
+    // Nature + récurrence (refonte 2026-05-21)
+    nature: "punctual" as "regular" | "punctual",
+    recurrence_frequency: "weekly" as "daily" | "weekly" | "monthly" | "yearly",
+    recurrence_interval: 1,
+    recurrence_days_of_week: "mon",
+    recurrence_start_time: "09:00",
+    recurrence_end_time: "11:00",
+    recurrence_end_type: "never" as "never" | "on_date" | "after_occurrences",
+    recurrence_occurrences_count: "",
   });
 
-  // Auto-fill on product change
+  const isRecurring = form.nature === "regular";
+  const isCustomPrice = form.pricing_type === "custom";
+
+  // Auto-fill on product change : le prix base = prix catalogue (verrouillé).
   const handleProductChange = (productId: string) => {
     const p = products.find((x: any) => String(x.id) === productId);
     setForm((f) => ({
       ...f,
       product_id: productId,
       label: f.label || p?.name || "",
-      base_price: p?.price ? String(p.price) : f.base_price,
+      base_price: p?.price != null ? String(p.price) : "",
     }));
   };
 
+  const togglePricing = (custom: boolean) => {
+    setForm((f) => ({
+      ...f,
+      pricing_type: custom ? "custom" : "default",
+      custom_price: custom ? f.custom_price || f.base_price : "",
+    }));
+  };
+
+  const toggleDay = (code: string) => {
+    const days = form.recurrence_days_of_week.split(",").map((d) => d.trim()).filter(Boolean);
+    const next = days.includes(code) ? days.filter((d) => d !== code) : [...days, code];
+    const ordered = WEEKDAYS.filter((w) => next.includes(w.code)).map((w) => w.code);
+    setForm((f) => ({ ...f, recurrence_days_of_week: ordered.join(",") }));
+  };
+
+  const activeDays = form.recurrence_days_of_week.split(",").map((d) => d.trim());
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.label.trim()) return;
+    // Validation au clic (jamais de submit disabled pour règle métier).
+    const errs: string[] = [];
+    if (!form.label.trim()) errs.push("Libellé requis.");
+    if (isCustomPrice && (!form.custom_price || Number(form.custom_price) < 0)) {
+      errs.push("Prix personnalisé invalide.");
+    }
+    if (isRecurring) {
+      if (form.recurrence_frequency === "weekly" && !form.recurrence_days_of_week.trim()) {
+        errs.push("Choisis au moins un jour de la semaine.");
+      }
+      if (!form.recurrence_start_time || !form.recurrence_end_time) {
+        errs.push("Heures de début/fin requises.");
+      }
+      if (
+        form.recurrence_start_time &&
+        form.recurrence_end_time &&
+        form.recurrence_end_time <= form.recurrence_start_time
+      ) {
+        errs.push("L'heure de fin doit suivre l'heure de début.");
+      }
+      if (form.recurrence_end_type === "on_date" && !form.end_date) {
+        errs.push("Date de fin requise.");
+      }
+      if (
+        form.recurrence_end_type === "after_occurrences" &&
+        (!form.recurrence_occurrences_count || Number(form.recurrence_occurrences_count) < 1)
+      ) {
+        errs.push("Nombre d'occurrences invalide.");
+      }
+    }
+    if (errs.length > 0) {
+      toast.error(errs.join(" "));
+      return;
+    }
+
     try {
       await createPresta.mutateAsync({
         product_id: form.product_id ? Number(form.product_id) : null,
@@ -341,11 +428,29 @@ function AddPrestationDialog({
         end_date: form.end_date || null,
         billing_type: form.billing_type,
         pricing_type: form.pricing_type,
-        custom_price: form.pricing_type === "custom" && form.custom_price
-          ? Number(form.custom_price) : null,
+        custom_price:
+          isCustomPrice && form.custom_price ? Number(form.custom_price) : null,
         base_price: form.base_price ? Number(form.base_price) : null,
+        nature: form.nature,
+        recurrence_frequency: isRecurring ? form.recurrence_frequency : null,
+        recurrence_interval: isRecurring ? Number(form.recurrence_interval) || 1 : null,
+        recurrence_days_of_week:
+          isRecurring && form.recurrence_frequency === "weekly"
+            ? form.recurrence_days_of_week
+            : null,
+        recurrence_start_time: isRecurring ? form.recurrence_start_time : null,
+        recurrence_end_time: isRecurring ? form.recurrence_end_time : null,
+        recurrence_end_type: isRecurring ? form.recurrence_end_type : null,
+        recurrence_occurrences_count:
+          isRecurring && form.recurrence_end_type === "after_occurrences"
+            ? Number(form.recurrence_occurrences_count)
+            : null,
       });
-      toast.success("Prestation ajoutée");
+      toast.success(
+        isRecurring
+          ? "Prestation récurrente ajoutée · RDV à pourvoir généré"
+          : "Prestation ajoutée",
+      );
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.message ?? "Ajout impossible");
@@ -353,7 +458,7 @@ function AddPrestationDialog({
   };
 
   return (
-    <DialogContent className="sm:!max-w-xl">
+    <DialogContent className="sm:!max-w-xl max-h-[88vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Package className="h-4 w-4 text-primary" />
@@ -384,7 +489,6 @@ function AddPrestationDialog({
             placeholder="Ex: Ménage 2h"
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
-            required
           />
         </div>
 
@@ -406,51 +510,6 @@ function AddPrestationDialog({
               </SelectContent>
             </Select>
           </div>
-
-          <div>
-            <Label className="text-xs">Tarification</Label>
-            <Select
-              value={form.pricing_type}
-              onValueChange={(v) => setForm({ ...form, pricing_type: v as "default" | "custom" })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Tarif catalogue</SelectItem>
-                <SelectItem value="custom">Tarif personnalisé</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Prix de base (€)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={form.base_price}
-              onChange={(e) => setForm({ ...form, base_price: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">
-              Prix custom (€) {form.pricing_type === "custom" && <span className="text-amber-600">*</span>}
-            </Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={form.custom_price}
-              onChange={(e) => setForm({ ...form, custom_price: e.target.value })}
-              disabled={form.pricing_type !== "custom"}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs">Début</Label>
             <Input
@@ -459,19 +518,218 @@ function AddPrestationDialog({
               onChange={(e) => setForm({ ...form, start_date: e.target.value })}
             />
           </div>
-          <div>
-            <Label className="text-xs">Fin (optionnel)</Label>
-            <Input
-              type="date"
-              value={form.end_date}
-              onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-            />
+        </div>
+
+        {/* Étape 6 — Prix verrouillé + case "Prix personnalisé" */}
+        <div className="rounded-md border bg-muted/30 p-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+              {!isCustomPrice && <Lock className="h-3 w-3" />}
+              Prix de la prestation
+            </Label>
+            <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+              <input
+                type="checkbox"
+                checked={isCustomPrice}
+                onChange={(e) => togglePricing(e.target.checked)}
+              />
+              <span className={isCustomPrice ? "font-medium text-amber-600" : "text-muted-foreground"}>
+                Prix personnalisé
+              </span>
+            </label>
           </div>
+          {!isCustomPrice ? (
+            <div className="flex items-center gap-2">
+              <Input type="number" value={form.base_price} readOnly disabled
+                className="bg-muted cursor-not-allowed" placeholder="Prix catalogue" />
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">Tarif catalogue</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Input type="number" step="0.01" min="0" value={form.custom_price}
+                onChange={(e) => setForm({ ...form, custom_price: e.target.value })}
+                placeholder="Prix négocié (€)" autoFocus />
+              <span className="text-[10px] text-amber-600 whitespace-nowrap">
+                Catalogue : {form.base_price ? `${Number(form.base_price).toFixed(2)} €` : "—"}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Étape 2 — Nature : Ponctuelle / Récurrente */}
+        <div className="rounded-md border p-2.5 space-y-2.5">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            Nature de la prestation
+          </Label>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { val: "punctual", label: "Ponctuelle", desc: "RDV créés manuellement" },
+              { val: "regular", label: "Récurrente", desc: "RDV générés automatiquement" },
+            ] as const).map((opt) => {
+              const active = form.nature === opt.val;
+              return (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, nature: opt.val }))}
+                  className={
+                    "text-left rounded-md border px-2.5 py-1.5 transition-colors " +
+                    (active ? "border-primary bg-primary/10" : "border-input hover:bg-muted")
+                  }
+                >
+                  <div className={"text-xs font-medium " + (active ? "text-primary" : "")}>
+                    {opt.label}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {isRecurring && (
+            <div className="space-y-2.5 pt-1 border-t mt-1">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px]">Fréquence</Label>
+                  <Select
+                    value={form.recurrence_frequency}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, recurrence_frequency: v as typeof f.recurrence_frequency }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Quotidienne</SelectItem>
+                      <SelectItem value="weekly">Hebdomadaire</SelectItem>
+                      <SelectItem value="monthly">Mensuelle</SelectItem>
+                      <SelectItem value="yearly">Annuelle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Intervalle</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={form.recurrence_interval}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, recurrence_interval: Number(e.target.value) || 1 }))
+                    }
+                  />
+                </div>
+              </div>
+
+              {form.recurrence_frequency === "weekly" && (
+                <div>
+                  <Label className="text-[10px]">Jours de la semaine</Label>
+                  <div className="flex gap-1 mt-0.5">
+                    {WEEKDAYS.map((d) => {
+                      const on = activeDays.includes(d.code);
+                      return (
+                        <button
+                          key={d.code}
+                          type="button"
+                          onClick={() => toggleDay(d.code)}
+                          className={
+                            "h-7 w-7 rounded-md border text-xs font-medium transition-colors " +
+                            (on
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-input hover:bg-muted")
+                          }
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Heure début
+                  </Label>
+                  <Input
+                    type="time"
+                    value={form.recurrence_start_time}
+                    onChange={(e) => setForm({ ...form, recurrence_start_time: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Heure fin
+                  </Label>
+                  <Input
+                    type="time"
+                    value={form.recurrence_end_time}
+                    onChange={(e) => setForm({ ...form, recurrence_end_time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-[10px]">Fin de la récurrence</Label>
+                <Select
+                  value={form.recurrence_end_type}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, recurrence_end_type: v as typeof f.recurrence_end_type }))
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="never">Jamais</SelectItem>
+                    <SelectItem value="on_date">À une date</SelectItem>
+                    <SelectItem value="after_occurrences">Après N occurrences</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {form.recurrence_end_type === "on_date" && (
+                <div>
+                  <Label className="text-[10px]">Date de fin</Label>
+                  <Input
+                    type="date"
+                    value={form.end_date}
+                    min={form.start_date || undefined}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {form.recurrence_end_type === "after_occurrences" && (
+                <div>
+                  <Label className="text-[10px]">Nombre d'occurrences</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={form.recurrence_occurrences_count}
+                    onChange={(e) =>
+                      setForm({ ...form, recurrence_occurrences_count: e.target.value })
+                    }
+                    placeholder="Ex: 12"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isRecurring && (
+            <div>
+              <Label className="text-[10px]">Fin de prestation (optionnel)</Label>
+              <Input
+                type="date"
+                value={form.end_date}
+                min={form.start_date || undefined}
+                onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter className="pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={createPresta.isPending || !form.label.trim()}>
+          <Button type="submit" disabled={createPresta.isPending}>
             {createPresta.isPending ? "Ajout…" : "Ajouter la prestation"}
           </Button>
         </DialogFooter>

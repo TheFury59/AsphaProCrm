@@ -26,6 +26,16 @@ class ClientPrestation extends Model
         'custom_price',
         'base_price',
         'no_intervention_no_bill',
+        // Nature + récurrence (refonte 2026-05-21) : la nature régulier/ponctuel
+        // est portée par la prestation contractualisée, pas le catalogue.
+        'nature',
+        'recurrence_frequency',
+        'recurrence_interval',
+        'recurrence_days_of_week',
+        'recurrence_start_time',
+        'recurrence_end_time',
+        'recurrence_end_type',
+        'recurrence_occurrences_count',
     ];
 
     protected function casts(): array
@@ -36,6 +46,8 @@ class ClientPrestation extends Model
             'custom_price' => 'decimal:2',
             'base_price' => 'decimal:2',
             'no_intervention_no_bill' => 'boolean',
+            'recurrence_interval' => 'integer',
+            'recurrence_occurrences_count' => 'integer',
         ];
     }
 

@@ -180,7 +180,12 @@ export type Product = {
   name: string;
   entity_id: number | null;
   type: ProductType;
-  nature: ProductNature;
+  /**
+   * @deprecated 2026-05-21 — la nature (régulier/ponctuel) est désormais portée
+   * par la prestation contractualisée (`client_prestations.nature`), pas le
+   * catalogue. Colonne conservée en BDD pour la rétro-compat ; non éditée.
+   */
+  nature?: ProductNature | null;
   billing_mode: ProductBillingMode;
   category_id: number | null;
   default_duration_minutes: number | null;

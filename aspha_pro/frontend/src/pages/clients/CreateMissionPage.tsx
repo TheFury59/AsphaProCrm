@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Briefcase, Package, Plus, Trash2, FileText, CreditCard,
-  Calendar as CalIcon, Receipt, Loader2,
+  Calendar as CalIcon, Receipt, Loader2, Repeat, Lock, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
@@ -90,17 +90,31 @@ export function CreateMissionPage() {
   const [prestations, setPrestations] = useState<PrestationDraft[]>([emptyPrestation()]);
 
   // -- Helpers prestation --------------------------------------------------
+  function todayStr(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   function emptyPrestation(): PrestationDraft {
     return {
       product_id: null,
       label: "",
-      start_date: new Date().toISOString().slice(0, 10),
+      start_date: todayStr(),
       end_date: null,
       billing_type: "hourly",
       pricing_type: "default",
       custom_price: null,
       base_price: null,
       no_intervention_no_bill: false,
+      // Par défaut : ponctuelle (nature portée par le contrat, pas le catalogue)
+      nature: "punctual",
+      recurrence_frequency: "weekly",
+      recurrence_interval: 1,
+      recurrence_days_of_week: "mon",
+      recurrence_start_time: "09:00",
+      recurrence_end_time: "11:00",
+      recurrence_end_type: "never",
+      recurrence_occurrences_count: null,
     };
   }
 
@@ -118,7 +132,9 @@ export function CreateMissionPage() {
       product_id: productId ? Number(productId) : null,
       label: prestations[idx].label || p?.name || "",
       billing_type: (p?.type as PrestationDraft["billing_type"]) ?? prestations[idx].billing_type,
-      base_price: p?.price ? Number(p.price) : prestations[idx].base_price,
+      // Le prix base = prix catalogue du produit (verrouillé tant que pas
+      // "prix personnalisé"). Toujours resynchronisé sur le produit choisi.
+      base_price: p?.price != null ? Number(p.price) : null,
     });
   };
 
@@ -129,14 +145,57 @@ export function CreateMissionPage() {
   };
 
   // -- Submit --------------------------------------------------------------
-  const canSubmit =
-    !!name.trim() &&
-    prestations.length > 0 &&
-    prestations.every((p) => p.label.trim().length > 0);
+  /**
+   * Validation métier au clic (convention projet : jamais de submit `disabled`
+   * pour une règle métier — on liste explicitement les erreurs dans un toast).
+   */
+  const validate = (): string[] => {
+    const errs: string[] = [];
+    if (!name.trim()) errs.push("Le nom de la mission est requis.");
+    if (prestations.length === 0) errs.push("Au moins une prestation est requise.");
+    prestations.forEach((p, i) => {
+      const n = i + 1;
+      if (!p.label.trim()) errs.push(`Prestation ${n} : libellé manquant.`);
+      if (p.pricing_type === "custom" && (p.custom_price == null || p.custom_price < 0)) {
+        errs.push(`Prestation ${n} : prix personnalisé invalide.`);
+      }
+      if (p.nature === "regular") {
+        if (!p.recurrence_frequency) errs.push(`Prestation ${n} : fréquence de récurrence manquante.`);
+        if (p.recurrence_frequency === "weekly" && !p.recurrence_days_of_week?.trim()) {
+          errs.push(`Prestation ${n} : choisis au moins un jour de la semaine.`);
+        }
+        if (!p.recurrence_start_time || !p.recurrence_end_time) {
+          errs.push(`Prestation ${n} : heures de début/fin manquantes.`);
+        }
+        if (p.recurrence_start_time && p.recurrence_end_time && p.recurrence_end_time <= p.recurrence_start_time) {
+          errs.push(`Prestation ${n} : l'heure de fin doit suivre l'heure de début.`);
+        }
+        if (p.recurrence_end_type === "on_date" && !p.end_date) {
+          errs.push(`Prestation ${n} : date de fin requise (fin de récurrence "à une date").`);
+        }
+        if (
+          p.recurrence_end_type === "after_occurrences" &&
+          (p.recurrence_occurrences_count == null || p.recurrence_occurrences_count < 1)
+        ) {
+          errs.push(`Prestation ${n} : nombre d'occurrences invalide.`);
+        }
+      }
+    });
+    return errs;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || !canSubmit) return;
+    if (!clientId) return;
+
+    const errs = validate();
+    if (errs.length > 0) {
+      toast.error(`Impossible de créer la mission — ${errs.length} point(s) à corriger`, {
+        description: errs.slice(0, 4).map((x) => `• ${x}`).join("\n"),
+        duration: 6000,
+      });
+      return;
+    }
 
     try {
       const mission = await createMission.mutateAsync({
@@ -147,20 +206,45 @@ export function CreateMissionPage() {
         payment_methods: paymentMethods.length ? paymentMethods.join(",") : null,
         online_payment_enabled: onlinePaymentEnabled,
         no_intervention_no_bill: noInterventionNoBill,
-        prestations: prestations.map((p) => ({
-          product_id: p.product_id || null,
-          label: p.label.trim(),
-          start_date: p.start_date || null,
-          end_date: p.end_date || null,
-          billing_type: p.billing_type ?? null,
-          pricing_type: p.pricing_type ?? "default",
-          base_price: p.base_price != null ? Number(p.base_price) : null,
-          custom_price:
-            p.pricing_type === "custom" && p.custom_price != null ? Number(p.custom_price) : null,
-          no_intervention_no_bill: !!p.no_intervention_no_bill,
-        })),
+        prestations: prestations.map((p) => {
+          const isRecurring = p.nature === "regular";
+          return {
+            product_id: p.product_id || null,
+            label: p.label.trim(),
+            start_date: p.start_date || null,
+            end_date: p.end_date || null,
+            billing_type: p.billing_type ?? null,
+            pricing_type: p.pricing_type ?? "default",
+            base_price: p.base_price != null ? Number(p.base_price) : null,
+            custom_price:
+              p.pricing_type === "custom" && p.custom_price != null ? Number(p.custom_price) : null,
+            no_intervention_no_bill: !!p.no_intervention_no_bill,
+            nature: p.nature ?? "punctual",
+            // Champs de récurrence : transmis uniquement si nature = regular,
+            // sinon null (le backend ne génère rien pour une ponctuelle).
+            recurrence_frequency: isRecurring ? p.recurrence_frequency ?? null : null,
+            recurrence_interval: isRecurring ? Number(p.recurrence_interval ?? 1) : null,
+            recurrence_days_of_week:
+              isRecurring && p.recurrence_frequency === "weekly"
+                ? p.recurrence_days_of_week ?? null
+                : null,
+            recurrence_start_time: isRecurring ? p.recurrence_start_time ?? null : null,
+            recurrence_end_time: isRecurring ? p.recurrence_end_time ?? null : null,
+            recurrence_end_type: isRecurring ? p.recurrence_end_type ?? "never" : null,
+            recurrence_occurrences_count:
+              isRecurring && p.recurrence_end_type === "after_occurrences"
+                ? Number(p.recurrence_occurrences_count ?? 1)
+                : null,
+          };
+        }),
       });
-      toast.success(`Mission "${mission.name}" créée avec ${prestations.length} prestation(s)`);
+      const recurringCount = prestations.filter((p) => p.nature === "regular").length;
+      toast.success(
+        `Mission "${mission.name}" créée avec ${prestations.length} prestation(s)` +
+          (recurringCount > 0
+            ? ` · ${recurringCount} RDV récurrent(s) à pourvoir généré(s)`
+            : ""),
+      );
       navigate(`/clients/${clientId}#missions`);
     } catch (err: any) {
       const msg = err.response?.data?.message ?? "Création impossible";
@@ -194,7 +278,7 @@ export function CreateMissionPage() {
             <Button type="button" variant="ghost" onClick={() => navigate(`/clients/${clientId}`)}>
               Annuler
             </Button>
-            <Button type="submit" disabled={!canSubmit || createMission.isPending} className="gap-2">
+            <Button type="submit" disabled={createMission.isPending} className="gap-2">
               {createMission.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {createMission.isPending ? "Création…" : "Créer la mission"}
             </Button>
@@ -437,6 +521,17 @@ export function CreateMissionPage() {
 // Sous-composant : carte d'édition d'une prestation
 // =========================================================================
 
+// Jours de la semaine — codes alignés sur le moteur InterventionExpander.
+const WEEKDAYS = [
+  { code: "mon", label: "L" },
+  { code: "tue", label: "M" },
+  { code: "wed", label: "M" },
+  { code: "thu", label: "J" },
+  { code: "fri", label: "V" },
+  { code: "sat", label: "S" },
+  { code: "sun", label: "D" },
+] as const;
+
 function PrestationCard({
   idx,
   prestation: p,
@@ -454,8 +549,36 @@ function PrestationCard({
   onProductPick: (productId: string) => void;
   onRemove: () => void;
 }) {
-  const effectivePrice =
-    p.pricing_type === "custom" ? p.custom_price : p.base_price;
+  const isCustomPrice = p.pricing_type === "custom";
+  const isRecurring = p.nature === "regular";
+  const effectivePrice = isCustomPrice ? p.custom_price : p.base_price;
+
+  // Étape 6 — verrouillage du prix : par défaut le prix affiché = prix catalogue
+  // (base_price), en lecture seule. La case "Prix personnalisé" le déverrouille.
+  const togglePricing = (custom: boolean) => {
+    onChange({
+      pricing_type: custom ? "custom" : "default",
+      // Quand on coche, on pré-remplit le custom avec le prix catalogue pour
+      // partir d'une base ; quand on décoche, on efface le custom.
+      custom_price: custom ? (p.custom_price ?? p.base_price ?? null) : null,
+    });
+  };
+
+  // Toggle d'un jour de la semaine (CSV mon,wed,fri).
+  const toggleDay = (code: string) => {
+    const days = (p.recurrence_days_of_week ?? "")
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    const next = days.includes(code)
+      ? days.filter((d) => d !== code)
+      : [...days, code];
+    // On garde l'ordre canonique L→D pour la lisibilité.
+    const ordered = WEEKDAYS.filter((w) => next.includes(w.code)).map((w) => w.code);
+    onChange({ recurrence_days_of_week: ordered.join(",") });
+  };
+
+  const activeDays = (p.recurrence_days_of_week ?? "").split(",").map((d) => d.trim());
 
   return (
     <div className="rounded-lg border bg-card p-3 space-y-2.5 shadow-sm">
@@ -465,6 +588,11 @@ function PrestationCard({
         <span className="text-xs font-medium flex-1 truncate">
           {p.label || <em className="text-muted-foreground">Nouvelle prestation</em>}
         </span>
+        {isRecurring && (
+          <Badge variant="secondary" className="text-[9px] h-4 gap-0.5">
+            <Repeat className="h-2.5 w-2.5" /> Récurrente
+          </Badge>
+        )}
         {effectivePrice != null && (
           <span className="text-xs font-semibold tabular-nums">
             {Number(effectivePrice).toFixed(2)} €
@@ -512,7 +640,6 @@ function PrestationCard({
             value={p.label}
             onChange={(e) => onChange({ label: e.target.value })}
             placeholder="Ex: Ménage 2h"
-            required
           />
         </div>
 
@@ -532,52 +659,6 @@ function PrestationCard({
         </div>
 
         <div>
-          <Label className="text-[10px]">Tarification</Label>
-          <Select
-            value={p.pricing_type ?? "default"}
-            onValueChange={(v) => onChange({ pricing_type: v as "default" | "custom" })}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">Tarif catalogue</SelectItem>
-              <SelectItem value="custom">Tarif personnalisé</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-[10px]">Prix base (€)</Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={p.base_price ?? ""}
-            onChange={(e) =>
-              onChange({ base_price: e.target.value ? Number(e.target.value) : null })
-            }
-            placeholder="0.00"
-          />
-        </div>
-
-        <div>
-          <Label className="text-[10px]">
-            Prix custom (€){" "}
-            {p.pricing_type === "custom" && <span className="text-amber-600">*</span>}
-          </Label>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={p.custom_price ?? ""}
-            onChange={(e) =>
-              onChange({ custom_price: e.target.value ? Number(e.target.value) : null })
-            }
-            placeholder="0.00"
-            disabled={p.pricing_type !== "custom"}
-          />
-        </div>
-
-        <div>
           <Label className="text-[10px] flex items-center gap-1">
             <CalIcon className="h-3 w-3" />
             Début
@@ -588,15 +669,249 @@ function PrestationCard({
             onChange={(e) => onChange({ start_date: e.target.value || null })}
           />
         </div>
+      </div>
 
-        <div>
-          <Label className="text-[10px]">Fin (optionnel)</Label>
-          <Input
-            type="date"
-            value={p.end_date ?? ""}
-            onChange={(e) => onChange({ end_date: e.target.value || null })}
-          />
+      {/* ============== ÉTAPE 6 — Prix verrouillé + case "Prix personnalisé" ============== */}
+      <div className="rounded-md border bg-muted/30 p-2.5 space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+            {!isCustomPrice && <Lock className="h-3 w-3" />}
+            Prix de la prestation
+          </Label>
+          <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+            <input
+              type="checkbox"
+              checked={isCustomPrice}
+              onChange={(e) => togglePricing(e.target.checked)}
+            />
+            <span className={isCustomPrice ? "font-medium text-amber-600" : "text-muted-foreground"}>
+              Prix personnalisé
+            </span>
+          </label>
         </div>
+        {!isCustomPrice ? (
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              value={p.base_price ?? ""}
+              readOnly
+              disabled
+              className="bg-muted cursor-not-allowed"
+              placeholder="Prix catalogue"
+            />
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              Tarif catalogue
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={p.custom_price ?? ""}
+              onChange={(e) =>
+                onChange({ custom_price: e.target.value ? Number(e.target.value) : null })
+              }
+              placeholder="Prix négocié (€)"
+              autoFocus
+            />
+            <span className="text-[10px] text-amber-600 whitespace-nowrap">
+              Catalogue : {p.base_price != null ? `${Number(p.base_price).toFixed(2)} €` : "—"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ============== ÉTAPE 2 — Nature : Ponctuelle / Récurrente ============== */}
+      <div className="rounded-md border p-2.5 space-y-2.5">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Nature de la prestation
+        </Label>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { val: "punctual", label: "Ponctuelle", desc: "RDV créés manuellement" },
+            { val: "regular", label: "Récurrente", desc: "RDV générés automatiquement" },
+          ] as const).map((opt) => {
+            const active = (p.nature ?? "punctual") === opt.val;
+            return (
+              <button
+                key={opt.val}
+                type="button"
+                onClick={() => onChange({ nature: opt.val })}
+                className={
+                  "text-left rounded-md border px-2.5 py-1.5 transition-colors " +
+                  (active
+                    ? "border-primary bg-primary/10"
+                    : "border-input hover:bg-muted")
+                }
+              >
+                <div className={"text-xs font-medium " + (active ? "text-primary" : "")}>
+                  {opt.label}
+                </div>
+                <div className="text-[10px] text-muted-foreground">{opt.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Formulaire de récurrence COMPLET (si nature = récurrente) */}
+        {isRecurring && (
+          <div className="space-y-2.5 pt-1 border-t mt-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px]">Fréquence</Label>
+                <Select
+                  value={p.recurrence_frequency ?? "weekly"}
+                  onValueChange={(v) =>
+                    onChange({ recurrence_frequency: v as PrestationDraft["recurrence_frequency"] })
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Quotidienne</SelectItem>
+                    <SelectItem value="weekly">Hebdomadaire</SelectItem>
+                    <SelectItem value="monthly">Mensuelle</SelectItem>
+                    <SelectItem value="yearly">Annuelle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[10px]">Intervalle</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={p.recurrence_interval ?? 1}
+                  onChange={(e) =>
+                    onChange({ recurrence_interval: e.target.value ? Number(e.target.value) : 1 })
+                  }
+                />
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  Toutes les {p.recurrence_interval ?? 1}{" "}
+                  {p.recurrence_frequency === "daily"
+                    ? "journée(s)"
+                    : p.recurrence_frequency === "weekly"
+                      ? "semaine(s)"
+                      : p.recurrence_frequency === "monthly"
+                        ? "mois"
+                        : "année(s)"}
+                </p>
+              </div>
+            </div>
+
+            {/* Jours de la semaine — uniquement pour la fréquence hebdomadaire */}
+            {p.recurrence_frequency === "weekly" && (
+              <div>
+                <Label className="text-[10px]">Jours de la semaine</Label>
+                <div className="flex gap-1 mt-0.5">
+                  {WEEKDAYS.map((d) => {
+                    const on = activeDays.includes(d.code);
+                    return (
+                      <button
+                        key={d.code}
+                        type="button"
+                        onClick={() => toggleDay(d.code)}
+                        className={
+                          "h-7 w-7 rounded-md border text-xs font-medium transition-colors " +
+                          (on
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input hover:bg-muted")
+                        }
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px] flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Heure début
+                </Label>
+                <Input
+                  type="time"
+                  value={p.recurrence_start_time ?? ""}
+                  onChange={(e) => onChange({ recurrence_start_time: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Heure fin
+                </Label>
+                <Input
+                  type="time"
+                  value={p.recurrence_end_time ?? ""}
+                  onChange={(e) => onChange({ recurrence_end_time: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-[10px]">Fin de la récurrence</Label>
+              <Select
+                value={p.recurrence_end_type ?? "never"}
+                onValueChange={(v) =>
+                  onChange({ recurrence_end_type: v as PrestationDraft["recurrence_end_type"] })
+                }
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="never">Jamais</SelectItem>
+                  <SelectItem value="on_date">À une date</SelectItem>
+                  <SelectItem value="after_occurrences">Après N occurrences</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {p.recurrence_end_type === "on_date" && (
+              <div>
+                <Label className="text-[10px]">Date de fin</Label>
+                <Input
+                  type="date"
+                  value={p.end_date ?? ""}
+                  min={p.start_date ?? undefined}
+                  onChange={(e) => onChange({ end_date: e.target.value || null })}
+                />
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  La récurrence s'arrête à cette date (aussi date de fin de la prestation).
+                </p>
+              </div>
+            )}
+
+            {p.recurrence_end_type === "after_occurrences" && (
+              <div>
+                <Label className="text-[10px]">Nombre d'occurrences</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={p.recurrence_occurrences_count ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      recurrence_occurrences_count: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  placeholder="Ex: 12"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Date de fin (optionnelle) pour les ponctuelles */}
+        {!isRecurring && (
+          <div>
+            <Label className="text-[10px]">Fin de prestation (optionnel)</Label>
+            <Input
+              type="date"
+              value={p.end_date ?? ""}
+              min={p.start_date ?? undefined}
+              onChange={(e) => onChange({ end_date: e.target.value || null })}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

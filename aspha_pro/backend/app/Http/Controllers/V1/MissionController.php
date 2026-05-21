@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\ClientPrestation;
 use App\Models\Mission;
+use App\Services\RecurringInterventionGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -93,15 +94,7 @@ class MissionController extends Controller
             // Création en batch : on accepte une liste de prestations à attacher
             // à la mission dès sa création (flow Xelya : 1 page = 1 mission + N prestations)
             'prestations' => ['nullable', 'array'],
-            'prestations.*.product_id' => ['nullable', 'exists:products,id'],
-            'prestations.*.label' => ['required_with:prestations', 'string', 'max:255'],
-            'prestations.*.start_date' => ['nullable', 'date'],
-            'prestations.*.end_date' => ['nullable', 'date', 'after_or_equal:prestations.*.start_date'],
-            'prestations.*.billing_type' => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
-            'prestations.*.pricing_type' => ['nullable', 'in:default,custom'],
-            'prestations.*.custom_price' => ['nullable', 'numeric', 'min:0'],
-            'prestations.*.base_price' => ['nullable', 'numeric', 'min:0'],
-            'prestations.*.no_intervention_no_bill' => ['nullable', 'boolean'],
+            ...$this->prestationRules('prestations.*.'),
         ]);
         $data['status'] = $data['status'] ?? 'active';
         $prestations = $data['prestations'] ?? [];
@@ -109,16 +102,17 @@ class MissionController extends Controller
 
         $mission = DB::transaction(function () use ($client, $data, $prestations) {
             $mission = $client->missions()->create($data);
+            $generator = app(RecurringInterventionGenerator::class);
 
             foreach ($prestations as $p) {
-                // Auto-fill base_price depuis le produit catalogue si pricing_type=default
-                if (($p['pricing_type'] ?? 'default') === 'default' && ! empty($p['product_id']) && empty($p['base_price'])) {
-                    $product = \App\Models\Product::find($p['product_id']);
-                    $p['base_price'] = $product?->price;
-                }
+                $p = $this->normalizePrestationData($p);
                 $p['mission_id'] = $mission->id;
                 $p['client_id'] = $client->id;
-                ClientPrestation::create($p);
+                $prestation = ClientPrestation::create($p);
+
+                // Étape 3 — génère l'intervention récurrente modèle si nature=regular.
+                // Ponctuelle : aucune génération (RDV créés manuellement au planning).
+                $generator->syncForPrestation($prestation);
             }
 
             return $mission;
@@ -175,27 +169,20 @@ class MissionController extends Controller
     {
         abort_unless($request->user()?->can('clients.edit'), 403);
         $data = $request->validate([
-            'product_id' => ['nullable', 'exists:products,id'],
-            'label' => ['required', 'string', 'max:255'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'billing_type' => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
-            'pricing_type' => ['nullable', 'in:default,custom'],
-            'custom_price' => ['nullable', 'numeric', 'min:0'],
-            'base_price' => ['nullable', 'numeric', 'min:0'],
-            'no_intervention_no_bill' => ['nullable', 'boolean'],
+            ...$this->prestationRules(),
             'quote_id' => ['nullable', 'exists:quotes,id'],
         ]);
+        $data = $this->normalizePrestationData($data);
         $data['mission_id'] = $mission->id;
         $data['client_id'] = $mission->client_id;
 
-        // Auto-fill base_price depuis le produit si pricing_type=default
-        if (($data['pricing_type'] ?? 'default') === 'default' && ! empty($data['product_id'])) {
-            $product = \App\Models\Product::find($data['product_id']);
-            $data['base_price'] = $data['base_price'] ?? $product?->price;
-        }
+        $prestation = DB::transaction(function () use ($data) {
+            $prestation = ClientPrestation::create($data);
+            // Étape 3 — génère l'intervention récurrente modèle si nature=regular.
+            app(RecurringInterventionGenerator::class)->syncForPrestation($prestation);
+            return $prestation;
+        });
 
-        $prestation = ClientPrestation::create($data);
         return response()->json(['data' => $prestation->load('product')], 201);
     }
 
@@ -203,7 +190,7 @@ class MissionController extends Controller
     {
         abort_unless($request->user()?->can('clients.edit'), 403);
         $prestation = ClientPrestation::where('mission_id', $mission->id)->findOrFail($prestationId);
-        $prestation->update($request->validate([
+        $data = $request->validate([
             'product_id' => ['sometimes', 'nullable', 'exists:products,id'],
             'label' => ['sometimes', 'string', 'max:255'],
             'start_date' => ['sometimes', 'nullable', 'date'],
@@ -214,15 +201,92 @@ class MissionController extends Controller
             'base_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'no_intervention_no_bill' => ['sometimes', 'boolean'],
             'quote_id' => ['sometimes', 'nullable', 'exists:quotes,id'],
-        ]));
+            'nature' => ['sometimes', 'in:regular,punctual'],
+            'recurrence_frequency' => ['sometimes', 'nullable', 'in:daily,weekly,monthly,yearly'],
+            'recurrence_interval' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'recurrence_days_of_week' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'recurrence_start_time' => ['sometimes', 'nullable', 'date_format:H:i'],
+            'recurrence_end_time' => ['sometimes', 'nullable', 'date_format:H:i'],
+            'recurrence_end_type' => ['sometimes', 'nullable', 'in:never,on_date,after_occurrences'],
+            'recurrence_occurrences_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
+        ]);
+
+        DB::transaction(function () use ($prestation, $data) {
+            $prestation->update($data);
+            // Resynchronise l'intervention récurrente modèle après modif.
+            app(RecurringInterventionGenerator::class)->syncForPrestation($prestation->fresh());
+        });
+
         return ['data' => $prestation->fresh('product')];
+    }
+
+    /**
+     * Règles de validation communes pour une prestation contractualisée.
+     * Le préfixe permet de réutiliser ces règles pour les sous-tableaux
+     * (`prestations.*.`) du batch create de mission.
+     */
+    private function prestationRules(string $prefix = ''): array
+    {
+        $required = $prefix === '' ? 'required' : 'required_with:prestations';
+
+        return [
+            "{$prefix}product_id" => ['nullable', 'exists:products,id'],
+            "{$prefix}label" => [$required, 'string', 'max:255'],
+            "{$prefix}start_date" => ['nullable', 'date'],
+            "{$prefix}end_date" => ['nullable', 'date'],
+            "{$prefix}billing_type" => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
+            "{$prefix}pricing_type" => ['nullable', 'in:default,custom'],
+            "{$prefix}custom_price" => ['nullable', 'numeric', 'min:0'],
+            "{$prefix}base_price" => ['nullable', 'numeric', 'min:0'],
+            "{$prefix}no_intervention_no_bill" => ['nullable', 'boolean'],
+            // Nature + récurrence (refonte 2026-05-21)
+            "{$prefix}nature" => ['nullable', 'in:regular,punctual'],
+            "{$prefix}recurrence_frequency" => ['nullable', 'in:daily,weekly,monthly,yearly'],
+            "{$prefix}recurrence_interval" => ['nullable', 'integer', 'min:1'],
+            "{$prefix}recurrence_days_of_week" => ['nullable', 'string', 'max:32'],
+            "{$prefix}recurrence_start_time" => ['nullable', 'date_format:H:i'],
+            "{$prefix}recurrence_end_time" => ['nullable', 'date_format:H:i'],
+            "{$prefix}recurrence_end_type" => ['nullable', 'in:never,on_date,after_occurrences'],
+            "{$prefix}recurrence_occurrences_count" => ['nullable', 'integer', 'min:1'],
+        ];
+    }
+
+    /**
+     * Normalise les données d'une prestation avant persistance :
+     *  - auto-fill du base_price depuis le produit catalogue si tarif par défaut ;
+     *  - défaut `nature = 'punctual'` si non précisée.
+     */
+    private function normalizePrestationData(array $p): array
+    {
+        $p['nature'] = $p['nature'] ?? 'punctual';
+
+        // Auto-fill base_price depuis le produit catalogue si pricing_type=default
+        if (($p['pricing_type'] ?? 'default') === 'default' && ! empty($p['product_id']) && empty($p['base_price'])) {
+            $product = \App\Models\Product::find($p['product_id']);
+            $p['base_price'] = $product?->price;
+        }
+
+        return $p;
     }
 
     public function destroyPrestation(Request $request, Mission $mission, int $prestationId)
     {
         abort_unless($request->user()?->can('clients.edit'), 403);
         $prestation = ClientPrestation::where('mission_id', $mission->id)->findOrFail($prestationId);
-        $prestation->delete();
+
+        DB::transaction(function () use ($prestation) {
+            // Supprime d'abord l'intervention récurrente modèle générée pour cette
+            // prestation (FK restrictOnDelete sur interventions.client_prestation_id
+            // → sinon le soft-delete de la prestation laisserait une récurrence
+            // orpheline visible au planning).
+            \App\Models\Intervention::where('client_prestation_id', $prestation->id)
+                ->where('is_recurring', true)
+                ->where('is_exception', false)
+                ->get()
+                ->each->delete();  // soft delete
+            $prestation->delete();
+        });
+
         return response()->noContent();
     }
 }

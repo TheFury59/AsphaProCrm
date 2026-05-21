@@ -1,5 +1,41 @@
 # Aspha Pro — Todo
 
+## 🔁 2026-05-21 — Refonte nature des prestations + récurrences au niveau mission
+
+Contexte : la « nature » (régulier/ponctuel) était un champ du catalogue
+`products.nature`. Erreur de conception : la nature dépend du contrat client,
+pas de la prestation. Refonte : nature portée par `client_prestations` +
+génération auto des interventions récurrentes à la création/maj de mission.
+
+### Plan
+- [x] Étape 1 — Retirer la nature du catalogue (front ProductFormDialog + back ProductController nullable défaut 'regular')
+- [x] Étape 2 — Migration `client_prestations.nature` + champs récurrence ; formulaire mission par prestation
+- [x] Étape 3 — Génération auto interventions récurrentes dans MissionController (transaction, anti-doublon)
+- [x] Étape 4 — Notif RDV à pourvoir + commande artisan `app:notify-unassigned-interventions` quotidienne
+- [x] Étape 5 — Vérification système d'id InterventionExpander (anti-collision)
+- [x] Étape 6 — Verrouillage du prix dans la mission (case « Prix personnalisé »)
+
+### Review
+- Migration `2026_05_21_101153_add_nature_and_recurrence_to_client_prestations` :
+  ajoute `nature` (défaut punctual) + 7 colonnes de récurrence. Idempotente
+  (`Schema::hasColumn`), pas de SQL spécifique → OK PostgreSQL + SQLite.
+- Service `RecurringInterventionGenerator` : crée/maj UNE intervention récurrente
+  modèle par prestation `regular` (anti-doublon : update si déjà générée, sans
+  réécraser status/intervenant). Supprime la récurrence si la prestation repasse
+  ponctuelle. `MissionController` l'appelle en transaction (store/storePrestation/
+  updatePrestation/destroyPrestation).
+- Notif : nouveau type `intervention_unassigned`. `InterventionObserver::created`
+  notifie les admins si `status=a_pourvoir` + `employee_id=null` (au lieu de la
+  notif "nouveau RDV" classique). Commande `app:notify-unassigned-interventions`
+  (récap quotidien groupé 7j, schedulée 08:00) — déclencheur Render à câbler.
+- Système d'id InterventionExpander vérifié : occurrence = `{id}-{Ymd}`, réel =
+  `{id}`. Pas de collision possible (le `-` est un délimiteur non ambigu, la date
+  est toujours 8 chiffres). Testé : 19 occurrences, 19 ids uniques.
+- Tests tinker : création mission HTTP (201, 1 récurrente générée a_pourvoir +
+  notif admin, 0 pour ponctuelle), idempotence (re-sync ×2 = 1 iv), flip
+  regular→punctual (récurrence supprimée), produit sans nature (défaut regular).
+  `php -l` OK partout, `php artisan migrate` OK, `tsc --noEmit` 0 erreur.
+
 ## 🔔 2026-05-20 — Matrice de notifications in-app (cloche)
 
 Contexte : la cloche existait mais ne couvrait qu'une fraction des events

@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Intervention;
+use App\Models\User;
 use App\Services\NotificationDispatcher;
 
 /**
@@ -29,6 +30,14 @@ class InterventionObserver
 
     public function created(Intervention $iv): void
     {
+        // RDV à pourvoir : aucun intervenant assigné → on notifie les ADMINS
+        // pour qu'ils sélectionnent un intervenant. Cas typique : intervention
+        // récurrente modèle générée depuis une mission (Étape 3 refonte 2026-05-21).
+        if ($iv->status === 'a_pourvoir' && empty($iv->employee_id)) {
+            $this->notifyAdminsUnassigned($iv);
+            return;  // pas de double notif "nouveau rendez-vous" (pas d'intervenant)
+        }
+
         $userIds = $this->recipients($iv);
         if (empty($userIds)) return;
 
@@ -36,6 +45,30 @@ class InterventionObserver
             code: 'intervention_assigned',
             userIds: $userIds,
             title: 'Nouveau rendez-vous',
+            body: $this->describe($iv),
+            target: $iv,
+        );
+    }
+
+    /**
+     * Notifie les admins (super_admin + admin) qu'un RDV reste à pourvoir.
+     * L'auteur de l'action est exclu (cf. LRN 2026-05-19).
+     */
+    private function notifyAdminsUnassigned(Intervention $iv): void
+    {
+        $adminIds = User::role(['super_admin', 'admin'])->pluck('id')->all();
+
+        $authorId = auth()->id();
+        if ($authorId) {
+            $adminIds = array_filter($adminIds, fn ($id) => (int) $id !== (int) $authorId);
+        }
+        $adminIds = array_values(array_unique(array_map('intval', $adminIds)));
+        if (empty($adminIds)) return;
+
+        $this->dispatcher->dispatch(
+            code: 'intervention_unassigned',
+            userIds: $adminIds,
+            title: 'RDV à pourvoir — sélectionner un intervenant',
             body: $this->describe($iv),
             target: $iv,
         );
@@ -112,12 +145,26 @@ class InterventionObserver
 
     private function describe(Intervention $iv): string
     {
-        if (! $iv->start_datetime) return 'Voir détails dans le planning.';
         $iv->loadMissing('client.company');
-        $when = $iv->start_datetime->isoFormat('dddd D MMMM, HH:mm');
         $who = $iv->client?->company?->company_name
             ?? $iv->client?->code
             ?? 'client';
+
+        // Récurrente : pas de start_datetime, on décrit la périodicité.
+        if ($iv->is_recurring) {
+            $freq = match ($iv->frequency) {
+                'daily' => 'tous les jours',
+                'weekly' => 'chaque semaine',
+                'monthly' => 'chaque mois',
+                'yearly' => 'chaque année',
+                default => 'récurrent',
+            };
+            $time = $iv->start_time ? ' à ' . substr((string) $iv->start_time, 0, 5) : '';
+            return "RDV récurrent ({$freq}{$time}) chez {$who}";
+        }
+
+        if (! $iv->start_datetime) return "Voir détails dans le planning ({$who}).";
+        $when = $iv->start_datetime->isoFormat('dddd D MMMM, HH:mm');
         return "{$when} chez {$who}";
     }
 }

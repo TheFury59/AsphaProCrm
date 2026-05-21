@@ -31,10 +31,9 @@ const TYPE_LABELS: Record<string, string> = {
   exceptional: "Exceptionnel",
 };
 
-const NATURE_LABELS: Record<string, string> = {
-  regular: "Régulière",
-  punctual: "Ponctuelle",
-};
+// Note : la « nature » (régulier/ponctuel) n'est plus une propriété du
+// catalogue depuis 2026-05-21. Elle dépend du contrat client et se gère
+// désormais sur la prestation contractualisée d'une mission.
 
 const BILLING_MODE_LABELS: Record<string, string> = {
   per_intervention: "Par intervention",
@@ -160,7 +159,6 @@ function ProductFormDialog({ product, onClose }: {
   const [status, setStatus] = useState(product?.status ?? "active");
   const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
   const [type, setType] = useState(product?.type ?? "hourly");
-  const [nature, setNature] = useState(product?.nature ?? "regular");
   const [billingMode, setBillingMode] = useState(product?.billing_mode ?? "per_intervention");
   const [categoryId, setCategoryId] = useState<string>(product?.category_id ? String(product.category_id) : "none");
   const [duration, setDuration] = useState<string>(product?.default_duration_minutes != null ? String(product.default_duration_minutes) : "");
@@ -202,7 +200,6 @@ function ProductFormDialog({ product, onClose }: {
       status,
       entity_id: entityId === "none" ? null : Number(entityId),
       type,
-      nature,
       billing_mode: billingMode,
       category_id: categoryId === "none" ? null : Number(categoryId),
       default_duration_minutes: duration === "" ? null : Number(duration),
@@ -294,20 +291,12 @@ function ProductFormDialog({ product, onClose }: {
           </div>
 
           {/* Classification */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Type">
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Nature">
-              <Select value={nature} onValueChange={setNature}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(NATURE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                 </SelectContent>
               </Select>
             </Field>

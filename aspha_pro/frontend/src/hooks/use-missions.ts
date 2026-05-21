@@ -7,6 +7,15 @@ import { api } from "@/lib/api";
 
 export type MissionStatus = "active" | "suspended" | "cancelled";
 
+/** Nature de la prestation contractualisée (portée par le contrat, pas le catalogue). */
+export type PrestationNature = "regular" | "punctual";
+
+/** Fréquence de récurrence — aligné sur le moteur InterventionExpander. */
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+/** Type de fin de récurrence. */
+export type RecurrenceEndType = "never" | "on_date" | "after_occurrences";
+
 export type Prestation = {
   id: number;
   client_id: number;
@@ -21,6 +30,15 @@ export type Prestation = {
   custom_price: string | number | null;
   base_price: string | number | null;
   no_intervention_no_bill: boolean;
+  // Nature + récurrence (refonte 2026-05-21)
+  nature: PrestationNature | null;
+  recurrence_frequency: RecurrenceFrequency | null;
+  recurrence_interval: number | null;
+  recurrence_days_of_week: string | null;
+  recurrence_start_time: string | null;
+  recurrence_end_time: string | null;
+  recurrence_end_type: RecurrenceEndType | null;
+  recurrence_occurrences_count: number | null;
   product?: { id: number; name: string; code: string; price: string | number; default_duration_minutes: number | null };
   quote?: { id: number; reference: string };
 };
@@ -131,6 +149,15 @@ export type PrestationDraft = {
   custom_price?: number | null;
   base_price?: number | null;
   no_intervention_no_bill?: boolean;
+  // Nature + récurrence (refonte 2026-05-21)
+  nature?: PrestationNature | null;
+  recurrence_frequency?: RecurrenceFrequency | null;
+  recurrence_interval?: number | null;
+  recurrence_days_of_week?: string | null;
+  recurrence_start_time?: string | null;
+  recurrence_end_time?: string | null;
+  recurrence_end_type?: RecurrenceEndType | null;
+  recurrence_occurrences_count?: number | null;
 };
 
 /**

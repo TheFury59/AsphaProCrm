@@ -19,6 +19,9 @@ class NotificationTypesSeeder extends Seeder
             ['code' => 'intervention_modified', 'label' => 'Intervention modifiée', 'module' => 'planning', 'default_channels' => 'push'],
             ['code' => 'intervention_cancelled', 'label' => 'Intervention annulée', 'module' => 'planning', 'default_channels' => 'push,email'],
             ['code' => 'replacement_requested', 'label' => 'Remplacement demandé', 'module' => 'planning', 'default_channels' => 'push,email'],
+            // RDV à pourvoir : intervention sans intervenant assigné (status=a_pourvoir).
+            // Notifie les admins pour qu'ils sélectionnent un intervenant.
+            ['code' => 'intervention_unassigned', 'label' => 'RDV à pourvoir', 'module' => 'planning', 'default_channels' => 'push,email'],
 
             // RH
             ['code' => 'absence_created', 'label' => 'Absence enregistrée', 'module' => 'rh', 'default_channels' => 'push'],
