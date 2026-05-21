@@ -53,7 +53,7 @@ export function HelpPage() {
     <div>
       <PageHeader
         title="Aide & Documentation"
-        description="Guides d'utilisation du CRM Aspha. Cherche ou parcours par catégorie."
+        description="Guides d'utilisation de l'ERP Aspha. Cherche ou parcours par catégorie."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-[75vh]">

@@ -202,7 +202,7 @@ class UsersController extends Controller
         return [
             'data' => [
                 ['name' => 'super_admin', 'label' => 'Super-administrateur', 'description' => 'Accès total sans exception, gestion des rôles incluse.'],
-                ['name' => 'admin', 'label' => 'Administrateur', 'description' => 'Accès à tout le CRM sauf l\'onglet Permissions des paramètres.'],
+                ['name' => 'admin', 'label' => 'Administrateur', 'description' => 'Accès à tout l\'ERP sauf l\'onglet Permissions des paramètres.'],
                 ['name' => 'intervenant', 'label' => 'Intervenant', 'description' => 'Extranet personnel uniquement : planning, messagerie, profil.'],
                 ['name' => 'client', 'label' => 'Client', 'description' => 'Extranet client : factures, prestations, demandes.'],
             ],

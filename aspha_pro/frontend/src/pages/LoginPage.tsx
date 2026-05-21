@@ -66,14 +66,14 @@ export function LoginPage() {
             </div>
             <div>
               <div className="text-xl font-semibold tracking-tight">Aspha Pro</div>
-              <div className="text-xs text-white/70">Services à la personne · CRM complet</div>
+              <div className="text-xs text-white/70">Services à la personne · ERP complet</div>
             </div>
           </div>
         </div>
 
         <div className="relative z-10 space-y-6 max-w-md">
           <h1 className="text-4xl font-semibold tracking-tight leading-tight">
-            Le CRM pensé pour les <span className="underline decoration-white/50 decoration-2 underline-offset-4">services à la personne</span>.
+            L'ERP pensé pour les <span className="underline decoration-white/50 decoration-2 underline-offset-4">services à la personne</span>.
           </h1>
           <p className="text-white/85 leading-relaxed">
             Planning, télégestion, facturation Factur-X, paie via Silae, portail client.

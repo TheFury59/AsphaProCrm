@@ -53,7 +53,7 @@ class AppSettingsSeeder extends Seeder
                 'key' => 'silae_portal_url',
                 'category' => 'integrations',
                 'label' => 'URL du portail Silae',
-                'description' => 'Lien ouvert depuis le CRM pour la gestion des fiches de paie.',
+                'description' => 'Lien ouvert depuis l\'ERP pour la gestion des fiches de paie.',
                 'value' => ['value' => 'https://app.silae.fr'],
                 'value_type' => 'string',
             ],

@@ -41,7 +41,7 @@ class HelpArticlesSeeder extends Seeder
                 'category' => 'facturation',
                 'audience' => 'admin',
                 'display_order' => 10,
-                'body' => "# Factures Factur-X\n\nDepuis le 1er septembre 2026, toutes les factures B2B doivent être au format **Factur-X PDF/A-3** (norme EN 16931).\n\nLe CRM génère ce format automatiquement :\n1. Crée la facture standard depuis le module Factures\n2. Clique sur le bouton **PDF Factur-X** → téléchargement automatique\n3. Le PDF visible contient aussi les données XML CII embarquées\n\n## Sync Pennylane\n\nClic sur l'icône cloud → push automatique vers Pennylane. La facture y apparaît avec son `pennylane_id`.\n\nMode mock si la clé API n'est pas configurée (utile en dev).",
+                'body' => "# Factures Factur-X\n\nDepuis le 1er septembre 2026, toutes les factures B2B doivent être au format **Factur-X PDF/A-3** (norme EN 16931).\n\nL'ERP génère ce format automatiquement :\n1. Crée la facture standard depuis le module Factures\n2. Clique sur le bouton **PDF Factur-X** → téléchargement automatique\n3. Le PDF visible contient aussi les données XML CII embarquées\n\n## Sync Pennylane\n\nClic sur l'icône cloud → push automatique vers Pennylane. La facture y apparaît avec son `pennylane_id`.\n\nMode mock si la clé API n'est pas configurée (utile en dev).",
             ],
             [
                 'slug' => 'mon-planning-intervenant',
