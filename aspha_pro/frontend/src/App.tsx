@@ -10,6 +10,7 @@ import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { ClientsListPage } from "@/pages/clients/ClientsListPage";
 import { ClientFichePage } from "@/pages/clients/ClientFichePage";
 import { CreateMissionPage } from "@/pages/clients/CreateMissionPage";
+import { EditMissionPage } from "@/pages/missions/EditMissionPage";
 import { MissionsListPage } from "@/pages/missions/MissionsListPage";
 import { TicketsListPage } from "@/pages/tickets/TicketsListPage";
 import { TicketDetailPage } from "@/pages/tickets/TicketDetailPage";
@@ -119,6 +120,7 @@ export default function App() {
               <Route path="/clients" element={<ClientsListPage />} />
               <Route path="/clients/:id" element={<ClientFichePage />} />
               <Route path="/clients/:id/missions/new" element={<CreateMissionPage />} />
+              <Route path="/clients/:id/missions/:missionId" element={<EditMissionPage />} />
               <Route path="/missions" element={<MissionsListPage />} />
               <Route path="/tickets" element={<TicketsListPage />} />
               <Route path="/tickets/:id" element={<TicketDetailPage />} />

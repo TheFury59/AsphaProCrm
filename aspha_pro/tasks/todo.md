@@ -1,5 +1,38 @@
 # Aspha Pro — Todo
 
+## ✏️ 2026-05-21 — Édition d'une mission existante
+
+Contexte : on pouvait créer une mission mais pas y revenir pour l'éditer.
+
+### Fait
+- [x] Composant partagé `components/missions/PrestationFormCard.tsx` : extrait du
+      `PrestationCard` de CreateMissionPage. Exporte aussi `emptyPrestation`,
+      `validatePrestation`, `serializePrestation`, `BILLING_TYPES`,
+      `PAYMENT_METHODS`, `BILLING_RHYTHMS`, `WEEKDAYS`, `todayStr`.
+- [x] `CreateMissionPage` refactorisée pour consommer le composant partagé
+      (suppression de ~400 lignes dupliquées, comportement identique).
+- [x] Nouvelle page `pages/missions/EditMissionPage.tsx` : route
+      `/clients/:id/missions/:missionId`. Charge mission + prestations, pré-remplit.
+      Infos mission via `useUpdateMission` (bouton « Enregistrer la mission »).
+      Prestations gérées pièce par pièce : create/update/delete par carte.
+      Skeleton pendant le fetch, flag `hydrated` pour ne pas écraser les
+      modifications en cours après le refetch déclenché par une mutation.
+- [x] Confirmation de suppression d'une prestation via `Dialog` shadcn.
+- [x] Route ajoutée dans `App.tsx`.
+- [x] Accès : `MissionsListPage` (clic ligne + bouton crayon → page d'édition),
+      `ClientMissionsTab` (bouton « Modifier » inline + item dropdown).
+      Accès création `/clients/:id/missions/new` intact.
+
+### Review
+- `tsc --noEmit` : 0 erreur. Test navigateur réel (login admin) : édition infos
+  mission OK, update prestation OK, ajout prestation OK, suppression avec dialog
+  de confirmation OK, validation au clic (submit jamais disabled métier) OK,
+  3 chemins d'accès vérifiés, 0 erreur console.
+- Note dette préexistante : `npm run build` (`tsc -b`, règle `noUnusedLocals`)
+  remonte des erreurs dans des fichiers NON touchés (PlanningPage,
+  ProductsListPage, StockPage, TicketDetailPage, ContextMenuEvent, MapPage,
+  LongAbsenceBanner). `tsc --noEmit` (exigence projet) reste à 0.
+
 ## 🔁 2026-05-21 — Refonte nature des prestations + récurrences au niveau mission
 
 Contexte : la « nature » (régulier/ponctuel) était un champ du catalogue

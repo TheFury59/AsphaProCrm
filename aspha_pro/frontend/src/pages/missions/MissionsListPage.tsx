@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Briefcase, Search, Package, FileText, ChevronRight, Plus, ArrowRight } from "lucide-react";
+import { Briefcase, Search, Package, FileText, Pencil, Plus, ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -141,7 +141,11 @@ export function MissionsListPage() {
               const prestationsCount = m.client_prestations_count ?? m.client_prestations?.length ?? 0;
               const companyName = m.client?.company?.company_name ?? `Client #${m.client_id}`;
               return (
-                <ClickableRow key={m.id} to={`/clients/${m.client_id}#missions`} className="group">
+                <ClickableRow
+                  key={m.id}
+                  to={`/clients/${m.client_id}/missions/${m.id}`}
+                  className="group"
+                >
                   <TableCell>
                     <div className="font-medium text-sm">{m.name}</div>
                     <div className="text-[10px] text-muted-foreground font-mono">#{m.id}</div>
@@ -190,9 +194,12 @@ export function MissionsListPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Link to={`/clients/${m.client_id}#missions`} aria-label="Ouvrir la mission">
+                    <Link
+                      to={`/clients/${m.client_id}/missions/${m.id}`}
+                      aria-label="Modifier la mission"
+                    >
                       <Button size="icon" variant="ghost" className="h-7 w-7 opacity-60 group-hover:opacity-100">
-                        <ChevronRight className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     </Link>
                   </TableCell>

@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   Briefcase, Plus, ChevronDown, ChevronRight, Trash2,
-  Package, FileText, MoreHorizontal, Repeat, Lock, Clock,
+  Package, FileText, MoreHorizontal, Repeat, Lock, Clock, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,6 +153,13 @@ function MissionCard({ mission, clientId }: { mission: Mission; clientId: number
 
         <Badge className={STATUS_COLORS[mission.status]}>{STATUS_LABELS[mission.status]}</Badge>
 
+        <Link to={`/clients/${clientId}/missions/${mission.id}`}>
+          <Button size="sm" variant="outline" className="gap-1 h-7 text-xs">
+            <Pencil className="h-3 w-3" />
+            Modifier
+          </Button>
+        </Link>
+
         <Dialog open={addPrestaOpen} onOpenChange={setAddPrestaOpen}>
           <DialogTrigger asChild>
             <Button size="sm" variant="outline" className="gap-1 h-7 text-xs">
@@ -174,6 +181,12 @@ function MissionCard({ mission, clientId }: { mission: Mission; clientId: number
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link to={`/clients/${clientId}/missions/${mission.id}`}>
+                <Pencil className="h-3.5 w-3.5 mr-2" />
+                Modifier la mission
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleDelete} className="text-rose-600">
               <Trash2 className="h-3.5 w-3.5 mr-2" />
               Supprimer la mission
