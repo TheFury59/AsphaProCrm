@@ -4,12 +4,12 @@ import {
   Receipt, Wallet, Hourglass,
 } from "lucide-react";
 import {
-  useInvoices, useCreateInvoice, useDeleteInvoice, useInvoice,
+  useInvoices, useCreateInvoice, useDeleteInvoice, useInvoice, useUpdateInvoice,
   type Invoice as InvoiceType,
 } from "@/hooks/use-phase3";
 import { useSyncInvoicePennylane } from "@/hooks/use-payments";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -294,6 +294,20 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
 
 function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useInvoice(id);
+  const update = useUpdateInvoice();
+
+  // 2026-05-21 — envoyer la facture au client (draft → sent). Une fois
+  // émise, elle devient visible sur l'extranet client + le client est
+  // notifié (InvoiceObserver).
+  const sendToClient = async () => {
+    if (!data) return;
+    try {
+      await update.mutateAsync({ id: data.id, patch: { status: "sent" } });
+      toast.success("Facture envoyée au client");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de l'envoi de la facture"));
+    }
+  };
 
   return (
     <Dialog open={!!id} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -377,8 +391,17 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
             </div>
           </div>
         )}
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
+          {data?.status === "draft" && (
+            <Button
+              onClick={sendToClient}
+              disabled={update.isPending}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
+            >
+              {update.isPending ? "Envoi…" : "Envoyer au client"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

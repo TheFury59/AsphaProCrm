@@ -513,3 +513,17 @@ export function useDeleteInvoice() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
   });
 }
+
+// 2026-05-21 — maj du statut d'une facture (draft → sent pour l'envoyer au
+// client). L'InvoiceObserver notifie le client à l'émission.
+export function useUpdateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Record<string, unknown> }) =>
+      (await api.patch<Single<Invoice>>(`/invoices/${id}`, patch)).data.data,
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["invoice", vars.id] });
+    },
+  });
+}
