@@ -397,9 +397,9 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateInvoice();
   const { data: clientsData } = useClients({ per_page: 100 });
+  // entity_id n'est plus saisi ni envoyé : le backend le dérive du client.
   const [form, setForm] = useState({
     client_id: "",
-    entity_id: "1",
     invoice_date: new Date().toISOString().slice(0, 10),
     due_date: "",
   });
@@ -422,7 +422,6 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
     try {
       await create.mutateAsync({
         client_id: parseInt(form.client_id, 10),
-        entity_id: parseInt(form.entity_id, 10),
         invoice_date: form.invoice_date,
         due_date: form.due_date || null,
         items: items
@@ -435,7 +434,7 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
           })),
       });
       toast.success("Facture créée");
-      setForm({ client_id: "", entity_id: "1", invoice_date: new Date().toISOString().slice(0, 10), due_date: "" });
+      setForm({ client_id: "", invoice_date: new Date().toISOString().slice(0, 10), due_date: "" });
       setItems([{ label: "", quantity: "1", unit_price: "0" }]);
       onClose();
     } catch {

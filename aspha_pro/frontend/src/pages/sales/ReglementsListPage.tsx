@@ -339,9 +339,9 @@ function CreateReglementDialog({ open, onClose }: { open: boolean; onClose: () =
   const { data: clientsData } = useClients({ per_page: 100 });
   const { data: invoicesData } = useInvoices({ per_page: 100 });
 
+  // entity_id n'est plus saisi ni envoyé : le backend le dérive du client.
   const [form, setForm] = useState({
     client_id: "",
-    entity_id: "1",
     amount: "",
     payment_method: "transfer",
     operation_date: new Date().toISOString().slice(0, 10),
@@ -352,7 +352,7 @@ function CreateReglementDialog({ open, onClose }: { open: boolean; onClose: () =
   const clientInvoices = (invoicesData as any)?.data?.filter((inv: any) => inv.client_id === parseInt(form.client_id, 10)) ?? [];
 
   const reset = () => {
-    setForm({ client_id: "", entity_id: "1", amount: "", payment_method: "transfer", operation_date: new Date().toISOString().slice(0, 10), description: "" });
+    setForm({ client_id: "", amount: "", payment_method: "transfer", operation_date: new Date().toISOString().slice(0, 10), description: "" });
     setAllocations([]);
   };
 
@@ -361,7 +361,6 @@ function CreateReglementDialog({ open, onClose }: { open: boolean; onClose: () =
     try {
       await create.mutateAsync({
         client_id: parseInt(form.client_id, 10),
-        entity_id: parseInt(form.entity_id, 10),
         amount: parseFloat(form.amount),
         payment_method: form.payment_method,
         operation_date: form.operation_date,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Quote;
@@ -51,7 +52,8 @@ class InvoiceController extends Controller
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
-            'entity_id' => ['required', 'exists:entities,id'],
+            // entity_id facultatif : dérivé de l'entité de rattachement du client.
+            'entity_id' => ['nullable', 'exists:entities,id'],
             'invoice_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:invoice_date'],
             'type' => ['nullable', 'in:client,third_party,credit_note,manual'],
@@ -65,16 +67,19 @@ class InvoiceController extends Controller
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19 — TVA par ligne
         ]);
 
+        // L'entité du document suit l'entité de rattachement du client si non fournie.
+        $entityId = $data['entity_id'] ?? Client::whereKey($data['client_id'])->value('entity_id');
+
         $sequences = app(DocumentSequenceService::class);
 
-        $invoice = DB::transaction(function () use ($data, $sequences) {
+        $invoice = DB::transaction(function () use ($data, $sequences, $entityId) {
             // Numérotation atomique (audit 2026-05-19 — fix race condition count()+1)
             $ref = $sequences->next('INV');
             $invoice = Invoice::create([
                 'reference' => $ref,
                 'type' => $data['type'] ?? 'client',
                 'client_id' => $data['client_id'],
-                'entity_id' => $data['entity_id'],
+                'entity_id' => $entityId,
                 'invoice_date' => $data['invoice_date'],
                 'due_date' => $data['due_date'] ?? null,
                 'payment_mode' => $data['payment_mode'] ?? null,

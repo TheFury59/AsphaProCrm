@@ -15,7 +15,9 @@ class StoreClientRequest extends FormRequest
     {
         return [
             // Client
-            'code' => ['required', 'string', 'max:64', 'unique:clients,code'],
+            // `code` optionnel : généré automatiquement (CLI-XXXX) après l'insert
+            // si non fourni. L'unicité reste validée quand un code est saisi.
+            'code' => ['nullable', 'string', 'max:64', 'unique:clients,code'],
             'status' => ['required', 'in:active,inactive,suspended'],
             'entity_id' => ['required', 'exists:entities,id'],
             'owner_user_id' => ['nullable', 'exists:users,id'],
@@ -48,8 +50,8 @@ class StoreClientRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('code')) {
-            $this->merge(['code' => strtoupper(trim($this->input('code')))]);
+        if ($this->filled('code')) {
+            $this->merge(['code' => strtoupper(trim((string) $this->input('code')))]);
         }
         if (! $this->filled('status')) {
             $this->merge(['status' => 'active']);

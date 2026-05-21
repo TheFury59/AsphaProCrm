@@ -87,6 +87,13 @@ class ClientController extends Controller
 
             $client = Client::create($data);
 
+            // Code optionnel : si l'utilisateur n'en fournit pas, on le génère
+            // automatiquement à partir de l'id (unique → code unique, pas de
+            // race condition). Format : CLI-0001.
+            if (empty($client->code)) {
+                $client->update(['code' => 'CLI-' . str_pad((string) $client->id, 4, '0', STR_PAD_LEFT)]);
+            }
+
             $companyData = $request->input('company');
             $client->company()->create($companyData);
 

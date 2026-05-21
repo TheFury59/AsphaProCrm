@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 import { useCreateEmployee } from "@/hooks/use-employees";
+import { useEntities } from "@/hooks/use-products";
 import { apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +12,13 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const schema = z.object({
-  entity_id: z.coerce.number().int().positive(),
+  entity_id: z.coerce.number().int().positive("Sélectionnez une entité"),
   name: z.string().min(1, "Nom requis"),
   phone: z.string().optional(),
   classification: z.enum(["non_cadre", "cadre"]).default("non_cadre"),
@@ -34,11 +38,12 @@ export function CreateEmployeeDialog({ open, onClose }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
   const navigate = useNavigate();
   const create = useCreateEmployee();
+  const { data: entities } = useEntities();
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, setValue, watch } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
     defaultValues: {
-      entity_id: 1,
+      entity_id: undefined,
       name: "",
       classification: "non_cadre",
       has_company_vehicle: false,
@@ -46,6 +51,14 @@ export function CreateEmployeeDialog({ open, onClose }: Props) {
   });
 
   const hasVehicle = watch("has_company_vehicle");
+  const entityId = watch("entity_id");
+
+  // Pré-sélection intelligente : une seule entité → sélection automatique.
+  useEffect(() => {
+    if (entities && entities.length === 1 && !entityId) {
+      setValue("entity_id", entities[0].id as unknown as FormInput["entity_id"]);
+    }
+  }, [entities, entityId, setValue]);
 
   const onSubmit = async (values: FormOutput) => {
     setServerError(null);
@@ -70,22 +83,36 @@ export function CreateEmployeeDialog({ open, onClose }: Props) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="name">Nom complet *</Label>
-              <Input id="name" {...register("name")} placeholder="Sophie Martin" />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="entity_id">Entité *</Label>
-              <Input id="entity_id" type="number" {...register("entity_id")} />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="name">Nom complet *</Label>
+            <Input id="name" {...register("name")} placeholder="Sophie Martin" />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="phone">Téléphone</Label>
-            <Input id="phone" {...register("phone")} placeholder="06 12 34 56 78" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="entity_id">Entité *</Label>
+              <Select
+                value={entityId ? String(entityId) : ""}
+                onValueChange={(v) => setValue("entity_id", Number(v) as unknown as FormInput["entity_id"], { shouldValidate: true })}
+              >
+                <SelectTrigger id="entity_id">
+                  <SelectValue placeholder="Sélectionner une entité…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {entities?.map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.entity_id && <p className="text-xs text-destructive">{errors.entity_id.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">Téléphone</Label>
+              <Input id="phone" {...register("phone")} placeholder="06 12 34 56 78" />
+            </div>
           </div>
+          <p className="-mt-2 text-xs text-muted-foreground">Entité : agence / société de rattachement.</p>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

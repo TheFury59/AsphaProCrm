@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\Reglement;
 use App\Models\ReglementInvoiceLine;
@@ -63,7 +64,8 @@ class ReglementController extends Controller
 
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
-            'entity_id' => ['required', 'exists:entities,id'],
+            // entity_id facultatif : dérivé de l'entité de rattachement du client.
+            'entity_id' => ['nullable', 'exists:entities,id'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'payment_method' => ['required', 'in:cash,check,card,transfer,cesu,sepa'],
             'operation_date' => ['required', 'date'],
@@ -104,9 +106,12 @@ class ReglementController extends Controller
             }
         }
 
+        // L'entité du règlement suit l'entité de rattachement du client si non fournie.
+        $entityId = $data['entity_id'] ?? Client::whereKey($data['client_id'])->value('entity_id');
+
         $sequences = app(DocumentSequenceService::class);
 
-        $reglement = DB::transaction(function () use ($data, $sequences) {
+        $reglement = DB::transaction(function () use ($data, $sequences, $entityId) {
             // Numérotation atomique (audit 2026-05-19 — fix race condition count()+1)
             $ref = $sequences->next('PAY');
             $reglement = Reglement::create([
@@ -115,7 +120,7 @@ class ReglementController extends Controller
                 'status' => 'received',
                 'is_non_deductible' => false,
                 'client_id' => $data['client_id'],
-                'entity_id' => $data['entity_id'],
+                'entity_id' => $entityId,
                 'amount' => $data['amount'],
                 'payment_method' => $data['payment_method'],
                 'operation_date' => $data['operation_date'],

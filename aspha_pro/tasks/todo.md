@@ -1,5 +1,46 @@
 # Aspha Pro — Todo
 
+## 🧹 2026-05-21 — Clarté des formulaires de création (champs « Code » et « Entité »)
+
+Contexte : « Code » oblige l'utilisateur à inventer un identifiant ; « Entité »
+affiche un ID numérique brut. Incompréhensible.
+
+### Plan
+- [x] Recensement : `CreateClientDialog` (Code + Entité), `CreateEmployeeDialog`
+      (Entité seul — pas de colonne `code` côté employees). Invoice/Reglement :
+      `entity_id` hardcodé en state, jamais affiché → dérivé du client backend.
+- [x] Code : `clients.code` rendu `nullable` ; généré `CLI-{id zero-pad 4}`
+      après insert si vide ; unicité conservée si fourni. Champ retiré du dialog.
+- [x] Entité : `Select` shadcn par nom via `useEntities` ; pré-sélection auto si
+      une seule entité ; description « Agence / société de rattachement ».
+- [x] Invoice/Reglement : `entity_id` dérivé du client côté backend (plus de
+      dépendance au hardcode `"1"`).
+- [x] Revue clarté générale des 2 dialogs de création.
+
+### Review
+- Migration `2026_05_21_120000_make_clients_code_nullable` : `clients.code`
+  rendu nullable. Idempotente, pas de SQL spécifique → OK PostgreSQL/SQLite.
+  L'index `unique` est conservé (Postgres autorise plusieurs NULL).
+- `StoreClientRequest` : `code` passé de `required` à `nullable` ; unicité
+  conservée. `prepareForValidation` durci (`filled` + cast string).
+- `ClientController::store` : génère `CLI-{id zero-pad 4}` après l'insert si
+  `code` vide. Pas de race condition (l'id est unique).
+- `CreateClientDialog` : champ « Code » retiré du formulaire (le code reste
+  visible sur la fiche, ex. « Code CLI-0012 »). « Entité » → `Select` shadcn
+  par nom, pré-sélection auto si une seule entité, indice « Agence / société
+  de rattachement ». Placeholders ajoutés (gérant, email, téléphone).
+- `CreateEmployeeDialog` : « Entité » input number brut → `Select` shadcn
+  identique. Pas de champ « Code » côté employés (la table `employees` n'a
+  pas de colonne `code` — rien à générer).
+- Invoice/Reglement : `entity_id` était hardcodé `"1"` dans le state (jamais
+  affiché). Retiré du frontend ; les controllers le dérivent de
+  `client.entity_id`. Validation `entity_id` passée `nullable`.
+- Tests : `php -l` OK, `php artisan migrate` OK, génération `CLI-XXXX` testée
+  en tinker (code généré + unique, code manuel conservé), `tsc --noEmit` 0
+  erreur. Test navigateur réel (login super_admin) : création client →
+  « Code CLI-0012 » auto + entité rattachée ; création intervenant OK ;
+  0 erreur console.
+
 ## ✏️ 2026-05-21 — Édition d'une mission existante
 
 Contexte : on pouvait créer une mission mais pas y revenir pour l'éditer.
