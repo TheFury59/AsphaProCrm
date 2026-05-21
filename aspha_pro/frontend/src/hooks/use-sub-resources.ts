@@ -231,6 +231,53 @@ export function useUpdateClientAddress(clientId: number) {
   });
 }
 
+// === Adresses INTERVENANT ===
+// L'adresse (domicile) de l'intervenant est indispensable au calcul de
+// proximité de la carte de suggestion d'intervenants (géocodage BAN auto
+// via Address::booted). 2026-05-21.
+
+function invalidateEmployeeAddresses(qc: ReturnType<typeof useQueryClient>, employeeId: number) {
+  qc.invalidateQueries({ queryKey: ["employee", employeeId, "addresses"] });
+  qc.invalidateQueries({ queryKey: ["employee", employeeId] });
+  qc.invalidateQueries({ queryKey: ["employees"] });
+  // le planning / les suggestions embarquent les coordonnées géocodées
+  qc.invalidateQueries({ queryKey: ["planning"] });
+}
+
+export function useEmployeeAddresses(employeeId: number) {
+  return useQuery({
+    queryKey: ["employee", employeeId, "addresses"],
+    queryFn: async () => (await api.get<ListResponse<Address>>(`/employees/${employeeId}/addresses`)).data.data,
+    enabled: !!employeeId,
+  });
+}
+
+export function useCreateEmployeeAddress(employeeId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Partial<Address>) =>
+      (await api.post<SingleResponse<Address>>(`/employees/${employeeId}/addresses`, payload)).data.data,
+    onSuccess: () => invalidateEmployeeAddresses(qc, employeeId),
+  });
+}
+
+export function useUpdateEmployeeAddress(employeeId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<Address> }) =>
+      (await api.patch<SingleResponse<Address>>(`/employees/${employeeId}/addresses/${id}`, patch)).data.data,
+    onSuccess: () => invalidateEmployeeAddresses(qc, employeeId),
+  });
+}
+
+export function useDeleteEmployeeAddress(employeeId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/employees/${employeeId}/addresses/${id}`); },
+    onSuccess: () => invalidateEmployeeAddresses(qc, employeeId),
+  });
+}
+
 /**
  * Update partiel d'un contact client. Idem cascade planning.
  */

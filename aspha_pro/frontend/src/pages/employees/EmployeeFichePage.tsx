@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User, FileText, Award, Calendar, GraduationCap, Receipt, Wallet } from "lucide-react";
+import { User, FileText, Award, Calendar, GraduationCap, Receipt, Wallet, MapPin } from "lucide-react";
 import { EmployeeSkillsTab } from "./tabs/EmployeeSkillsTab";
+import { EmployeeAddressesTab } from "./tabs/EmployeeAddressesTab";
 import { EmployeeAbsencesTab } from "./tabs/EmployeeAbsencesTab";
 import { EmployeeTrainingsTab } from "./tabs/EmployeeTrainingsTab";
 import { SalaryDeductionsTab } from "./tabs/SalaryDeductionsTab";
@@ -65,6 +66,7 @@ export function EmployeeFichePage() {
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="general"><User className="h-3.5 w-3.5 mr-1.5" /> Général</TabsTrigger>
           <TabsTrigger value="contract"><FileText className="h-3.5 w-3.5 mr-1.5" /> Contrat</TabsTrigger>
+          <TabsTrigger value="address"><MapPin className="h-3.5 w-3.5 mr-1.5" /> Adresse</TabsTrigger>
           <TabsTrigger value="skills"><Award className="h-3.5 w-3.5 mr-1.5" /> Compétences ({e.skills?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="absences"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Absences ({e.counts?.absences ?? 0})</TabsTrigger>
           <TabsTrigger value="trainings"><GraduationCap className="h-3.5 w-3.5 mr-1.5" /> Formations ({e.counts?.trainings ?? 0})</TabsTrigger>
@@ -191,6 +193,10 @@ export function EmployeeFichePage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="address" className="mt-4">
+          <EmployeeAddressesTab employeeId={employeeId} />
         </TabsContent>
 
         <TabsContent value="skills" className="mt-4">
