@@ -56,6 +56,8 @@ class ClientRequestController extends Controller
             'client:id,code',
             'client.company:id,client_id,company_name,photo,updated_at',
             'assignedTo:id,name,email',
+            'createdByUser:id,name',
+            'assignedEmployees:id,name,user_id,avatar_path,updated_at',
         ]);
         return ['data' => $clientRequest];
     }
@@ -109,5 +111,139 @@ class ClientRequestController extends Controller
         abort_unless($request->user()?->can('clients.edit'), 403);
         $clientRequest->delete();
         return response()->noContent();
+    }
+
+    // ====================================================================
+    // Fil de discussion (admin)
+    // ====================================================================
+
+    /**
+     * GET /client-requests/{clientRequest}/messages
+     * Liste le fil de discussion du ticket (ordre chronologique).
+     */
+    public function listMessages(Request $request, ClientRequest $clientRequest)
+    {
+        abort_unless($request->user()?->can('clients.view'), 403);
+
+        $messages = $clientRequest->messages()
+            ->with('sender:id,name')
+            ->orderBy('created_at')
+            ->get();
+
+        return ['data' => $messages];
+    }
+
+    /**
+     * POST /client-requests/{clientRequest}/messages
+     * Poste un message dans le fil. L'auteur est l'admin connecté.
+     * La notification aux participants est émise par
+     * ClientRequestMessageObserver (point d'émission unique).
+     */
+    public function storeMessage(Request $request, ClientRequest $clientRequest)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $message = $clientRequest->messages()->create([
+            'sender_id' => $request->user()->id,
+            'body' => $data['body'],
+        ]);
+
+        $message->load('sender:id,name');
+
+        return response()->json(['data' => $message], 201);
+    }
+
+    // ====================================================================
+    // Affectation d'intervenant(s) (admin)
+    // ====================================================================
+
+    /**
+     * POST /client-requests/{clientRequest}/employees
+     * Affecte un intervenant au ticket. Idempotent (re-affecter ne crée
+     * pas de doublon — la table pivot a un unique composite).
+     *
+     * L'intervenant affecté est notifié (`client_request_assigned`) —
+     * sauf s'il s'affecte lui-même (cf. règle "jamais d'auto-notif").
+     */
+    public function attachEmployee(Request $request, ClientRequest $clientRequest)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+        ]);
+
+        $alreadyAssigned = $clientRequest->assignedEmployees()
+            ->where('employees.id', $data['employee_id'])
+            ->exists();
+
+        if (! $alreadyAssigned) {
+            $clientRequest->assignedEmployees()->attach($data['employee_id']);
+
+            $employee = \App\Models\Employee::find($data['employee_id']);
+            if ($employee?->user_id && (int) $employee->user_id !== (int) $request->user()->id) {
+                $clientRequest->loadMissing('client.company:id,client_id,company_name');
+                $companyName = $clientRequest->client?->company?->company_name
+                    ?? ($clientRequest->client ? "Client {$clientRequest->client->code}" : 'Client');
+
+                app(\App\Services\NotificationDispatcher::class)->dispatch(
+                    code: 'client_request_assigned',
+                    userIds: [(int) $employee->user_id],
+                    title: "Ticket à traiter · {$companyName}",
+                    body: $clientRequest->subject ?? 'Vous avez été affecté à un ticket',
+                    target: $clientRequest,
+                );
+            }
+        }
+
+        $clientRequest->load('assignedEmployees:id,name,user_id,avatar_path,updated_at');
+
+        return ['data' => $clientRequest->assignedEmployees];
+    }
+
+    /**
+     * DELETE /client-requests/{clientRequest}/employees/{employeeId}
+     * Retire un intervenant du ticket.
+     */
+    public function detachEmployee(Request $request, ClientRequest $clientRequest, int $employeeId)
+    {
+        abort_unless($request->user()?->can('clients.edit'), 403);
+
+        $clientRequest->assignedEmployees()->detach($employeeId);
+        $clientRequest->load('assignedEmployees:id,name,user_id,avatar_path,updated_at');
+
+        return ['data' => $clientRequest->assignedEmployees];
+    }
+
+    /**
+     * GET /employees/{employee}/client-requests
+     *
+     * Tickets liés à un intervenant pour l'onglet de sa fiche admin :
+     * ceux où il est affecté OU qu'il a créés (via son `user_id`).
+     */
+    public function forEmployee(Request $request, \App\Models\Employee $employee)
+    {
+        abort_unless($request->user()?->can('clients.view'), 403);
+
+        $tickets = ClientRequest::query()
+            ->where(function ($q) use ($employee) {
+                $q->whereHas('assignedEmployees', fn ($e) => $e->where('employees.id', $employee->id));
+                if ($employee->user_id) {
+                    $q->orWhere('created_by_user_id', $employee->user_id);
+                }
+            })
+            ->with([
+                'client:id,code',
+                'client.company:id,client_id,company_name,photo,updated_at',
+                'assignedTo:id,name',
+            ])
+            ->orderByDesc('created_at')
+            ->get();
+
+        return ['data' => $tickets];
     }
 }

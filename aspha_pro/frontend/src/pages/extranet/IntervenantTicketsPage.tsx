@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -21,8 +22,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { TicketThread } from "@/components/TicketThread";
+import { useAuthStore } from "@/stores/auth";
 import {
   useIntervenantTickets, useIntervenantMyClients, useCreateIntervenantTicket,
+  useIntervenantTicketMessages, usePostIntervenantTicketMessage,
 } from "@/hooks/use-extranet";
 
 /**
@@ -54,6 +58,7 @@ const TICKET_STATUS_LABEL = (s: string): string => ({
 export function IntervenantTicketsPage() {
   const { data: tickets = [] } = useIntervenantTickets();
   const [open, setOpen] = useState(false);
+  const [openTicket, setOpenTicket] = useState<any | null>(null);
 
   return (
     <div className="space-y-4">
@@ -61,7 +66,8 @@ export function IntervenantTicketsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Mes signalements</h1>
           <p className="text-sm text-muted-foreground">
-            Signale un problème ou une demande pour un de tes clients. L'équipe Aspha sera notifiée.
+            Tes signalements et les tickets sur lesquels l'équipe Aspha t'a affecté.
+            Ouvre un ticket pour échanger dans le fil de discussion.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -90,12 +96,13 @@ export function IntervenantTicketsPage() {
                 <TableHead>Priorité</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Créé</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tickets.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">
                     <TicketIcon className="h-8 w-8 mx-auto mb-2 opacity-30" />
                     Aucun signalement pour le moment.
                   </TableCell>
@@ -104,7 +111,11 @@ export function IntervenantTicketsPage() {
               {tickets.map((t: any) => {
                 const companyName = t.client?.company?.company_name ?? `Client #${t.client_id}`;
                 return (
-                  <TableRow key={t.id}>
+                  <TableRow
+                    key={t.id}
+                    className="cursor-pointer"
+                    onClick={() => setOpenTicket(t)}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <EntityAvatar
@@ -136,6 +147,11 @@ export function IntervenantTicketsPage() {
                     <TableCell className="text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(t.created_at), { locale: fr, addSuffix: true })}
                     </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" className="gap-1">
+                        <MessageSquare className="h-3.5 w-3.5" /> Ouvrir
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -143,7 +159,66 @@ export function IntervenantTicketsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {openTicket && (
+        <IntervenantTicketThreadDialog ticket={openTicket} onClose={() => setOpenTicket(null)} />
+      )}
     </div>
+  );
+}
+
+// =========================================================================
+// Dialog : ouvrir un ticket + fil de discussion
+// =========================================================================
+
+function IntervenantTicketThreadDialog({ ticket, onClose }: { ticket: any; onClose: () => void }) {
+  const currentUser = useAuthStore((s) => s.user);
+  const { data: messages, isLoading } = useIntervenantTicketMessages(ticket.id);
+  const post = usePostIntervenantTicketMessage(ticket.id);
+  const closed = ticket.status === "closed";
+  const companyName = ticket.client?.company?.company_name ?? `Client #${ticket.client_id}`;
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <TicketIcon className="h-4 w-4 text-primary" />
+            {ticket.subject ?? "Ticket"}
+          </DialogTitle>
+          <DialogDescription className="flex items-center gap-2 flex-wrap">
+            <span>{companyName}</span>
+            <Badge variant="outline" className="text-[10px]">{TICKET_TYPE_LABEL(ticket.type)}</Badge>
+            <Badge
+              variant={ticket.status === "resolved" || ticket.status === "closed" ? "secondary" : "default"}
+              className="text-[10px]"
+            >
+              {TICKET_STATUS_LABEL(ticket.status)}
+            </Badge>
+          </DialogDescription>
+        </DialogHeader>
+
+        {ticket.body && (
+          <div className="rounded-lg bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+            {ticket.body}
+          </div>
+        )}
+
+        <TicketThread
+          messages={messages}
+          isLoading={isLoading}
+          currentUserId={currentUser?.id ?? null}
+          isSending={post.isPending}
+          disabled={closed}
+          onSend={async (body) => { await post.mutateAsync(body); }}
+        />
+        {closed && (
+          <p className="text-xs text-muted-foreground italic">
+            Ce ticket est clôturé — vous ne pouvez plus y répondre.
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

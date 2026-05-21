@@ -244,20 +244,78 @@ class ExtranetController extends Controller
         return response()->json(['data' => $ticket], 201);
     }
 
+    /**
+     * Résout un ticket en garantissant que l'utilisateur courant en est
+     * bien participant (ownership strict — cf. audit sécurité 2026-05-19).
+     *
+     * Un participant côté CLIENT est : le client propriétaire (le ticket
+     * appartient au client lié à `portal_user_id`). On ne s'appuie pas sur
+     * le route-model-binding seul : on re-vérifie `client_id`.
+     */
+    private function resolveClientTicket(Request $request, \App\Models\ClientRequest $ticket): \App\Models\ClientRequest
+    {
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
+        abort_unless($client, 404, 'Profil client introuvable');
+        abort_unless((int) $ticket->client_id === (int) $client->id, 403, 'Ce ticket ne vous appartient pas.');
+
+        return $ticket;
+    }
+
+    /**
+     * GET /api/v1/extranet/client/tickets/{ticket}/messages
+     * Fil de discussion d'un ticket du client connecté.
+     */
+    public function clientTicketMessages(Request $request, \App\Models\ClientRequest $ticket)
+    {
+        $ticket = $this->resolveClientTicket($request, $ticket);
+
+        return ['data' => $ticket->messages()
+            ->with('sender:id,name')
+            ->orderBy('created_at')
+            ->get()];
+    }
+
+    /**
+     * POST /api/v1/extranet/client/tickets/{ticket}/messages
+     * Le client répond dans le fil de SON ticket.
+     * La notif aux participants est émise par ClientRequestMessageObserver.
+     */
+    public function postClientTicketMessage(Request $request, \App\Models\ClientRequest $ticket)
+    {
+        $ticket = $this->resolveClientTicket($request, $ticket);
+
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $message = $ticket->messages()->create([
+            'sender_id' => $request->user()->id,
+            'body' => $data['body'],
+        ]);
+        $message->load('sender:id,name');
+
+        return response()->json(['data' => $message], 201);
+    }
+
     // ========== INTERVENANT — TICKETS (signaler un problème client) ==========
 
     /**
      * GET /api/v1/extranet/intervenant/tickets
      *
-     * Liste les tickets créés par l'intervenant connecté (peu importe le client).
-     * Permet de suivre ses propres signalements.
+     * Liste les tickets où l'intervenant connecté est PARTICIPANT :
+     * ceux qu'il a créés (ses signalements) OU ceux où il a été affecté
+     * par un admin. Dans les deux cas il peut consulter / répondre au fil.
      */
     public function intervenantTickets(Request $request)
     {
         $employee = Employee::where('user_id', $request->user()->id)->first();
         abort_unless($employee, 404);
 
-        $tickets = \App\Models\ClientRequest::where('created_by_user_id', $request->user()->id)
+        $tickets = \App\Models\ClientRequest::query()
+            ->where(function ($q) use ($request, $employee) {
+                $q->where('created_by_user_id', $request->user()->id)
+                  ->orWhereHas('assignedEmployees', fn ($e) => $e->where('employees.id', $employee->id));
+            })
             ->with([
                 'client:id,code',
                 'client.company:id,client_id,company_name,photo,updated_at',
@@ -266,6 +324,58 @@ class ExtranetController extends Controller
             ->get();
 
         return ['data' => $tickets];
+    }
+
+    /**
+     * Résout un ticket en garantissant que l'intervenant connecté en est
+     * participant : soit il l'a créé, soit il y est affecté (ownership
+     * strict — cf. audit 2026-05-19).
+     */
+    private function resolveIntervenantTicket(Request $request, \App\Models\ClientRequest $ticket): \App\Models\ClientRequest
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        $isCreator = (int) $ticket->created_by_user_id === (int) $request->user()->id;
+        $isAssigned = $ticket->assignedEmployees()->where('employees.id', $employee->id)->exists();
+
+        abort_unless($isCreator || $isAssigned, 403, "Vous ne participez pas à ce ticket.");
+
+        return $ticket;
+    }
+
+    /**
+     * GET /api/v1/extranet/intervenant/tickets/{ticket}/messages
+     */
+    public function intervenantTicketMessages(Request $request, \App\Models\ClientRequest $ticket)
+    {
+        $ticket = $this->resolveIntervenantTicket($request, $ticket);
+
+        return ['data' => $ticket->messages()
+            ->with('sender:id,name')
+            ->orderBy('created_at')
+            ->get()];
+    }
+
+    /**
+     * POST /api/v1/extranet/intervenant/tickets/{ticket}/messages
+     * L'intervenant répond dans le fil d'un ticket auquel il participe.
+     */
+    public function postIntervenantTicketMessage(Request $request, \App\Models\ClientRequest $ticket)
+    {
+        $ticket = $this->resolveIntervenantTicket($request, $ticket);
+
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $message = $ticket->messages()->create([
+            'sender_id' => $request->user()->id,
+            'body' => $data['body'],
+        ]);
+        $message->load('sender:id,name');
+
+        return response()->json(['data' => $message], 201);
     }
 
     /**

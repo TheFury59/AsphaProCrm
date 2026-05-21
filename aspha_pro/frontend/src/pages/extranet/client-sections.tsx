@@ -28,8 +28,11 @@ import {
   useClientInvoices, useClientPrestations, useClientProfile,
   useClientQuotes, useClientTickets, useCreateClientTicket,
   useAcceptClientQuote, useRefuseClientQuote,
+  useClientTicketMessages, usePostClientTicketMessage,
 } from "@/hooks/use-extranet";
 import { api, apiErrorMessage } from "@/lib/api";
+import { TicketThread } from "@/components/TicketThread";
+import { useAuthStore } from "@/stores/auth";
 
 /**
  * Bibliotheque de sections reutilisables pour l'extranet client.
@@ -540,6 +543,7 @@ export function ClientPrestationsSection() {
 export function ClientTicketsSection() {
   const { data: tickets = [] } = useClientTickets();
   const [ticketOpen, setTicketOpen] = useState(false);
+  const [openTicket, setOpenTicket] = useState<any | null>(null);
 
   return (
     <Card>
@@ -565,18 +569,23 @@ export function ClientTicketsSection() {
               <TableHead>Priorité</TableHead>
               <TableHead>Statut</TableHead>
               <TableHead>Créée</TableHead>
+              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tickets.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">
                   Aucune demande pour le moment.
                 </TableCell>
               </TableRow>
             )}
             {tickets.map((t: any) => (
-              <TableRow key={t.id}>
+              <TableRow
+                key={t.id}
+                className="cursor-pointer"
+                onClick={() => setOpenTicket(t)}
+              >
                 <TableCell>{TICKET_TYPE_LABEL(t.type)}</TableCell>
                 <TableCell className="text-sm font-medium">{t.subject ?? "—"}</TableCell>
                 <TableCell>
@@ -592,12 +601,74 @@ export function ClientTicketsSection() {
                 <TableCell className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(t.created_at), { locale: fr, addSuffix: true })}
                 </TableCell>
+                <TableCell>
+                  <Button size="sm" variant="ghost" className="gap-1">
+                    <MessageSquare className="h-3.5 w-3.5" /> Ouvrir
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </CardContent>
+
+      {openTicket && (
+        <ClientTicketThreadDialog ticket={openTicket} onClose={() => setOpenTicket(null)} />
+      )}
     </Card>
+  );
+}
+
+// =========================================================================
+// Dialog : ouvrir un ticket + fil de discussion (extranet client)
+// =========================================================================
+
+function ClientTicketThreadDialog({ ticket, onClose }: { ticket: any; onClose: () => void }) {
+  const currentUser = useAuthStore((s) => s.user);
+  const { data: messages, isLoading } = useClientTicketMessages(ticket.id);
+  const post = usePostClientTicketMessage(ticket.id);
+  const closed = ticket.status === "closed";
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <TicketIcon className="h-4 w-4 text-primary" />
+            {ticket.subject ?? "Demande"}
+          </DialogTitle>
+          <DialogDescription className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-[10px]">{TICKET_TYPE_LABEL(ticket.type)}</Badge>
+            <Badge
+              variant={ticket.status === "resolved" || ticket.status === "closed" ? "secondary" : "default"}
+              className="text-[10px]"
+            >
+              {TICKET_STATUS_LABEL(ticket.status)}
+            </Badge>
+          </DialogDescription>
+        </DialogHeader>
+
+        {ticket.body && (
+          <div className="rounded-lg bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+            {ticket.body}
+          </div>
+        )}
+
+        <TicketThread
+          messages={messages}
+          isLoading={isLoading}
+          currentUserId={currentUser?.id ?? null}
+          isSending={post.isPending}
+          disabled={closed}
+          onSend={async (body) => { await post.mutateAsync(body); }}
+        />
+        {closed && (
+          <p className="text-xs text-muted-foreground italic">
+            Cette demande est clôturée — vous ne pouvez plus y répondre.
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

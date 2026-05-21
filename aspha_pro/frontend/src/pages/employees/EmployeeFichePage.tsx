@@ -14,10 +14,11 @@ import { EmployeeTrainingsTab } from "./tabs/EmployeeTrainingsTab";
 import { SalaryDeductionsTab } from "./tabs/SalaryDeductionsTab";
 import { ContractFormDialog } from "./tabs/ContractFormDialog";
 import { EmployeePlanningTab } from "./tabs/EmployeePlanningTab";
+import { EmployeeTicketsTab } from "./tabs/EmployeeTicketsTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Ticket } from "lucide-react";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { PortalAccessCard } from "@/pages/clients/PortalAccessCard";
@@ -72,6 +73,7 @@ export function EmployeeFichePage() {
           <TabsTrigger value="trainings"><GraduationCap className="h-3.5 w-3.5 mr-1.5" /> Formations ({e.counts?.trainings ?? 0})</TabsTrigger>
           <TabsTrigger value="planning"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Planning ({e.counts?.interventions ?? 0})</TabsTrigger>
           <TabsTrigger value="payroll"><Wallet className="h-3.5 w-3.5 mr-1.5" /> Saisies ({e.counts?.salary_deductions ?? 0})</TabsTrigger>
+          <TabsTrigger value="tickets"><Ticket className="h-3.5 w-3.5 mr-1.5" /> Tickets</TabsTrigger>
           <TabsTrigger value="documents"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Documents</TabsTrigger>
         </TabsList>
 
@@ -220,6 +222,9 @@ export function EmployeeFichePage() {
         </TabsContent>
         <TabsContent value="payroll" className="mt-4">
           <SalaryDeductionsTab employeeId={employeeId} />
+        </TabsContent>
+        <TabsContent value="tickets" className="mt-4">
+          <EmployeeTicketsTab employeeId={employeeId} />
         </TabsContent>
       </Tabs>
 

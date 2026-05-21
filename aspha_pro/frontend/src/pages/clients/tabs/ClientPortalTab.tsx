@@ -14,9 +14,15 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import {
   useClientRequests, useClientReorders, useCreateClientRequest, useCreateClientReorder,
   useCreateQualityControl, useQualityControls,
 } from "@/hooks/use-operations";
+import { useTicketMessages, usePostTicketMessage } from "@/hooks/use-tickets";
+import { TicketThread } from "@/components/TicketThread";
+import { useAuthStore } from "@/stores/auth";
 import { apiErrorMessage } from "@/lib/api";
 
 /**
@@ -54,6 +60,7 @@ export function ClientPortalTab({ clientId }: { clientId: number }) {
 function RequestsTab({ clientId }: { clientId: number }) {
   const { data } = useClientRequests(clientId);
   const create = useCreateClientRequest();
+  const [openTicket, setOpenTicket] = useState<any | null>(null);
   const [form, setForm] = useState({
     type: "complaint" as "complaint" | "problem_report",
     subject: "",
@@ -143,7 +150,11 @@ function RequestsTab({ clientId }: { clientId: number }) {
             </TableRow></TableHeader>
             <TableBody>
               {data?.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  className="cursor-pointer"
+                  onClick={() => setOpenTicket(r)}
+                >
                   <TableCell className="text-sm">
                     <div className="font-medium">{r.subject}</div>
                     {r.body && (
@@ -162,7 +173,52 @@ function RequestsTab({ clientId }: { clientId: number }) {
           </Table>
         </CardContent>
       </Card>
+
+      {openTicket && (
+        <AdminTicketThreadDialog ticket={openTicket} onClose={() => setOpenTicket(null)} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Dialog du fil de discussion d'un ticket — vue admin embarquée dans la
+ * fiche client. Réutilise les endpoints admin `/client-requests/{id}/messages`.
+ */
+function AdminTicketThreadDialog({ ticket, onClose }: { ticket: any; onClose: () => void }) {
+  const currentUser = useAuthStore((s) => s.user);
+  const { data: messages, isLoading } = useTicketMessages(ticket.id);
+  const post = usePostTicketMessage(ticket.id);
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            {ticket.subject ?? "Demande"}
+          </DialogTitle>
+          <DialogDescription className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-[10px]">{TYPE_LABEL(ticket.type)}</Badge>
+            <Badge className="text-[10px]">{STATUS_LABEL(ticket.status)}</Badge>
+          </DialogDescription>
+        </DialogHeader>
+
+        {ticket.body && (
+          <div className="rounded-lg bg-muted/50 p-3 text-sm whitespace-pre-wrap">
+            {ticket.body}
+          </div>
+        )}
+
+        <TicketThread
+          messages={messages}
+          isLoading={isLoading}
+          currentUserId={currentUser?.id ?? null}
+          isSending={post.isPending}
+          onSend={async (body) => { await post.mutateAsync(body); }}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 

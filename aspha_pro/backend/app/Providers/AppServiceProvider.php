@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Entity;
 use App\Models\ClientRequest;
+use App\Models\ClientRequestMessage;
 use App\Models\Intervention;
 use App\Models\Invoice;
 use App\Models\Message;
@@ -15,6 +16,7 @@ use App\Models\Mission;
 use App\Models\Quote;
 use App\Models\StockProduct;
 use App\Observers\ClientRequestObserver;
+use App\Observers\ClientRequestMessageObserver;
 use App\Observers\InterventionObserver;
 use App\Observers\InvoiceObserver;
 use App\Observers\MessageObserver;
@@ -66,6 +68,7 @@ class AppServiceProvider extends ServiceProvider
         // dans les controllers — cf. LRN 2026-05-18 : double-notif silencieuse).
         Intervention::observe(InterventionObserver::class);
         ClientRequest::observe(ClientRequestObserver::class);
+        ClientRequestMessage::observe(ClientRequestMessageObserver::class);
         StockProduct::observe(StockProductObserver::class);
         Mission::observe(MissionObserver::class);
         Invoice::observe(InvoiceObserver::class);

@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   Ticket as TicketIcon, AlertCircle, MessageSquare, PackageOpen,
-  Building2, Calendar, User, Trash2, ArrowRight,
+  Building2, Calendar, User, Trash2, ArrowRight, Users, Plus, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
@@ -12,15 +12,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { TicketThread } from "@/components/TicketThread";
 import {
   useTicket, useUpdateTicket, useDeleteTicket,
+  useTicketMessages, usePostTicketMessage,
+  useAttachTicketEmployee, useDetachTicketEmployee,
   type TicketStatus, type TicketPriority,
 } from "@/hooks/use-tickets";
+import { useEmployees } from "@/hooks/use-employees";
+import { useAuthStore } from "@/stores/auth";
 
 /**
  * Page détail d'un ticket — accessible via la cloche notif, la liste tickets,
@@ -71,13 +75,12 @@ export function TicketDetailPage() {
   const { id } = useParams();
   const ticketId = id ? parseInt(id, 10) : null;
   const navigate = useNavigate();
+  const currentUser = useAuthStore((s) => s.user);
   const { data: t, isLoading } = useTicket(ticketId);
   const update = useUpdateTicket();
   const del = useDeleteTicket();
-  // Note interne saisie côté admin — non persistée pour l'instant
-  // (champ body de la table est utilisé par le ticket initial). Une
-  // future itération ajoutera une table comments rattachée au ticket.
-  const [internalNote, setInternalNote] = useState("");
+  const { data: messages, isLoading: messagesLoading } = useTicketMessages(ticketId);
+  const postMessage = usePostTicketMessage(ticketId ?? 0);
 
   if (isLoading || !t || !ticketId) {
     return (
@@ -219,25 +222,28 @@ export function TicketDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Note interne — placeholder pour évolution future */}
+          {/* Fil de discussion — échange admin / client / intervenants */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Notes internes</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                Fil de discussion
+              </CardTitle>
               <CardDescription>
-                Échanges et historique de traitement (à venir : commentaires persistés).
+                Échangez avec le client et les intervenants affectés. Tous les
+                participants reçoivent une notification à chaque message.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Textarea
-                rows={3}
-                placeholder="Écrire une note interne…"
-                value={internalNote}
-                onChange={(e) => setInternalNote(e.target.value)}
-                className="text-sm"
+              <TicketThread
+                messages={messages}
+                isLoading={messagesLoading}
+                currentUserId={currentUser?.id ?? null}
+                isSending={postMessage.isPending}
+                onSend={async (body) => {
+                  await postMessage.mutateAsync(body);
+                }}
               />
-              <p className="text-[10px] text-muted-foreground mt-2 italic">
-                Bientôt : ajouter des commentaires datés visibles uniquement par les admins.
-              </p>
             </CardContent>
           </Card>
         </div>
@@ -304,9 +310,134 @@ export function TicketDetailPage() {
               />
             </CardContent>
           </Card>
+
+          {/* Intervenants affectés au ticket */}
+          <AssignedEmployeesCard ticketId={ticketId} assigned={t.assigned_employees ?? []} />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Carte de gestion des intervenants affectés au ticket. Un intervenant
+ * affecté devient participant du fil : il voit le ticket dans son extranet.
+ */
+function AssignedEmployeesCard({
+  ticketId,
+  assigned,
+}: {
+  ticketId: number;
+  assigned: { id: number; name: string | null; avatar_url?: string | null }[];
+}) {
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState("");
+  const { data: employeesPage } = useEmployees({ per_page: 100 });
+  const attach = useAttachTicketEmployee(ticketId);
+  const detach = useDetachTicketEmployee(ticketId);
+
+  const allEmployees = employeesPage?.data ?? [];
+  const assignedIds = new Set(assigned.map((e) => e.id));
+  const candidates = allEmployees.filter((e: any) => !assignedIds.has(e.id));
+
+  const handleAttach = async () => {
+    if (!selected) {
+      toast.error("Sélectionnez un intervenant");
+      return;
+    }
+    try {
+      await attach.mutateAsync(parseInt(selected, 10));
+      toast.success("Intervenant affecté — il a été notifié.");
+      setSelected("");
+      setPicking(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Affectation impossible");
+    }
+  };
+
+  const handleDetach = async (employeeId: number) => {
+    try {
+      await detach.mutateAsync(employeeId);
+      toast.success("Intervenant retiré du ticket");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Retrait impossible");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Intervenants ({assigned.length})
+        </CardTitle>
+        {!picking && (
+          <Button size="sm" variant="ghost" onClick={() => setPicking(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Affecter
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {picking && (
+          <div className="flex items-center gap-2">
+            <Select value={selected} onValueChange={setSelected}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Choisir un intervenant…" />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.length === 0 && (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Tous les intervenants sont déjà affectés.
+                  </div>
+                )}
+                {candidates.map((e: any) => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.name ?? `Intervenant #${e.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" disabled={attach.isPending} onClick={handleAttach}>
+              OK
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setPicking(false); setSelected(""); }}
+            >
+              Annuler
+            </Button>
+          </div>
+        )}
+
+        {assigned.length === 0 && !picking && (
+          <p className="text-xs text-muted-foreground italic">
+            Aucun intervenant affecté. Affectez-en un pour l'inclure dans le fil.
+          </p>
+        )}
+
+        {assigned.map((e) => (
+          <div key={e.id} className="flex items-center gap-2.5 group">
+            <EntityAvatar
+              src={e.avatar_url}
+              name={e.name ?? `Intervenant #${e.id}`}
+              variant="employee"
+              size="xs"
+            />
+            <span className="text-sm flex-1 truncate">{e.name ?? `Intervenant #${e.id}`}</span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-rose-600"
+              onClick={() => handleDetach(e.id)}
+              disabled={detach.isPending}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -9,6 +9,13 @@ export type TicketType = "complaint" | "problem_report" | "consumable_reorder";
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
+export type TicketAssignedEmployee = {
+  id: number;
+  name: string | null;
+  user_id: number | null;
+  avatar_url?: string | null;
+};
+
 export type ClientRequest = {
   id: number;
   client_id: number;
@@ -18,6 +25,7 @@ export type ClientRequest = {
   status: TicketStatus;
   priority: TicketPriority | null;
   assigned_to: number | null;
+  created_by_user_id: number | null;
   resolved_at: string | null;
   created_at: string;
   client?: {
@@ -25,8 +33,21 @@ export type ClientRequest = {
     code: string;
     company?: { id: number; company_name: string; logo_url: string | null } | null;
   };
+  // Relations sérialisées en snake_case par Eloquent (toArray).
   assigned_to_user?: { id: number; name: string } | null;
   assignedTo?: { id: number; name: string } | null;
+  created_by_user?: { id: number; name: string } | null;
+  assigned_employees?: TicketAssignedEmployee[];
+};
+
+/** Un message du fil de discussion d'un ticket. */
+export type TicketMessage = {
+  id: number;
+  client_request_id: number;
+  sender_id: number | null;
+  body: string;
+  created_at: string;
+  sender?: { id: number; name: string } | null;
 };
 
 type ListResponse<T> = { data: { data: T[]; total: number; current_page: number; last_page: number; per_page: number } };
@@ -116,5 +137,73 @@ export function useDeleteTicket() {
       await api.delete(`/client-requests/${id}`);
     },
     onSuccess: () => invalidateTickets(qc),
+  });
+}
+
+// =========================================================================
+// Fil de discussion (admin)
+// =========================================================================
+
+export function useTicketMessages(ticketId: number | null) {
+  return useQuery({
+    queryKey: ["client-requests", ticketId, "messages"],
+    enabled: !!ticketId,
+    queryFn: async () =>
+      (await api.get<SingleResponse<TicketMessage[]>>(`/client-requests/${ticketId}/messages`)).data.data,
+  });
+}
+
+export function usePostTicketMessage(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: string) =>
+      (await api.post<SingleResponse<TicketMessage>>(`/client-requests/${ticketId}/messages`, { body }))
+        .data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-requests", ticketId, "messages"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+// =========================================================================
+// Affectation d'intervenant(s)
+// =========================================================================
+
+export function useAttachTicketEmployee(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (employeeId: number) =>
+      (await api.post<SingleResponse<TicketAssignedEmployee[]>>(
+        `/client-requests/${ticketId}/employees`,
+        { employee_id: employeeId },
+      )).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-requests", ticketId] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+export function useDetachTicketEmployee(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (employeeId: number) =>
+      (await api.delete<SingleResponse<TicketAssignedEmployee[]>>(
+        `/client-requests/${ticketId}/employees/${employeeId}`,
+      )).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-requests", ticketId] });
+    },
+  });
+}
+
+/** Tickets liés à un intervenant (affectés OU créés) — onglet fiche intervenant. */
+export function useEmployeeTickets(employeeId: number | null) {
+  return useQuery({
+    queryKey: ["employees", employeeId, "client-requests"],
+    enabled: !!employeeId,
+    queryFn: async () =>
+      (await api.get<SingleResponse<ClientRequest[]>>(`/employees/${employeeId}/client-requests`)).data.data,
   });
 }

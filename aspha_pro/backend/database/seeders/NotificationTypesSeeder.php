@@ -52,6 +52,11 @@ class NotificationTypesSeeder extends Seeder
 
             // Tickets
             ['code' => 'client_request_status', 'label' => 'Ticket mis à jour', 'module' => 'portal', 'default_channels' => 'push'],
+            // Nouveau message dans le fil de discussion d'un ticket → notifie
+            // tous les participants sauf l'auteur (workflow 2026-05-21).
+            ['code' => 'client_request_message', 'label' => 'Nouveau message sur un ticket', 'module' => 'portal', 'default_channels' => 'push,email'],
+            // Intervenant affecté à un ticket → on le prévient.
+            ['code' => 'client_request_assigned', 'label' => 'Affecté à un ticket', 'module' => 'portal', 'default_channels' => 'push,email'],
 
             // Messagerie
             ['code' => 'new_message', 'label' => 'Nouveau message', 'module' => 'messaging', 'default_channels' => 'push'],

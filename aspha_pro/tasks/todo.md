@@ -678,3 +678,46 @@ affectation d'intervenant(s), accès des 3 publics (admin/client/intervenant).
 - [ ] Frontend : fil dans extranet client + intervenant
 - [ ] Frontend : onglet tickets fiche intervenant (admin)
 - [ ] Vérif : php -l, tsc, migrate, tinker, navigateur
+
+### Review (vérifié end-to-end via tinker + HTTP + navigateur réel)
+
+**Migrations** (idempotentes `Schema::hasTable`, PostgreSQL/SQLite, rollback+up testé) :
+- `2026_05_21_160000_create_client_request_messages_table` — fil de discussion
+  (`client_request_id` cascade, `sender_id` nullOnDelete, `body` text, index).
+- `2026_05_21_160100_create_client_request_employee_table` — pivot affectation
+  intervenants (`client_request_id`+`employee_id` cascade, unique composite).
+
+**Backend** :
+- `ClientRequestMessage` + relations `ClientRequest::messages()` / `assignedEmployees()`
+  + helper `participantUserIds()` (client owner + créateur + assigned_to + admins
+  + intervenants affectés).
+- `ClientRequestMessageObserver` → notif `client_request_message` à TOUS les
+  participants sauf l'auteur (point d'émission unique).
+- `NotificationTypesSeeder` : types `client_request_message` + `client_request_assigned`.
+- Endpoints admin : `GET/POST /client-requests/{id}/messages`,
+  `POST /client-requests/{id}/employees`, `DELETE .../employees/{empId}`,
+  `GET /employees/{id}/client-requests` (tickets affectés OU créés).
+- Endpoints extranet client : `GET/POST /extranet/client/tickets/{id}/messages`
+  — ownership strict (ticket.client_id == client lié au portal_user_id).
+- Endpoints extranet intervenant : idem + `intervenantTickets` étendu aux
+  tickets affectés. Ownership strict (créateur OU affecté → sinon 403).
+
+**Frontend** :
+- `TicketThread` (composant partagé 3 publics) : bulles alignées, auto-scroll,
+  Ctrl+Entrée, disabled si ticket clôturé.
+- TicketDetailPage admin : fil de discussion + `AssignedEmployeesCard`
+  (affecter/retirer intervenant, picker, notif auto).
+- ClientPortalTab (fiche client admin) : onglet Réclamations cliquable → dialog fil.
+- EmployeeFichePage : onglet "Tickets" (affectés + créés, deep-link).
+- Extranet client/intervenant : lignes ticket cliquables → dialog fil.
+
+**Preuve des tests** :
+- HTTP : POST message admin 201, GET/POST client (son ticket) 200/201,
+  intervenant affecté 200, ownership non-participant → 403, attach/detach 200.
+- Navigateur réel : admin poste message + affecte Adeline Muret (Intervenants 1) ;
+  client extranet ouvre son ticket, voit le fil, répond ; intervenant affecté
+  voit le ticket, lit le message client, répond. 0 erreur console.
+- Notifs : client poste → 2 notifs (admin+intervenant, pas l'auteur) ;
+  intervenant poste → 2 notifs (admin+client). Auteur toujours exclu. 4 total.
+- Cascade delete ticket → messages + pivot purgés. Migration rollback+up OK.
+- `php -l` 0 erreur, `tsc --noEmit` 0 erreur, suite de tests 2/2.

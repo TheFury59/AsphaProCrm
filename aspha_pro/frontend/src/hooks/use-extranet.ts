@@ -111,6 +111,27 @@ export function useCreateClientTicket() {
   });
 }
 
+/** Fil de discussion d'un ticket côté extranet client. */
+export function useClientTicketMessages(ticketId: number | null) {
+  return useQuery({
+    queryKey: ["extranet", "client", "tickets", ticketId, "messages"],
+    enabled: !!ticketId,
+    queryFn: async () =>
+      (await api.get(`/extranet/client/tickets/${ticketId}/messages`)).data.data,
+  });
+}
+
+export function usePostClientTicketMessage(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: string) =>
+      (await api.post(`/extranet/client/tickets/${ticketId}/messages`, { body })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "client", "tickets", ticketId, "messages"] });
+    },
+  });
+}
+
 // === Intervenant : tickets signalements + mes clients ===
 
 export function useIntervenantTickets() {
@@ -139,6 +160,27 @@ export function useCreateIntervenantTicket() {
     }) => (await api.post("/extranet/intervenant/tickets", payload)).data.data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["extranet", "intervenant", "tickets"] });
+    },
+  });
+}
+
+/** Fil de discussion d'un ticket côté extranet intervenant. */
+export function useIntervenantTicketMessages(ticketId: number | null) {
+  return useQuery({
+    queryKey: ["extranet", "intervenant", "tickets", ticketId, "messages"],
+    enabled: !!ticketId,
+    queryFn: async () =>
+      (await api.get(`/extranet/intervenant/tickets/${ticketId}/messages`)).data.data,
+  });
+}
+
+export function usePostIntervenantTicketMessage(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: string) =>
+      (await api.post(`/extranet/intervenant/tickets/${ticketId}/messages`, { body })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["extranet", "intervenant", "tickets", ticketId, "messages"] });
     },
   });
 }
