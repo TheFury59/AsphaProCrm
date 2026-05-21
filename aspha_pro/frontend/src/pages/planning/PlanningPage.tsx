@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useEmployees } from "@/hooks/use-employees";
 import { useClients } from "@/hooks/use-clients";
 import { useClientMissions } from "@/hooks/use-missions";
+import { useProducts } from "@/hooks/use-products";
 import { useConflictCheck, type ConflictItem } from "@/hooks/use-conflict-check";
 import { ConflictWarningDialog } from "./ConflictWarningDialog";
 import { PageHeader } from "@/components/PageHeader";
@@ -807,10 +808,20 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   const [form, setForm] = useState<any>({
     client_id: "",
     // Rattachement : 'mission' = lié à une mission/prestation existante,
-    // 'standalone' = intervention ponctuelle one-shot sans contrat.
+    // 'standalone' = intervention ponctuelle. Pour un RDV ponctuel standalone,
+    // l'admin peut choisir des prestations du catalogue : la validation crée
+    // alors une mission + un devis brouillon (cf. backend 2026-05-21).
     link_type: "mission",
     mission_id: "",
     client_prestation_id: "",
+    // Prestations choisies pour un RDV ponctuel standalone (catalogue).
+    // Chaque entrée : { product_id, label, unit_price, billing_type }.
+    standalone_prestations: [] as Array<{
+      product_id: number | null;
+      label: string;
+      unit_price: number | null;
+      billing_type: string;
+    }>,
     employee_id: "",
     status: "planifiee",
     // ⚠️ date et heure séparés pour la lisibilité (recomposés à la soumission)
@@ -879,6 +890,15 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
     // Rattachement : mission requiert mission_id, standalone OK
     if (form.link_type === "mission" && !form.mission_id) {
       errors.push("Choisis une mission OU passe en « Intervention ponctuelle »");
+    }
+
+    // Prestations standalone : si l'admin en a ajouté, chacune doit avoir un libellé.
+    if (form.link_type === "standalone" && Array.isArray(form.standalone_prestations)) {
+      form.standalone_prestations.forEach((p: any, i: number) => {
+        if (!p.label?.trim()) {
+          errors.push(`Prestation #${i + 1} : libellé manquant`);
+        }
+      });
     }
 
     // Date/horaires
@@ -989,12 +1009,34 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
       });
     }
 
+    // RDV ponctuel standalone + prestations choisies → le backend crée
+    // automatiquement la mission + le devis brouillon et y rattache ce RDV.
+    if (
+      !isRecurring &&
+      !linkedToMission &&
+      Array.isArray(form.standalone_prestations) &&
+      form.standalone_prestations.length > 0
+    ) {
+      payload.prestations = form.standalone_prestations.map((p: any) => ({
+        product_id: p.product_id,
+        label: p.label,
+        unit_price: p.unit_price,
+        billing_type: p.billing_type || "forfait",
+      }));
+    }
+
     // IMPORTANT : try/catch obligatoire — sans lui, mutateAsync rejette
     // silencieusement et le dialog reste ouvert, donnant l'impression que
     // "rien ne se passe" alors qu'une 422 a été retournée par le backend.
     try {
       await create.mutateAsync(payload);
-      toast.success("Intervention créée");
+      if (payload.prestations?.length) {
+        toast.success("RDV ponctuel créé", {
+          description: `Mission et devis brouillon générés (${payload.prestations.length} prestation(s)).`,
+        });
+      } else {
+        toast.success("Intervention créée");
+      }
       onClose();
     } catch (err: any) {
       const data = err?.response?.data;
@@ -1144,6 +1186,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
                   linkType={form.link_type}
                   missionId={form.mission_id}
                   prestationId={form.client_prestation_id}
+                  standalonePrestations={form.standalone_prestations}
                   onLinkTypeChange={(t) => setForm((f: any) => ({
                     ...f,
                     link_type: t,
@@ -1158,6 +1201,9 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
                     client_prestation_id: "",
                   }))}
                   onPrestationChange={(id) => setForm((f: any) => ({ ...f, client_prestation_id: id }))}
+                  onStandalonePrestationsChange={(list) =>
+                    setForm((f: any) => ({ ...f, standalone_prestations: list }))
+                  }
                 />
               </WizardStep>
 
@@ -1468,27 +1514,73 @@ function WizardStep({
  * Si le client n'a aucune mission active, on bascule automatiquement en
  * "standalone" et on propose un lien vers la création de mission.
  */
+/** Une prestation choisie pour un RDV ponctuel standalone (catalogue). */
+type StandalonePrestation = {
+  product_id: number | null;
+  label: string;
+  unit_price: number | null;
+  billing_type: string;
+};
+
 function MissionLinkStep({
   clientId,
   linkType,
   missionId,
   prestationId,
+  standalonePrestations,
   onLinkTypeChange,
   onMissionChange,
   onPrestationChange,
+  onStandalonePrestationsChange,
 }: {
   clientId: number | null;
   linkType: "mission" | "standalone";
   missionId: string;
   prestationId: string;
+  standalonePrestations: StandalonePrestation[];
   onLinkTypeChange: (t: "mission" | "standalone") => void;
   onMissionChange: (id: string) => void;
   onPrestationChange: (id: string) => void;
+  onStandalonePrestationsChange: (list: StandalonePrestation[]) => void;
 }) {
   const { data: missions = [], isLoading } = useClientMissions(clientId ?? 0);
   const activeMissions = missions.filter((m) => m.status === "active");
   const selectedMission = missions.find((m) => String(m.id) === missionId);
   const prestations = selectedMission?.client_prestations ?? [];
+
+  // Catalogue produits (pour les prestations d'un RDV ponctuel standalone).
+  const { data: productsData } = useProducts({ per_page: 200, status: "active" });
+  const catalogProducts: any[] = (productsData as any)?.data ?? [];
+
+  // Ajoute une ligne de prestation vierge.
+  const addPrestation = () => {
+    onStandalonePrestationsChange([
+      ...standalonePrestations,
+      { product_id: null, label: "", unit_price: null, billing_type: "forfait" },
+    ]);
+  };
+  // Met à jour une ligne (patch partiel).
+  const updatePrestation = (idx: number, patch: Partial<StandalonePrestation>) => {
+    onStandalonePrestationsChange(
+      standalonePrestations.map((p, i) => (i === idx ? { ...p, ...patch } : p)),
+    );
+  };
+  // Quand on choisit un produit du catalogue : pré-remplit label + prix.
+  const pickProduct = (idx: number, productId: string) => {
+    if (!productId) {
+      updatePrestation(idx, { product_id: null });
+      return;
+    }
+    const prod = catalogProducts.find((p) => String(p.id) === productId);
+    updatePrestation(idx, {
+      product_id: Number(productId),
+      label: standalonePrestations[idx]?.label?.trim() || prod?.name || "",
+      unit_price: prod?.price != null ? Number(prod.price) : null,
+    });
+  };
+  const removePrestation = (idx: number) => {
+    onStandalonePrestationsChange(standalonePrestations.filter((_, i) => i !== idx));
+  };
 
   return (
     <div className="space-y-3">
@@ -1622,9 +1714,77 @@ function MissionLinkStep({
       )}
 
       {linkType === "standalone" && (
-        <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md p-2.5">
-          ⚡ Intervention <strong>ponctuelle</strong> : aucune mission/prestation associée.
-          Tu pourras la facturer manuellement ou la rattacher à une mission plus tard.
+        <div className="space-y-2">
+          <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md p-2.5">
+            ⚡ RDV <strong>ponctuel</strong>. Ajoute une ou plusieurs prestations
+            pour générer automatiquement une <strong>mission</strong> et un
+            <strong> devis brouillon</strong>. Sans prestation, le RDV reste un
+            simple one-shot.
+          </div>
+
+          {standalonePrestations.map((p, idx) => (
+            <div
+              key={idx}
+              className="rounded-lg border bg-card p-2.5 space-y-2 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Prestation #{idx + 1}
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => removePrestation(idx)}
+                  className="text-[10px] text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                >
+                  Retirer
+                </button>
+              </div>
+              <select
+                value={p.product_id ? String(p.product_id) : ""}
+                onChange={(e) => pickProduct(idx, e.target.value)}
+                className="w-full rounded-md border bg-background px-2.5 py-1.5 text-xs h-8 cursor-pointer"
+              >
+                <option value="">— Libre (sans produit catalogue) —</option>
+                {catalogProducts.map((prod) => (
+                  <option key={prod.id} value={prod.id}>
+                    {prod.code ? `${prod.code} · ` : ""}{prod.name}
+                    {prod.price != null ? ` (${Number(prod.price).toFixed(2)} €)` : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-[1fr_110px] gap-2">
+                <Input
+                  value={p.label}
+                  onChange={(e) => updatePrestation(idx, { label: e.target.value })}
+                  placeholder="Libellé de la prestation *"
+                  className="h-8 text-xs"
+                />
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={p.unit_price ?? ""}
+                  onChange={(e) =>
+                    updatePrestation(idx, {
+                      unit_price: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  placeholder="Prix €"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full h-8 gap-1 text-[11px]"
+            onClick={addPrestation}
+          >
+            + Ajouter une prestation
+          </Button>
         </div>
       )}
     </div>

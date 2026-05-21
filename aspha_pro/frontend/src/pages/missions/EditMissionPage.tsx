@@ -26,7 +26,7 @@ import {
 } from "@/hooks/use-missions";
 import {
   PrestationFormCard, emptyPrestation, validatePrestation, serializePrestation,
-  toDateInput, PAYMENT_METHODS, BILLING_RHYTHMS,
+  toDateInput, toTimeInput, PAYMENT_METHODS, BILLING_RHYTHMS,
 } from "@/components/missions/PrestationFormCard";
 import { MissionStockSectionLive } from "@/components/missions/MissionStockSection";
 
@@ -64,8 +64,10 @@ function toDraft(p: Prestation): PrestationDraft {
     recurrence_frequency: p.recurrence_frequency ?? "weekly",
     recurrence_interval: p.recurrence_interval ?? 1,
     recurrence_days_of_week: p.recurrence_days_of_week ?? "mon",
-    recurrence_start_time: p.recurrence_start_time ?? "09:00",
-    recurrence_end_time: p.recurrence_end_time ?? "11:00",
+    // `toTimeInput` : la colonne SQL `time` renvoie `HH:MM:SS` — on tronque les
+    // secondes pour que l'<input type="time"> affiche bien l'heure rechargée.
+    recurrence_start_time: toTimeInput(p.recurrence_start_time) ?? "09:00",
+    recurrence_end_time: toTimeInput(p.recurrence_end_time) ?? "11:00",
     recurrence_end_type: p.recurrence_end_type ?? "never",
     recurrence_occurrences_count: p.recurrence_occurrences_count ?? null,
     default_employee_id: p.default_employee_id ?? null,

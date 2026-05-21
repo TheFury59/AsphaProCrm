@@ -3,27 +3,53 @@
 ## 🎯 2026-05-21 — Missions / devis / RDV ponctuels (agent dédié)
 
 ### TÂCHE 1 — Bug format horaire à la modification de mission
-- [ ] Backend `MissionController` : `date_format:H:i,H:i:s` sur `recurrence_start_time`
-      et `recurrence_end_time` (lignes 214-215 `updatePrestation` + 255-256 `prestationRules`)
-- [ ] Frontend `PrestationFormCard` : helper `toTimeInput(v) => v?.slice(0,5)` ;
-      `EditMissionPage::toDraft` normalise les heures rechargées en `HH:MM`
+- [x] Backend `MissionController` : `date_format:H:i,H:i:s` sur `recurrence_start_time`
+      et `recurrence_end_time` (`updatePrestation` + `prestationRules`)
+- [x] Frontend `PrestationFormCard` : helper `toTimeInput` (tronque les secondes) ;
+      `EditMissionPage::toDraft` + `serializePrestation` normalisent en `HH:MM`
 
 ### TÂCHE 2 — Mission créée → devis brouillon auto
-- [ ] Service `MissionQuoteGenerator` : génère un `Quote` draft à la création de
+- [x] Service `MissionQuoteGenerator` : génère un `Quote` draft à la création de
       mission avec prestations (1 `QuoteItem` par prestation, réf `QUO`, anti-doublon)
-- [ ] `MissionController::store` appelle le service en transaction ; le devis
+- [x] `MissionController::store` appelle le service en transaction ; le devis
       pointe la mission via `missions.quote_id`
 
 ### TÂCHE 3 — RDV ponctuel → mission + devis auto
-- [ ] `CreateInterventionDialog` : étape « Prestations » (multi-sélection catalogue)
-      pour le mode ponctuel non rattaché à une mission
-- [ ] `InterventionController::store` : si prestations choisies → crée mission active
-      + `client_prestations` (nature `punctual`) + devis draft + lie l'intervention
-- [ ] RDV sans prestation = comportement actuel inchangé
+- [x] `CreateInterventionDialog` (`MissionLinkStep`) : picker multi-prestations
+      catalogue pour le mode ponctuel standalone
+- [x] `InterventionController::store` : si prestations choisies + RDV ponctuel non
+      lié → crée mission active + `client_prestations` (nature `punctual`) + devis
+      draft (via `MissionQuoteGenerator`) + lie l'intervention
+- [x] RDV sans prestation + RDV récurrent = comportement inchangé (testé)
 
-### Vérification
-- [ ] `php -l`, `npx tsc --noEmit`, `php artisan migrate` → 0 erreur
-- [ ] tinker : modif mission (plus de 422), mission → devis draft, RDV ponctuel → mission+devis+intervention
+### Review (vérifié end-to-end : php -l, tsc, tinker, navigateur réel)
+- **Cause racine bug horaire** : `MissionController` validait `recurrence_*_time`
+  en `date_format:H:i` (strict `HH:MM`). À la création OK (input time). À la
+  modification, l'heure rechargée depuis la colonne SQL `time` (PostgreSQL la
+  renvoie `09:00:00`) est rejetée → 422. Fix backend : `date_format:H:i,H:i:s`.
+  Fix front : helper `toTimeInput` tronque les secondes pour l'`<input time>`.
+  Preuve : ancienne règle rejette `09:00:00` (422), nouvelle l'accepte (OK) ;
+  PATCH navigateur `recurrence_start_time:'09:00:00'` → 200.
+- **Service `MissionQuoteGenerator`** (réutilisé par les tâches 2 et 3) : crée un
+  `Quote` draft, une `QuoteItem` par prestation (label, qté 1, prix résolu
+  custom>base, `product_id`, `item_type` mappé du `billing_type`), réf via
+  `DocumentSequenceService::next('QUO')`, lie `missions.quote_id`. Anti-doublon :
+  no-op si la mission a déjà un `quote_id`. Pas de devis si 0 prestation ou
+  client sans entité. Prix castés en string (évite la dépréciation brick/math).
+- **Tâche 3** : `InterventionController::store` accepte un tableau `prestations`
+  optionnel ; déclenche la création mission+devis UNIQUEMENT pour un RDV
+  ponctuel (`is_recurring` false), avec client, non lié à une mission. Tout en
+  `DB::transaction`. Front : `MissionLinkStep` affiche un picker de prestations
+  (catalogue) en mode standalone, payload `prestations` ajouté au submit.
+- **Tests** : tinker — re-save presta récurrente (plus de 422), mission+presta →
+  devis draft (total/lignes/quote_id OK, anti-doublon null au 2e appel), RDV
+  ponctuel HTTP → mission active + 2 prestations punctual + devis 200€ + iv liée.
+  Non-régression : RDV ponctuel sans presta = one-shot (mission_id null), RDV
+  récurrent intact. Navigateur réel : login super_admin, RDV ponctuel avec
+  prestation 150€ → mission/devis `QUO-202605-0002` créés (vérifié en base),
+  édition mission récurrente → inputs time affichent `09:00`/`11:00`, 0 erreur
+  console. `php -l` 0 erreur, `tsc --noEmit` 0 erreur, `migrate` (rien à migrer),
+  suite de tests 2/2.
 
 ## 💰 2026-05-21 — Champs produits stock + retrait billing_mode catalogue
 

@@ -7,10 +7,12 @@ use App\Models\Client;
 use App\Models\ClientPrestation;
 use App\Models\Mission;
 use App\Models\MissionStockItem;
+use App\Services\MissionQuoteGenerator;
 use App\Services\MissionStockService;
 use App\Services\RecurringInterventionGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 /**
  * Missions client + prestations contractualisées rattachées.
@@ -102,25 +104,43 @@ class MissionController extends Controller
         $prestations = $data['prestations'] ?? [];
         unset($data['prestations']);
 
-        $mission = DB::transaction(function () use ($client, $data, $prestations) {
+        $userId = $request->user()->id;
+
+        $mission = DB::transaction(function () use ($client, $data, $prestations, $userId) {
             $mission = $client->missions()->create($data);
             $generator = app(RecurringInterventionGenerator::class);
+
+            /** @var Collection<int,ClientPrestation> $createdPrestations */
+            $createdPrestations = collect();
 
             foreach ($prestations as $p) {
                 $p = $this->normalizePrestationData($p);
                 $p['mission_id'] = $mission->id;
                 $p['client_id'] = $client->id;
                 $prestation = ClientPrestation::create($p);
+                $createdPrestations->push($prestation);
 
                 // Étape 3 — génère l'intervention récurrente modèle si nature=regular.
                 // Ponctuelle : aucune génération (RDV créés manuellement au planning).
                 $generator->syncForPrestation($prestation);
             }
 
+            // 2026-05-21 — devis brouillon auto à la création d'une mission avec
+            // prestations. Anti-doublon géré par le service (missions.quote_id).
+            if ($createdPrestations->isNotEmpty()) {
+                app(MissionQuoteGenerator::class)->generateForMission(
+                    $mission,
+                    $createdPrestations,
+                    $userId,
+                );
+            }
+
             return $mission;
         });
 
-        return response()->json(['data' => $mission->load('clientPrestations.product')], 201);
+        return response()->json([
+            'data' => $mission->fresh(['clientPrestations.product', 'quote:id,reference,status']),
+        ], 201);
     }
 
     public function update(Request $request, Mission $mission)
@@ -211,8 +231,11 @@ class MissionController extends Controller
             'recurrence_frequency' => ['sometimes', 'nullable', 'in:daily,weekly,monthly,yearly'],
             'recurrence_interval' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'recurrence_days_of_week' => ['sometimes', 'nullable', 'string', 'max:32'],
-            'recurrence_start_time' => ['sometimes', 'nullable', 'date_format:H:i'],
-            'recurrence_end_time' => ['sometimes', 'nullable', 'date_format:H:i'],
+            // Accepte HH:MM (input time à la création) ET HH:MM:SS (heure rechargée
+            // depuis la colonne `time` PostgreSQL à la modification) — sinon une
+            // ré-sauvegarde de prestation récurrente renvoyait un 422 "format invalide".
+            'recurrence_start_time' => ['sometimes', 'nullable', 'date_format:H:i,H:i:s'],
+            'recurrence_end_time' => ['sometimes', 'nullable', 'date_format:H:i,H:i:s'],
             'recurrence_end_type' => ['sometimes', 'nullable', 'in:never,on_date,after_occurrences'],
             'recurrence_occurrences_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
             // Intervenant par défaut des RDV générés (P2 — 2026-05-21).
@@ -252,8 +275,9 @@ class MissionController extends Controller
             "{$prefix}recurrence_frequency" => ['nullable', 'in:daily,weekly,monthly,yearly'],
             "{$prefix}recurrence_interval" => ['nullable', 'integer', 'min:1'],
             "{$prefix}recurrence_days_of_week" => ['nullable', 'string', 'max:32'],
-            "{$prefix}recurrence_start_time" => ['nullable', 'date_format:H:i'],
-            "{$prefix}recurrence_end_time" => ['nullable', 'date_format:H:i'],
+            // HH:MM (création) ou HH:MM:SS (heure rechargée de la colonne `time`).
+            "{$prefix}recurrence_start_time" => ['nullable', 'date_format:H:i,H:i:s'],
+            "{$prefix}recurrence_end_time" => ['nullable', 'date_format:H:i,H:i:s'],
             "{$prefix}recurrence_end_type" => ['nullable', 'in:never,on_date,after_occurrences'],
             "{$prefix}recurrence_occurrences_count" => ['nullable', 'integer', 'min:1'],
             // Intervenant par défaut des RDV générés (P2 — 2026-05-21).

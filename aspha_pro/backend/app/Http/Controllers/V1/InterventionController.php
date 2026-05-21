@@ -4,11 +4,16 @@ namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\ClientPrestation;
 use App\Models\Intervention;
+use App\Models\Mission;
+use App\Models\Product;
 use App\Services\InterventionConflictDetector;
 use App\Services\InterventionExpander;
+use App\Services\MissionQuoteGenerator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
 use Spatie\QueryBuilder\QueryBuilder;
 
@@ -128,13 +133,101 @@ class InterventionController extends Controller
         return ['data' => $intervention];
     }
 
+    /**
+     * POST /api/v1/interventions
+     *
+     * Crée une intervention (ponctuelle ou récurrente).
+     *
+     * 2026-05-21 — RDV ponctuel rattaché à une mission/devis : l'ERP ne traite
+     * que des entreprises, donc tout RDV ponctuel a vocation à être contractualisé.
+     * Si la requête fournit un tableau `prestations` (prestations du catalogue
+     * choisies par l'admin), et que le RDV est ponctuel + sans mission existante,
+     * on crée automatiquement :
+     *   - une Mission active rattachée au client ;
+     *   - une ClientPrestation (nature `punctual`) par prestation choisie ;
+     *   - un devis brouillon (cf. MissionQuoteGenerator, même logique que la
+     *     création de mission depuis le menu Missions) ;
+     *   - l'intervention est alors liée à cette mission + sa 1ʳᵉ prestation.
+     *
+     * Sans `prestations` : comportement historique inchangé (RDV one-shot ou
+     * RDV récurrent), pour ne pas casser le drag-drop ni les récurrences.
+     */
     public function store(Request $request)
     {
         abort_unless($request->user()?->can('planning.edit'), 403);
         $data = $this->validateIntervention($request);
-        // La notification est émise par InterventionObserver::created (DRY).
-        $intervention = Intervention::create($data);
-        $intervention->load(['employee:id,name', 'client:id,code']);
+
+        // Prestations optionnelles : déclenchent la création mission + devis.
+        $prestations = $request->validate([
+            'prestations' => ['nullable', 'array'],
+            'prestations.*.product_id' => ['nullable', 'exists:products,id'],
+            'prestations.*.label' => ['required_with:prestations', 'string', 'max:255'],
+            'prestations.*.quantity' => ['nullable', 'numeric', 'min:0.01'],
+            'prestations.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'prestations.*.billing_type' => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
+        ])['prestations'] ?? [];
+
+        $userId = $request->user()->id;
+
+        // On ne génère mission + devis que pour un RDV PONCTUEL non déjà rattaché
+        // à une mission et avec un client + des prestations choisies.
+        $shouldGenerate = ! empty($prestations)
+            && empty($data['is_recurring'])
+            && ! empty($data['client_id'])
+            && empty($data['mission_id']);
+
+        $intervention = DB::transaction(function () use ($data, $prestations, $shouldGenerate, $userId) {
+            if ($shouldGenerate) {
+                $client = Client::findOrFail($data['client_id']);
+
+                $mission = Mission::create([
+                    'client_id' => $client->id,
+                    'name' => 'RDV ponctuel — ' . now()->format('d/m/Y'),
+                    'status' => 'active',
+                ]);
+
+                $createdPrestations = collect();
+                foreach ($prestations as $p) {
+                    $unitPrice = isset($p['unit_price']) ? (float) $p['unit_price'] : null;
+                    // Auto-fill du prix depuis le catalogue si non fourni.
+                    if ($unitPrice === null && ! empty($p['product_id'])) {
+                        $unitPrice = (float) (Product::find($p['product_id'])?->price ?? 0);
+                    }
+                    // Cast string : custom_price/base_price sont des `decimal`
+                    // (brick/math déprécie le passage direct de floats).
+                    $priceStr = $unitPrice !== null ? number_format($unitPrice, 2, '.', '') : null;
+                    $createdPrestations->push(ClientPrestation::create([
+                        'client_id' => $client->id,
+                        'mission_id' => $mission->id,
+                        'product_id' => $p['product_id'] ?? null,
+                        'label' => $p['label'],
+                        'billing_type' => $p['billing_type'] ?? 'forfait',
+                        // Pas de catalogue → prix custom ; avec catalogue → base_price.
+                        'pricing_type' => ! empty($p['product_id']) ? 'default' : 'custom',
+                        'base_price' => ! empty($p['product_id']) ? $priceStr : null,
+                        'custom_price' => ! empty($p['product_id']) ? null : $priceStr,
+                        // RDV ponctuel → prestation ponctuelle (pas de récurrence générée).
+                        'nature' => 'punctual',
+                    ]));
+                }
+
+                // Devis brouillon auto (même service que la création de mission).
+                app(MissionQuoteGenerator::class)->generateForMission(
+                    $mission,
+                    $createdPrestations,
+                    $userId,
+                );
+
+                // L'intervention pointe la mission + sa 1ʳᵉ prestation.
+                $data['mission_id'] = $mission->id;
+                $data['client_prestation_id'] = $createdPrestations->first()?->id;
+            }
+
+            // La notification est émise par InterventionObserver::created (DRY).
+            return Intervention::create($data);
+        });
+
+        $intervention->load(['employee:id,name', 'client:id,code', 'mission:id,name,quote_id']);
         return response()->json(['data' => $intervention], 201);
     }
 

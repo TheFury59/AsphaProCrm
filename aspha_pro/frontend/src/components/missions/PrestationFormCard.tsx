@@ -94,6 +94,20 @@ export function toDateInput(value: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Normalise une heure vers `HH:MM` (format attendu par `<input type="time">`).
+ *
+ * Le backend stocke `recurrence_start_time`/`recurrence_end_time` dans une
+ * colonne SQL `time` : PostgreSQL les renvoie en `HH:MM:SS` (`09:00:00`).
+ * `<input type="time">` n'accepte que `HH:MM` → on tronque les secondes.
+ * Indispensable pour pré-remplir le champ à la modification d'une mission.
+ */
+export function toTimeInput(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{2}:\d{2})/);
+  return m ? m[1] : null;
+}
+
 /** Une prestation vierge — utilisée par les deux pages pour « Ajouter ». */
 export function emptyPrestation(): PrestationDraft {
   return {
@@ -184,8 +198,10 @@ export function serializePrestation(p: PrestationDraft) {
       isRecurring && p.recurrence_frequency === "weekly"
         ? p.recurrence_days_of_week ?? null
         : null,
-    recurrence_start_time: isRecurring ? p.recurrence_start_time ?? null : null,
-    recurrence_end_time: isRecurring ? p.recurrence_end_time ?? null : null,
+    // `toTimeInput` : tronque d'éventuelles secondes (`09:00:00` → `09:00`)
+    // pour transmettre un format propre, cohérent avec l'<input type="time">.
+    recurrence_start_time: isRecurring ? toTimeInput(p.recurrence_start_time) : null,
+    recurrence_end_time: isRecurring ? toTimeInput(p.recurrence_end_time) : null,
     recurrence_end_type: isRecurring ? p.recurrence_end_type ?? "never" : null,
     recurrence_occurrences_count:
       isRecurring && p.recurrence_end_type === "after_occurrences"
