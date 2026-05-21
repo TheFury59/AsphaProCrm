@@ -36,13 +36,21 @@ class ClientPrestation extends Model
         'recurrence_end_time',
         'recurrence_end_type',
         'recurrence_occurrences_count',
+        // Intervenant par défaut des RDV générés pour cette prestation récurrente
+        // (refonte 2026-05-21). Nullable : si absent, les RDV restent 'a_pourvoir'.
+        'default_employee_id',
     ];
 
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'end_date' => 'date',
+            // Format `date:Y-m-d` (et non `date` seul) : sans le format, Eloquent
+            // sérialise en JSON un datetime ISO complet (`2026-05-21T00:00:00Z`)
+            // que le front ré-injecte tel quel — ce qui (1) vide le <input date>
+            // et (2) fait dériver la date de -1 jour à chaque aller-retour en
+            // timezone Europe/Paris. Le format force un `YYYY-MM-DD` propre.
+            'start_date' => 'date:Y-m-d',
+            'end_date' => 'date:Y-m-d',
             'custom_price' => 'decimal:2',
             'base_price' => 'decimal:2',
             'no_intervention_no_bill' => 'boolean',
@@ -69,6 +77,16 @@ class ClientPrestation extends Model
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class, 'quote_id');
+    }
+
+    /**
+     * Intervenant par défaut choisi pour les RDV générés de cette prestation
+     * récurrente (refonte 2026-05-21). Nullable : si absent, les RDV restent
+     * « à pourvoir ».
+     */
+    public function defaultEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'default_employee_id');
     }
 
     public function interventions(): HasMany

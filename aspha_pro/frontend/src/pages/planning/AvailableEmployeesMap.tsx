@@ -100,7 +100,12 @@ export function AvailableEmployeesMap({
   startDatetime: string;
   endDatetime: string;
   clientId: number;
-  onAssign: (employeeId: number) => void;
+  /**
+   * Callback de sélection. `employeeName` est fourni en second argument
+   * (optionnel pour les appelants qui n'en ont pas besoin) afin d'afficher
+   * immédiatement le nom sans refetch.
+   */
+  onAssign: (employeeId: number, employeeName?: string) => void;
 }) {
   const { data, isLoading } = useAvailableEmployees({
     start_datetime: startDatetime,
@@ -307,7 +312,7 @@ export function AvailableEmployeesMap({
                   // intuitif et évite le bug "j'ai cliqué l'intervenant mais
                   // pas affecté donc form.employee_id reste vide".
                   setSelected(c.employee_id);
-                  onAssign(c.employee_id);
+                  onAssign(c.employee_id, c.employee_name);
                 }}
                 onMouseEnter={() => setHovered(c.employee_id)}
                 onMouseLeave={() => setHovered(null)}

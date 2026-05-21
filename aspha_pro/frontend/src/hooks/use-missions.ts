@@ -39,8 +39,11 @@ export type Prestation = {
   recurrence_end_time: string | null;
   recurrence_end_type: RecurrenceEndType | null;
   recurrence_occurrences_count: number | null;
+  // Intervenant par défaut des RDV générés (refonte 2026-05-21, P2).
+  default_employee_id: number | null;
   product?: { id: number; name: string; code: string; price: string | number; default_duration_minutes: number | null };
   quote?: { id: number; reference: string };
+  default_employee?: { id: number; name: string };
 };
 
 export type Mission = {
@@ -158,6 +161,10 @@ export type PrestationDraft = {
   recurrence_end_time?: string | null;
   recurrence_end_type?: RecurrenceEndType | null;
   recurrence_occurrences_count?: number | null;
+  // Intervenant par défaut des RDV générés (refonte 2026-05-21, P2).
+  default_employee_id?: number | null;
+  /** Nom de l'intervenant choisi — hydraté pour l'affichage, non envoyé à l'API. */
+  default_employee_name?: string | null;
 };
 
 /**

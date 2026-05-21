@@ -50,18 +50,30 @@ class RecurringInterventionGenerator
             ->where('is_exception', false)
             ->first();
 
+        $defaultEmployeeId = $prestation->default_employee_id;
+
         if ($existing) {
-            // On ne réécrase pas l'intervenant ni le statut si l'admin a déjà
-            // pourvu le RDV : on met seulement à jour les paramètres de récurrence.
+            // On met à jour les paramètres de récurrence.
             $existing->fill($payload);
+
+            // Intervenant par défaut : si la prestation en porte un et que le
+            // RDV est encore « à pourvoir » (jamais affecté à la main), on
+            // applique cet intervenant. On ne touche JAMAIS un RDV déjà
+            // « planifié » : une affectation manuelle de l'admin est prioritaire.
+            if ($defaultEmployeeId && $existing->status === 'a_pourvoir') {
+                $existing->employee_id = $defaultEmployeeId;
+                $existing->status = 'planifiee';
+            }
             $existing->save();
 
             return $existing;
         }
 
+        // Création : si la prestation a un intervenant par défaut, le RDV
+        // récurrent naît directement « planifié » et affecté ; sinon « à pourvoir ».
         return Intervention::create($payload + [
-            'status' => 'a_pourvoir',
-            'employee_id' => null,
+            'status' => $defaultEmployeeId ? 'planifiee' : 'a_pourvoir',
+            'employee_id' => $defaultEmployeeId,
         ]);
     }
 

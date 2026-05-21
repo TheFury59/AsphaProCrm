@@ -1,5 +1,55 @@
 # Aspha Pro — Todo
 
+## 🐛 2026-05-21 — Bug édition de mission : la sauvegarde ne persiste rien (perçu)
+
+### Causes racines (vérifiées via preview + tinker)
+- **C1 — dérive des dates** : `client_prestations.start_date/end_date` sont des
+  casts `date`. Eloquent les sérialise en JSON comme datetime ISO complet
+  (`2026-05-20T22:00:00.000000Z`). Le front stocke ce datetime brut comme valeur
+  du champ → `<input type=date>` ne peut PAS l'afficher (champ vide → « rien
+  saisi ») et au re-save la date dérive de −1 jour à chaque aller-retour
+  (timezone Europe/Paris).
+- **C2 — bouton trompeur** : « Enregistrer la mission » (gros bouton haut-droite)
+  ne persiste QUE les infos mission. Chaque prestation a son propre petit bouton
+  `h-6 text-[11px]`. L'utilisateur édite tout, clique le gros bouton → les
+  prestations ne sont jamais sauvegardées.
+
+### Plan correctif
+- [x] C1 backend : caster `start_date`/`end_date` en `date:Y-m-d` (ClientPrestation)
+      → JSON renvoie `YYYY-MM-DD`. Idem `recurrence_start_date` sur Intervention.
+- [x] C1 front : `toDraft` + `serializePrestation` normalisent toute date en `Y-m-d`.
+- [x] C2 : bouton « Enregistrer la mission » → enregistre mission + TOUTES les
+      prestations en un clic ; toast récap. Bouton par prestation conservé.
+- [x] Re-hydratation de la ligne après save (id + draft depuis la réponse).
+- [x] Vérif end-to-end : save mission+presta OK, presta récurrente → intervention
+      générée → occurrences au planning.
+
+## ✨ 2026-05-21 — Assignation d'intervenant depuis la prestation (carte suggestion)
+- [x] Migration `default_employee_id` (nullable FK employees) sur client_prestations
+- [x] Validation + fillable + relation `defaultEmployee`
+- [x] `RecurringInterventionGenerator` assigne `employee_id`/statut depuis default
+- [x] `PrestationFormCard` : bouton « Assigner un intervenant » + Dialog carte
+- [x] Affichage intervenant choisi + retrait
+
+### Review (vérifié end-to-end via preview navigateur + tinker)
+- **Cause racine confirmée** : le bug n'était PAS un échec API. Les PATCH/POST
+  renvoyaient 200/201. Deux défauts cumulés donnaient l'illusion « rien n'est
+  sauvegardé » : (C1) cast `date` sérialisé en datetime ISO → `<input date>` vide
+  + dérive -1j au re-save ; (C2) le bouton « Enregistrer la mission » ne sauvait
+  que les infos mission, jamais les prestations.
+- **C1 corrigé** : casts `date:Y-m-d` (ClientPrestation + Intervention) + helper
+  front `toDateInput()`. Vérifié : re-PATCH d'une date → STABLE (0 dérive).
+- **C2 corrigé** : « Tout enregistrer » → 1 clic = PATCH mission + PATCH/POST de
+  chaque prestation + toast récap. Vérifié navigateur : 2 PATCH 200, données en
+  base, toast « Mission enregistrée · 1 prestation(s) · 1 récurrence(s) ».
+- **Récurrence** : prestation regular → intervention `is_recurring` générée → 5
+  occurrences visibles sur le planning (calendar endpoint). Sans default employee
+  → `a_pourvoir`/`employee_id=null` ; avec default → `planifiee`/affecté.
+- **P2** : carte de suggestion réutilise `AvailableEmployeesMap` + endpoint
+  `availableEmployees` existants. Migration idempotente (rollback+up testé).
+- Non cassé : CreateMissionPage, planning (calendar OK, 0 erreur console), tsc 0
+  erreur, `php -l` 0 erreur, `php artisan migrate` OK, suite de tests passe.
+
 ## 🧹 2026-05-21 — Clarté des formulaires de création (champs « Code » et « Entité »)
 
 Contexte : « Code » oblige l'utilisateur à inventer un identifiant ; « Entité »

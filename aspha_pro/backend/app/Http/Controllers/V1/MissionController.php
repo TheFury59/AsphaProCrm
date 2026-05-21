@@ -160,7 +160,11 @@ class MissionController extends Controller
     {
         abort_unless($request->user()?->can('clients.view'), 403);
         return ['data' => $mission->clientPrestations()
-            ->with(['product:id,name,code,price,default_duration_minutes', 'quote:id,reference'])
+            ->with([
+                'product:id,name,code,price,default_duration_minutes',
+                'quote:id,reference',
+                'defaultEmployee:id,name',
+            ])
             ->orderBy('start_date')
             ->get()];
     }
@@ -209,6 +213,8 @@ class MissionController extends Controller
             'recurrence_end_time' => ['sometimes', 'nullable', 'date_format:H:i'],
             'recurrence_end_type' => ['sometimes', 'nullable', 'in:never,on_date,after_occurrences'],
             'recurrence_occurrences_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            // Intervenant par défaut des RDV générés (P2 — 2026-05-21).
+            'default_employee_id' => ['sometimes', 'nullable', 'exists:employees,id'],
         ]);
 
         DB::transaction(function () use ($prestation, $data) {
@@ -248,6 +254,8 @@ class MissionController extends Controller
             "{$prefix}recurrence_end_time" => ['nullable', 'date_format:H:i'],
             "{$prefix}recurrence_end_type" => ['nullable', 'in:never,on_date,after_occurrences'],
             "{$prefix}recurrence_occurrences_count" => ['nullable', 'integer', 'min:1'],
+            // Intervenant par défaut des RDV générés (P2 — 2026-05-21).
+            "{$prefix}default_employee_id" => ['nullable', 'exists:employees,id'],
         ];
     }
 

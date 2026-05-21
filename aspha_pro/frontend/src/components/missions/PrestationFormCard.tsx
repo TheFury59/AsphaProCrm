@@ -1,5 +1,7 @@
+import { useState } from "react";
 import {
   Package, Trash2, Calendar as CalIcon, Repeat, Lock, Clock, Loader2,
+  UserPlus, X, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { AvailableEmployeesMap } from "@/pages/planning/AvailableEmployeesMap";
 import type { PrestationDraft } from "@/hooks/use-missions";
 
 /**
@@ -71,6 +77,23 @@ export function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Normalise une valeur de date vers `YYYY-MM-DD`.
+ *
+ * Le backend peut renvoyer une date soit déjà au format court (`2026-05-21`),
+ * soit — pour des enregistrements antérieurs au fix du cast `date:Y-m-d` — sous
+ * forme de datetime ISO (`2026-05-20T22:00:00.000000Z`). Dans ce dernier cas on
+ * extrait UNIQUEMENT la partie `YYYY-MM-DD`, sans passer par `new Date()` (qui
+ * réintroduirait un décalage de fuseau horaire). Indispensable pour que
+ * `<input type="date">` affiche la valeur et pour éviter la dérive au re-save.
+ */
+export function toDateInput(value: string | null | undefined): string | null {
+  if (!value) return null;
+  // "2026-05-21" ou "2026-05-21T..." → on coupe au "T", sinon au premier espace.
+  const m = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
 /** Une prestation vierge — utilisée par les deux pages pour « Ajouter ». */
 export function emptyPrestation(): PrestationDraft {
   return {
@@ -91,6 +114,8 @@ export function emptyPrestation(): PrestationDraft {
     recurrence_end_time: "11:00",
     recurrence_end_type: "never",
     recurrence_occurrences_count: null,
+    default_employee_id: null,
+    default_employee_name: null,
   };
 }
 
@@ -142,8 +167,10 @@ export function serializePrestation(p: PrestationDraft) {
   return {
     product_id: p.product_id || null,
     label: p.label.trim(),
-    start_date: p.start_date || null,
-    end_date: p.end_date || null,
+    // Normalisation `YYYY-MM-DD` : protège contre un datetime ISO hérité d'un
+    // ancien enregistrement (sinon la date dérive de -1 jour au re-save).
+    start_date: toDateInput(p.start_date),
+    end_date: toDateInput(p.end_date),
     billing_type: p.billing_type ?? null,
     pricing_type: p.pricing_type ?? "default",
     base_price: p.base_price != null ? Number(p.base_price) : null,
@@ -164,6 +191,9 @@ export function serializePrestation(p: PrestationDraft) {
       isRecurring && p.recurrence_end_type === "after_occurrences"
         ? Number(p.recurrence_occurrences_count ?? 1)
         : null,
+    // Intervenant par défaut : pertinent uniquement pour une prestation
+    // récurrente (les RDV ponctuels sont créés/affectés manuellement).
+    default_employee_id: isRecurring ? p.default_employee_id ?? null : null,
   };
 }
 
@@ -185,6 +215,12 @@ export function PrestationFormCard({
   removing = false,
   /** En-tête optionnel rendu en haut de la carte (ex: actions « Enregistrer »). */
   headerExtra,
+  /**
+   * Id du client de la mission — requis pour la carte de suggestion
+   * d'intervenants (calcul des distances). Si absent, le bouton « Assigner
+   * un intervenant » est masqué.
+   */
+  clientId,
 }: {
   idx: number;
   prestation: PrestationDraft;
@@ -196,10 +232,12 @@ export function PrestationFormCard({
   removeTitle?: string;
   removing?: boolean;
   headerExtra?: React.ReactNode;
+  clientId?: number | null;
 }) {
   const isCustomPrice = p.pricing_type === "custom";
   const isRecurring = p.nature === "regular";
   const effectivePrice = isCustomPrice ? p.custom_price : p.base_price;
+  const [assignOpen, setAssignOpen] = useState(false);
 
   // Verrouillage du prix : par défaut le prix affiché = prix catalogue
   // (base_price), en lecture seule. La case « Prix personnalisé » le déverrouille.
@@ -550,6 +588,54 @@ export function PrestationFormCard({
                 />
               </div>
             )}
+
+            {/* ====== Intervenant par défaut des RDV générés ====== */}
+            <div className="rounded-md border bg-muted/30 p-2.5 space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                <UserPlus className="h-3 w-3" />
+                Intervenant des RDV récurrents
+              </Label>
+              {p.default_employee_id ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2 py-1.5">
+                  <span className="text-xs font-medium text-primary truncate flex items-center gap-1">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    {p.default_employee_name ?? `Intervenant #${p.default_employee_id}`}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-5 w-5 text-rose-600 hover:text-rose-700"
+                    title="Retirer l'intervenant — les RDV repasseront « à pourvoir »"
+                    onClick={() =>
+                      onChange({ default_employee_id: null, default_employee_name: null })
+                    }
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  Aucun intervenant — les RDV générés seront « à pourvoir ».
+                </p>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full h-7 gap-1 text-[11px]"
+                disabled={!clientId}
+                title={
+                  clientId
+                    ? "Choisir un intervenant via la carte de suggestion"
+                    : "Client requis pour la suggestion d'intervenants"
+                }
+                onClick={() => setAssignOpen(true)}
+              >
+                <UserPlus className="h-3 w-3" />
+                {p.default_employee_id ? "Changer d'intervenant" : "Assigner un intervenant"}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -566,6 +652,37 @@ export function PrestationFormCard({
           </div>
         )}
       </div>
+
+      {/* ====== Pop-up carte de suggestion d'intervenants ====== */}
+      {clientId != null && (
+        <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+          <DialogContent className="sm:!max-w-4xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-primary" />
+                Assigner un intervenant
+              </DialogTitle>
+              <DialogDescription>
+                Intervenants disponibles et proches du client pour le créneau{" "}
+                {p.recurrence_start_time ?? "09:00"}–{p.recurrence_end_time ?? "11:00"}.
+                Le choix devient l'intervenant par défaut des RDV récurrents générés.
+              </DialogDescription>
+            </DialogHeader>
+            <AvailableEmployeesMap
+              startDatetime={`${p.start_date || todayStr()}T${p.recurrence_start_time ?? "09:00"}:00`}
+              endDatetime={`${p.start_date || todayStr()}T${p.recurrence_end_time ?? "11:00"}:00`}
+              clientId={clientId}
+              onAssign={(employeeId, employeeName) => {
+                onChange({
+                  default_employee_id: employeeId,
+                  default_employee_name: employeeName ?? `Intervenant #${employeeId}`,
+                });
+                setAssignOpen(false);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

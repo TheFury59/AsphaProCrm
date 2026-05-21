@@ -66,10 +66,13 @@ class Intervention extends Model
             'is_group' => 'boolean',
             'start_datetime' => 'datetime',
             'end_datetime' => 'datetime',
-            'recurrence_start_date' => 'date',
+            // Format `date:Y-m-d` : sans format, Eloquent sérialise un datetime
+            // ISO complet que les <input type=date> du planning ne peuvent pas
+            // afficher et qui dérive de -1 jour à chaque aller-retour (tz Paris).
+            'recurrence_start_date' => 'date:Y-m-d',
             'exclude_holidays' => 'boolean',
             'exclude_school_holidays' => 'boolean',
-            'recurrence_end_date' => 'date',
+            'recurrence_end_date' => 'date:Y-m-d',
             'is_exception' => 'boolean',
             'exception_date' => 'date',
             'is_paid' => 'boolean',

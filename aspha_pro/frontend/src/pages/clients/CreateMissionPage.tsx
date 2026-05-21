@@ -274,6 +274,7 @@ export function CreateMissionPage() {
                   idx={idx}
                   prestation={p}
                   products={products}
+                  clientId={clientId}
                   canRemove={prestations.length > 1}
                   onChange={(patch) => updatePrestation(idx, patch)}
                   onProductPick={(pid) => onProductPick(idx, pid)}

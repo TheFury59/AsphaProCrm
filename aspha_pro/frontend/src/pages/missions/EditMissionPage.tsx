@@ -26,7 +26,7 @@ import {
 } from "@/hooks/use-missions";
 import {
   PrestationFormCard, emptyPrestation, validatePrestation, serializePrestation,
-  PAYMENT_METHODS, BILLING_RHYTHMS,
+  toDateInput, PAYMENT_METHODS, BILLING_RHYTHMS,
 } from "@/components/missions/PrestationFormCard";
 
 /**
@@ -50,8 +50,10 @@ function toDraft(p: Prestation): PrestationDraft {
   return {
     product_id: p.product_id,
     label: p.label ?? "",
-    start_date: p.start_date,
-    end_date: p.end_date,
+    // `toDateInput` : le backend peut renvoyer un datetime ISO (anciens
+    // enregistrements) — on le réduit à `YYYY-MM-DD` pour l'<input type=date>.
+    start_date: toDateInput(p.start_date),
+    end_date: toDateInput(p.end_date),
     billing_type: (p.billing_type as PrestationDraft["billing_type"]) ?? "hourly",
     pricing_type: p.pricing_type ?? "default",
     custom_price: p.custom_price != null ? Number(p.custom_price) : null,
@@ -65,6 +67,8 @@ function toDraft(p: Prestation): PrestationDraft {
     recurrence_end_time: p.recurrence_end_time ?? "11:00",
     recurrence_end_type: p.recurrence_end_type ?? "never",
     recurrence_occurrences_count: p.recurrence_occurrences_count ?? null,
+    default_employee_id: p.default_employee_id ?? null,
+    default_employee_name: p.default_employee?.name ?? null,
   };
 }
 
@@ -100,6 +104,8 @@ export function EditMissionPage() {
   const [rows, setRows] = useState<PrestationRow[]>([]);
   // Index de la ligne en cours de mutation (save ou delete) pour le spinner.
   const [busyIdx, setBusyIdx] = useState<number | null>(null);
+  // Sauvegarde globale en cours (bouton « Enregistrer la mission »).
+  const [savingAll, setSavingAll] = useState(false);
   // Ligne dont la suppression est en attente de confirmation.
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   // Garde-fou : on n'hydrate le formulaire qu'au PREMIER chargement. Les
@@ -147,12 +153,72 @@ export function EditMissionPage() {
     );
   };
 
-  // -- Persistance : infos mission -----------------------------------------
+  /** Construit une erreur lisible à partir d'une réponse axios (toast). */
+  const describeError = (err: any, fallback: string) => {
+    const msg = err?.response?.data?.message ?? fallback;
+    const errors = err?.response?.data?.errors;
+    return {
+      msg,
+      description: errors
+        ? Object.values(errors).flat().slice(0, 3).join(" · ")
+        : undefined,
+    };
+  };
+
+  // -- Persistance : une seule prestation (create OU update) ---------------
+  /**
+   * Persiste UNE ligne de prestation. Renvoie l'id BDD en cas de succès, ou
+   * `null` en cas d'échec (l'erreur est déjà remontée en toast par l'appelant
+   * via le booléen de retour). Met à jour la ligne dans le state avec l'id
+   * retourné + le draft re-hydraté depuis la réponse serveur (dates normalisées).
+   */
+  const persistRow = async (idx: number): Promise<boolean> => {
+    const row = rows[idx];
+    const errs = validatePrestation(row.draft, `Prestation #${idx + 1}`);
+    if (errs.length > 0) {
+      toast.error(`Prestation #${idx + 1} — ${errs.length} point(s) à corriger`, {
+        description: errs.slice(0, 4).map((x) => `• ${x}`).join("\n"),
+        duration: 6000,
+      });
+      return false;
+    }
+
+    const payload = serializePrestation(row.draft);
+    try {
+      const saved =
+        row.id == null
+          ? await createPresta.mutateAsync(payload as Partial<Prestation>)
+          : await updatePresta.mutateAsync({ id: row.id, ...(payload as Partial<Prestation>) });
+      // Re-hydrate la ligne depuis la réponse serveur : id (pour passer en
+      // « update ») + draft avec dates normalisées → la carte affiche
+      // exactement ce qui est en base, sans dérive.
+      setRows((arr) =>
+        arr.map((r, i) => (i === idx ? { id: saved.id, draft: toDraft(saved) } : r)),
+      );
+      return true;
+    } catch (err: any) {
+      const { msg, description } = describeError(err, "Enregistrement de la prestation impossible");
+      console.error("persistRow failed", { idx, payload, response: err?.response?.data ?? err });
+      toast.error(`Prestation #${idx + 1} : ${msg}`, { description });
+      return false;
+    }
+  };
+
+  // -- Persistance : infos mission + TOUTES les prestations ----------------
+  /**
+   * Bouton principal « Enregistrer la mission » : persiste les infos mission
+   * ET toutes les prestations en un seul clic. C'est le comportement attendu
+   * par l'utilisateur — auparavant ce bouton ne sauvait QUE les infos mission,
+   * d'où la perception « rien n'est sauvegardé » pour les prestations.
+   */
   const handleSaveMission = async () => {
     if (!name.trim()) {
       toast.error("Le nom de la mission est requis.");
       return;
     }
+
+    setSavingAll(true);
+    let missionOk = false;
     try {
       await updateMission.mutateAsync({
         name: name.trim(),
@@ -162,58 +228,52 @@ export function EditMissionPage() {
         online_payment_enabled: onlinePaymentEnabled,
         no_intervention_no_bill: noInterventionNoBill,
       });
-      toast.success("Mission mise à jour");
+      missionOk = true;
     } catch (err: any) {
-      const msg = err.response?.data?.message ?? "Mise à jour impossible";
-      const errors = err.response?.data?.errors;
-      console.error("updateMission failed", err.response?.data ?? err);
-      toast.error(msg, {
-        description: errors ? Object.values(errors).flat().slice(0, 2).join(" · ") : undefined,
-      });
+      const { msg, description } = describeError(err, "Mise à jour de la mission impossible");
+      console.error("updateMission failed", err?.response?.data ?? err);
+      toast.error(msg, { description });
+    }
+
+    // Persiste chaque prestation séquentiellement (la génération de récurrence
+    // côté serveur ouvre une transaction par appel — pas de parallélisme).
+    let prestaOk = 0;
+    let prestaFail = 0;
+    for (let i = 0; i < rows.length; i++) {
+      setBusyIdx(i);
+      const ok = await persistRow(i);
+      if (ok) prestaOk++;
+      else prestaFail++;
+    }
+    setBusyIdx(null);
+    setSavingAll(false);
+
+    if (missionOk && prestaFail === 0) {
+      const recurring = rows.filter((r) => r.draft.nature === "regular").length;
+      toast.success(
+        `Mission enregistrée · ${prestaOk} prestation(s) sauvegardée(s)` +
+          (recurring > 0 ? ` · ${recurring} récurrence(s) synchronisée(s)` : ""),
+      );
+    } else if (prestaFail > 0) {
+      toast.error(
+        `Enregistrement partiel — ${prestaFail} prestation(s) en échec`,
+        { description: "Corrige les points signalés puis ré-enregistre." },
+      );
     }
   };
 
-  // -- Persistance : une prestation (create OU update) ---------------------
+  // -- Persistance : une prestation depuis son propre bouton ---------------
   const handleSavePrestation = async (idx: number) => {
-    const row = rows[idx];
-    const errs = validatePrestation(row.draft, "Prestation");
-    if (errs.length > 0) {
-      toast.error(`Impossible d'enregistrer — ${errs.length} point(s) à corriger`, {
-        description: errs.slice(0, 4).map((x) => `• ${x}`).join("\n"),
-        duration: 6000,
-      });
-      return;
-    }
-
-    const payload = serializePrestation(row.draft);
     setBusyIdx(idx);
-    try {
-      if (row.id == null) {
-        const created = await createPresta.mutateAsync(payload as Partial<Prestation>);
-        // Mémorise l'id retourné pour que la ligne bascule en « update ».
-        setRows((arr) => arr.map((r, i) => (i === idx ? { ...r, id: created.id } : r)));
-        toast.success(
-          row.draft.nature === "regular"
-            ? "Prestation récurrente ajoutée · RDV à pourvoir généré"
-            : "Prestation ajoutée",
-        );
-      } else {
-        await updatePresta.mutateAsync({ id: row.id, ...(payload as Partial<Prestation>) });
-        toast.success(
-          row.draft.nature === "regular"
-            ? "Prestation mise à jour · interventions resynchronisées"
-            : "Prestation mise à jour",
-        );
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.message ?? "Enregistrement impossible";
-      const errors = err.response?.data?.errors;
-      console.error("savePrestation failed", { payload, response: err.response?.data ?? err });
-      toast.error(msg, {
-        description: errors ? Object.values(errors).flat().slice(0, 2).join(" · ") : undefined,
-      });
-    } finally {
-      setBusyIdx(null);
+    const ok = await persistRow(idx);
+    setBusyIdx(null);
+    if (ok) {
+      const isRecurring = rows[idx]?.draft.nature === "regular";
+      toast.success(
+        isRecurring
+          ? "Prestation enregistrée · interventions récurrentes synchronisées"
+          : "Prestation enregistrée",
+      );
     }
   };
 
@@ -293,15 +353,15 @@ export function EditMissionPage() {
             <Button
               type="button"
               onClick={handleSaveMission}
-              disabled={updateMission.isPending}
+              disabled={savingAll}
               className="gap-2"
             >
-              {updateMission.isPending ? (
+              {savingAll ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              {updateMission.isPending ? "Enregistrement…" : "Enregistrer la mission"}
+              {savingAll ? "Enregistrement…" : "Tout enregistrer"}
             </Button>
           </>
         }
@@ -320,7 +380,8 @@ export function EditMissionPage() {
                 Informations principales
               </CardTitle>
               <CardDescription>
-                Les modifications des infos mission sont enregistrées via le bouton en haut à droite.
+                Le bouton « Tout enregistrer » (haut à droite) sauvegarde les infos
+                mission ET toutes les prestations en un clic.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -373,7 +434,8 @@ export function EditMissionPage() {
                   Prestations contractualisées ({rows.length})
                 </CardTitle>
                 <CardDescription>
-                  Chaque prestation s'enregistre individuellement via son bouton « Enregistrer ».
+                  Le bouton « Tout enregistrer » sauvegarde tout ; chaque prestation
+                  garde aussi son propre bouton « Enregistrer » pour un save isolé.
                 </CardDescription>
               </div>
               <Button
@@ -399,6 +461,7 @@ export function EditMissionPage() {
                   idx={idx}
                   prestation={row.draft}
                   products={products}
+                  clientId={clientId}
                   canRemove
                   onChange={(patch) => patchRow(idx, patch)}
                   onProductPick={(pid) => onProductPick(idx, pid)}
@@ -412,7 +475,7 @@ export function EditMissionPage() {
                       variant="outline"
                       className="h-6 gap-1 text-[11px]"
                       onClick={() => handleSavePrestation(idx)}
-                      disabled={busyIdx === idx}
+                      disabled={busyIdx === idx || savingAll}
                     >
                       {busyIdx === idx ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
