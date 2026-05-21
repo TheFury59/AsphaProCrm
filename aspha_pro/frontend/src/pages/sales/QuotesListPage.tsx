@@ -1,15 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
   Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
   Settings2, PackagePlus, PencilLine, Layers, Briefcase, Loader2,
-  Boxes,
+  Boxes, Send, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
 import {
-  useQuotes, useCreateQuote, useDeleteQuote, useConvertQuoteToInvoice,
+  useQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote, useConvertQuoteToInvoice,
   useConvertQuoteToMission, useQuote,
   type Quote as QuoteType,
 } from "@/hooks/use-phase3";
@@ -61,6 +61,8 @@ export function QuotesListPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null); // 2026-05-21 — édition devis
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuotes({
     page,
@@ -70,6 +72,8 @@ export function QuotesListPage() {
   });
   const del = useDeleteQuote();
   const convert = useConvertQuoteToInvoice();
+  const updateQuote = useUpdateQuote();
+  const convertMission = useConvertQuoteToMission();
   const syncPennylane = useSyncQuotePennylane();
 
   const rows: QuoteType[] = (data as any)?.data ?? [];
@@ -139,6 +143,36 @@ export function QuotesListPage() {
       );
     } catch {
       toast.error("Échec de synchronisation Pennylane");
+    }
+  };
+
+  // 2026-05-21 — envoi du devis au client (brouillon → envoyé). Le client le
+  // voit alors dans son extranet « en attente de validation » (QuoteObserver
+  // émet la notification sur le changement de statut).
+  const handleSend = async (id: number, ref: string) => {
+    if (!confirm(`Envoyer le devis ${ref} au client ? Il pourra le valider depuis son extranet.`)) return;
+    try {
+      await updateQuote.mutateAsync({ id, patch: { status: "sent" } });
+      toast.success("Devis envoyé au client (en attente de validation)");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Échec de l'envoi du devis"));
+    }
+  };
+
+  // 2026-05-21 — conversion devis → mission. Réservé aux devis validés par le
+  // client (statut « accepté »). Le backend gère l'anti-doublon.
+  const handleConvertMission = async (q: any) => {
+    if (!confirm(`Créer la mission depuis le devis ${q.reference ?? `#${q.id}`} ?`)) return;
+    try {
+      const { mission, alreadyExisted } = await convertMission.mutateAsync(q.id);
+      toast.success(
+        alreadyExisted
+          ? "Une mission existait déjà pour ce devis — ouverture en édition."
+          : "Mission créée depuis le devis — vous pouvez l'ajuster.",
+      );
+      navigate(`/clients/${mission.client_id}/missions/${mission.id}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Échec de la création de la mission"));
     }
   };
 
@@ -217,7 +251,7 @@ export function QuotesListPage() {
                 <TableHead>Validité</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead className="w-48 text-right">Actions</TableHead>
+                <TableHead className="w-64 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -258,6 +292,33 @@ export function QuotesListPage() {
                         onClick={() => setDetailId(q.id)}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
+                      {/* 2026-05-21 — édition du devis (verrouillée si déjà converti en facture) */}
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer"
+                        title={q.invoice_id ? "Devis converti en facture — non modifiable" : "Modifier le devis"}
+                        disabled={!!q.invoice_id}
+                        onClick={() => setEditId(q.id)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      {/* 2026-05-21 — envoi au client : uniquement sur un brouillon */}
+                      {q.status === "draft" && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-indigo-600 hover:bg-indigo-500/10"
+                          title="Envoyer au client"
+                          disabled={updateQuote.isPending}
+                          onClick={() => handleSend(q.id, q.reference ?? `#${q.id}`)}>
+                          <Send className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {/* 2026-05-21 — transformer en mission : uniquement un devis validé */}
+                      {q.status === "accepted" && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-emerald-600 hover:bg-emerald-500/10"
+                          title="Transformer en mission"
+                          disabled={convertMission.isPending}
+                          onClick={() => handleConvertMission(q)}>
+                          <Briefcase className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {/* 2026-05-20 PDF B2B */}
                       <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer" title="Télécharger PDF"
                         onClick={() => handleDownloadPdf(q.id, q.reference ?? `#${q.id}`)}>
@@ -304,6 +365,8 @@ export function QuotesListPage() {
 
       {/* 2026-05-20 refonte devis — key force le remount = reset propre du form à chaque ouverture */}
       {open && <CreateQuoteDialog key="create-quote" onClose={() => setOpen(false)} />}
+      {/* 2026-05-21 — édition d'un devis existant (key par id = form re-seedé) */}
+      {editId && <EditQuoteDialog key={`edit-${editId}`} id={editId} onClose={() => setEditId(null)} />}
       <QuoteDetailDialog id={detailId} onClose={() => setDetailId(null)} />
       {typesOpen && <QuoteTypesDialog onClose={() => setTypesOpen(false)} />}
     </div>
@@ -529,49 +592,6 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
     0,
   );
 
-  // --- Lignes ---------------------------------------------------------------
-  const blankLine = (kind: LineKind): DraftItem => ({
-    uid: nextUid(), kind, product_id: null, stock_product_id: null,
-    label: "", quantity: "1", unit_price: "0", vat_rate_id: null,
-    item_type: kind === "stock" ? "produit" : "forfait",
-  });
-
-  const addCatalogLine = () => setItems((arr) => [...arr, blankLine("catalog")]);
-  const addFreeLine = () => setItems((arr) => [...arr, blankLine("free")]);
-  const addStockLine = () => setItems((arr) => [...arr, blankLine("stock")]);
-
-  const removeLine = (uid: string) => setItems((arr) => arr.filter((it) => it.uid !== uid));
-
-  const updateLine = (uid: string, patch: Partial<DraftItem>) =>
-    setItems((arr) => arr.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
-
-  // Choix d'une prestation catalogue → pré-remplit label/prix/TVA/type/product_id
-  const pickProduct = (uid: string, productIdStr: string) => {
-    const pid = parseInt(productIdStr, 10);
-    const p = products?.data.find((x) => x.id === pid);
-    if (!p) return;
-    updateLine(uid, {
-      product_id: p.id,
-      label: p.name,
-      unit_price: String(p.price ?? 0),
-      vat_rate_id: p.vat_rate_id ?? null,
-      item_type: productTypeToItemType(p.type),
-    });
-  };
-
-  // Choix d'un produit du stock → pré-remplit le label depuis le produit.
-  // Le prix n'est pas porté par stock_products (consommable) → laissé à saisir.
-  const pickStockProduct = (uid: string, stockIdStr: string) => {
-    const sid = parseInt(stockIdStr, 10);
-    const sp = stockOptions?.find((x) => x.id === sid);
-    if (!sp) return;
-    updateLine(uid, {
-      stock_product_id: sp.id,
-      label: sp.reference ? `${sp.name} (${sp.reference})` : sp.name,
-      item_type: "produit",
-    });
-  };
-
   // Charge une ligne par client_prestation de la mission sélectionnée.
   // unit_price = custom_price ?? base_price ?? product.price.
   const loadMissionPrestations = () => {
@@ -755,149 +775,14 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* --- Lignes --- */}
-          <div className="space-y-2 border-t pt-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Lignes du devis</Label>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={addCatalogLine} className="cursor-pointer">
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Prestation du catalogue
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={addStockLine} className="cursor-pointer">
-                  <Boxes className="h-3.5 w-3.5 mr-1" /> Produit du stock
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={addFreeLine} className="cursor-pointer">
-                  <PencilLine className="h-3.5 w-3.5 mr-1" /> Ligne libre
-                </Button>
-              </div>
-            </div>
-
-            {items.length === 0 && (
-              <p className="text-xs text-muted-foreground py-3 text-center border rounded-lg border-dashed">
-                Aucune ligne. Ajoutez une prestation du catalogue, un produit du
-                stock, une ligne libre, ou chargez les prestations d'une mission.
-              </p>
-            )}
-
-            {items.map((it) => (
-              <div key={it.uid} className="rounded-lg border p-2.5 space-y-2">
-                <div className="flex items-center gap-2">
-                  {it.kind === "free" && (
-                    <Badge variant="secondary" className="text-[10px] shrink-0">Libre</Badge>
-                  )}
-                  {it.kind === "catalog" && (
-                    <Badge variant="outline" className="text-[10px] shrink-0">Catalogue</Badge>
-                  )}
-                  {it.kind === "stock" && (
-                    <Badge className="text-[10px] shrink-0 bg-amber-500/15 text-amber-700 border-amber-500/30">
-                      Stock
-                    </Badge>
-                  )}
-                  {it.kind === "free" && (
-                    <Input
-                      placeholder="Désignation (ex : frais de déplacement, remise…)"
-                      value={it.label}
-                      onChange={(e) => updateLine(it.uid, { label: e.target.value })}
-                      className="flex-1"
-                    />
-                  )}
-                  {it.kind === "catalog" && (
-                    <Select
-                      value={it.product_id ? String(it.product_id) : ""}
-                      onValueChange={(v) => pickProduct(it.uid, v)}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="— Choisir une prestation —" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products?.data.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name} — {Number(p.price).toFixed(2)} €
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {it.kind === "stock" && (
-                    <Select
-                      value={it.stock_product_id ? String(it.stock_product_id) : ""}
-                      onValueChange={(v) => pickStockProduct(it.uid, v)}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="— Choisir un produit du stock —" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(stockOptions ?? []).length === 0 && (
-                          <SelectItem value="__none" disabled>
-                            Aucun produit en stock actif
-                          </SelectItem>
-                        )}
-                        {stockOptions?.map((sp) => (
-                          <SelectItem key={sp.id} value={String(sp.id)}>
-                            {sp.name}
-                            {sp.reference ? ` · ${sp.reference}` : ""}
-                            <span className="text-muted-foreground ml-1">
-                              (stock : {sp.current_quantity})
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeLine(it.uid)}
-                    className="text-destructive hover:bg-destructive/10 p-1.5 rounded shrink-0 cursor-pointer"
-                    title="Supprimer la ligne"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
-                  {/* Le label catalogue/stock reste éditable une fois l'item choisi */}
-                  {it.kind !== "free" && (
-                    <Input
-                      placeholder="Désignation"
-                      value={it.label}
-                      onChange={(e) => updateLine(it.uid, { label: e.target.value })}
-                    />
-                  )}
-                  {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
-                  <Input
-                    type="number" step="0.01" min="0" placeholder="Qté"
-                    value={it.quantity}
-                    onChange={(e) => updateLine(it.uid, { quantity: e.target.value })}
-                  />
-                  <Input
-                    type="number" step="0.01" min="0" placeholder="PU €"
-                    value={it.unit_price}
-                    onChange={(e) => updateLine(it.uid, { unit_price: e.target.value })}
-                  />
-                  <Select
-                    value={it.vat_rate_id ? String(it.vat_rate_id) : "none"}
-                    onValueChange={(v) => updateLine(it.uid, { vat_rate_id: v === "none" ? null : parseInt(v, 10) })}
-                  >
-                    <SelectTrigger><SelectValue placeholder="TVA" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— TVA —</SelectItem>
-                      {vatRates?.map((v) => (
-                        <SelectItem key={v.id} value={String(v.id)}>{v.rate}%</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {it.kind === "stock" && (
-                  <p className="text-[10px] text-amber-700">
-                    Produit du stock — chiffrage seul : le devis ne décompte
-                    aucun stock. Le décompte aura lieu en l'ajoutant à la mission.
-                  </p>
-                )}
-                <p className="text-right text-xs text-muted-foreground">
-                  Sous-total ligne : {(parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0")).toFixed(2)} €
-                </p>
-              </div>
-            ))}
-          </div>
+          {/* --- Lignes --- (éditeur partagé avec EditQuoteDialog) */}
+          <QuoteLinesSection
+            items={items}
+            setItems={setItems}
+            products={products}
+            vatRates={vatRates}
+            stockOptions={stockOptions}
+          />
 
           {/* --- Dates + commentaire --- */}
           <div className="grid grid-cols-2 gap-3 border-t pt-3">
@@ -936,6 +821,388 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ===========================================================================
+// 2026-05-21 — Éditeur de lignes de devis, partagé entre création et édition
+// ===========================================================================
+//
+// Gère les 3 types de lignes (catalogue / stock / libre) + le calcul du
+// sous-total par ligne. Le parent fournit `items` / `setItems` et les
+// référentiels (catalogue de prestations, taux de TVA, produits du stock).
+
+function QuoteLinesSection({
+  items, setItems, products, vatRates, stockOptions,
+}: {
+  items: DraftItem[];
+  setItems: Dispatch<SetStateAction<DraftItem[]>>;
+  products?: { data: any[] };
+  vatRates?: any[];
+  stockOptions?: any[];
+}) {
+  const blankLine = (kind: LineKind): DraftItem => ({
+    uid: nextUid(), kind, product_id: null, stock_product_id: null,
+    label: "", quantity: "1", unit_price: "0", vat_rate_id: null,
+    item_type: kind === "stock" ? "produit" : "forfait",
+  });
+
+  const addCatalogLine = () => setItems((arr) => [...arr, blankLine("catalog")]);
+  const addFreeLine = () => setItems((arr) => [...arr, blankLine("free")]);
+  const addStockLine = () => setItems((arr) => [...arr, blankLine("stock")]);
+  const removeLine = (uid: string) => setItems((arr) => arr.filter((it) => it.uid !== uid));
+  const updateLine = (uid: string, patch: Partial<DraftItem>) =>
+    setItems((arr) => arr.map((it) => (it.uid === uid ? { ...it, ...patch } : it)));
+
+  // Choix d'une prestation catalogue → pré-remplit label/prix/TVA/type/product_id
+  const pickProduct = (uid: string, productIdStr: string) => {
+    const pid = parseInt(productIdStr, 10);
+    const p = products?.data.find((x) => x.id === pid);
+    if (!p) return;
+    updateLine(uid, {
+      product_id: p.id,
+      label: p.name,
+      unit_price: String(p.price ?? 0),
+      vat_rate_id: p.vat_rate_id ?? null,
+      item_type: productTypeToItemType(p.type),
+    });
+  };
+
+  // Choix d'un produit du stock → pré-remplit le label depuis le produit.
+  const pickStockProduct = (uid: string, stockIdStr: string) => {
+    const sid = parseInt(stockIdStr, 10);
+    const sp = stockOptions?.find((x) => x.id === sid);
+    if (!sp) return;
+    updateLine(uid, {
+      stock_product_id: sp.id,
+      label: sp.reference ? `${sp.name} (${sp.reference})` : sp.name,
+      item_type: "produit",
+    });
+  };
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Lignes du devis</Label>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={addCatalogLine} className="cursor-pointer">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Prestation du catalogue
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={addStockLine} className="cursor-pointer">
+            <Boxes className="h-3.5 w-3.5 mr-1" /> Produit du stock
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={addFreeLine} className="cursor-pointer">
+            <PencilLine className="h-3.5 w-3.5 mr-1" /> Ligne libre
+          </Button>
+        </div>
+      </div>
+
+      {items.length === 0 && (
+        <p className="text-xs text-muted-foreground py-3 text-center border rounded-lg border-dashed">
+          Aucune ligne. Ajoutez une prestation du catalogue, un produit du
+          stock, ou une ligne libre.
+        </p>
+      )}
+
+      {items.map((it) => (
+        <div key={it.uid} className="rounded-lg border p-2.5 space-y-2">
+          <div className="flex items-center gap-2">
+            {it.kind === "free" && (
+              <Badge variant="secondary" className="text-[10px] shrink-0">Libre</Badge>
+            )}
+            {it.kind === "catalog" && (
+              <Badge variant="outline" className="text-[10px] shrink-0">Catalogue</Badge>
+            )}
+            {it.kind === "stock" && (
+              <Badge className="text-[10px] shrink-0 bg-amber-500/15 text-amber-700 border-amber-500/30">
+                Stock
+              </Badge>
+            )}
+            {it.kind === "free" && (
+              <Input
+                placeholder="Désignation (ex : frais de déplacement, remise…)"
+                value={it.label}
+                onChange={(e) => updateLine(it.uid, { label: e.target.value })}
+                className="flex-1"
+              />
+            )}
+            {it.kind === "catalog" && (
+              <Select
+                value={it.product_id ? String(it.product_id) : ""}
+                onValueChange={(v) => pickProduct(it.uid, v)}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="— Choisir une prestation —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products?.data.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.name} — {Number(p.price).toFixed(2)} €
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {it.kind === "stock" && (
+              <Select
+                value={it.stock_product_id ? String(it.stock_product_id) : ""}
+                onValueChange={(v) => pickStockProduct(it.uid, v)}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="— Choisir un produit du stock —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(stockOptions ?? []).length === 0 && (
+                    <SelectItem value="__none" disabled>
+                      Aucun produit en stock actif
+                    </SelectItem>
+                  )}
+                  {stockOptions?.map((sp) => (
+                    <SelectItem key={sp.id} value={String(sp.id)}>
+                      {sp.name}
+                      {sp.reference ? ` · ${sp.reference}` : ""}
+                      <span className="text-muted-foreground ml-1">
+                        (stock : {sp.current_quantity})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <button
+              type="button"
+              onClick={() => removeLine(it.uid)}
+              className="text-destructive hover:bg-destructive/10 p-1.5 rounded shrink-0 cursor-pointer"
+              title="Supprimer la ligne"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
+            {/* Le label catalogue/stock reste éditable une fois l'item choisi */}
+            {it.kind !== "free" && (
+              <Input
+                placeholder="Désignation"
+                value={it.label}
+                onChange={(e) => updateLine(it.uid, { label: e.target.value })}
+              />
+            )}
+            {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
+            <Input
+              type="number" step="0.01" min="0" placeholder="Qté"
+              value={it.quantity}
+              onChange={(e) => updateLine(it.uid, { quantity: e.target.value })}
+            />
+            <Input
+              type="number" step="0.01" min="0" placeholder="PU €"
+              value={it.unit_price}
+              onChange={(e) => updateLine(it.uid, { unit_price: e.target.value })}
+            />
+            <Select
+              value={it.vat_rate_id ? String(it.vat_rate_id) : "none"}
+              onValueChange={(v) => updateLine(it.uid, { vat_rate_id: v === "none" ? null : parseInt(v, 10) })}
+            >
+              <SelectTrigger><SelectValue placeholder="TVA" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— TVA —</SelectItem>
+                {vatRates?.map((v) => (
+                  <SelectItem key={v.id} value={String(v.id)}>{v.rate}%</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {it.kind === "stock" && (
+            <p className="text-[10px] text-amber-700">
+              Produit du stock — chiffrage seul : le devis ne décompte
+              aucun stock. Le décompte aura lieu en l'ajoutant à la mission.
+            </p>
+          )}
+          <p className="text-right text-xs text-muted-foreground">
+            Sous-total ligne : {(parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0")).toFixed(2)} €
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===========================================================================
+// 2026-05-21 — Édition d'un devis existant
+// ===========================================================================
+//
+// PATCH /quotes/{id} accepte : quote_date, validity_date, status, comment et
+// items[] (remplacement complet des lignes). Le client, le type et la mission
+// d'origine ne sont PAS modifiables ici (ils définissent l'identité du devis).
+// Un devis déjà converti en facture est verrouillé côté backend (409) — le
+// bouton d'édition est d'ailleurs désactivé dans ce cas.
+
+// Convertit les `quote_items` renvoyés par l'API en lignes éditables.
+function quoteItemsToDraft(items: any[]): DraftItem[] {
+  return items.map((it) => {
+    const kind: LineKind = it.stock_product_id
+      ? "stock"
+      : it.product_id
+        ? "catalog"
+        : "free";
+    return {
+      uid: nextUid(),
+      kind,
+      product_id: it.product_id ?? null,
+      stock_product_id: it.stock_product_id ?? null,
+      label: it.label ?? "",
+      quantity: String(it.quantity ?? "1"),
+      unit_price: String(it.unit_price ?? "0"),
+      vat_rate_id: it.vat_rate_id ?? null,
+      item_type: it.item_type ?? "forfait",
+    };
+  });
+}
+
+function EditQuoteDialog({ id, onClose }: { id: number; onClose: () => void }) {
+  const { data, isLoading } = useQuote(id);
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:!max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Modifier le devis {data?.reference ?? ""}</DialogTitle>
+        </DialogHeader>
+        {isLoading && <Skeleton className="h-64 w-full" />}
+        {/* EditQuoteForm n'est monté qu'avec les données → seed direct du state */}
+        {data && <EditQuoteForm quote={data} onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => void }) {
+  const update = useUpdateQuote();
+  const { data: products } = useProducts({ status: "active", per_page: 100 });
+  const { data: vatRates } = useVatRates();
+  const { data: stockOptions } = useStockProductOptions();
+
+  // slice(0,10) : une date ISO complète casse <input type="date"> (veut YYYY-MM-DD)
+  const [quoteDate, setQuoteDate] = useState((quote.quote_date ?? "").slice(0, 10));
+  const [validityDate, setValidityDate] = useState((quote.validity_date ?? "").slice(0, 10));
+  const [status, setStatus] = useState<QuoteType["status"]>(quote.status);
+  const [comment, setComment] = useState(quote.comment ?? "");
+  const [items, setItems] = useState<DraftItem[]>(() => quoteItemsToDraft(quote.items ?? []));
+
+  const total = items.reduce(
+    (sum, it) => sum + parseFloat(it.quantity || "0") * parseFloat(it.unit_price || "0"),
+    0,
+  );
+
+  const handleSave = async () => {
+    // Validation métier au clic (cf. convention projet — pas de submit disabled)
+    const errors: string[] = [];
+    if (!quoteDate) errors.push("La date du devis est requise.");
+    const validItems = items.filter((it) => it.label.trim());
+    if (validItems.length === 0) errors.push("Le devis doit comporter au moins une ligne.");
+    validItems.forEach((it, i) => {
+      const q = parseFloat(it.quantity);
+      const u = parseFloat(it.unit_price);
+      if (isNaN(q) || q <= 0) errors.push(`Ligne ${i + 1} : quantité invalide.`);
+      if (isNaN(u) || u < 0) errors.push(`Ligne ${i + 1} : prix unitaire invalide.`);
+    });
+    if (errors.length > 0) {
+      toast.error(errors.join(" "));
+      return;
+    }
+
+    try {
+      await update.mutateAsync({
+        id: quote.id,
+        patch: {
+          quote_date: quoteDate,
+          validity_date: validityDate || null,
+          status,
+          comment: comment.trim() || null,
+          items: validItems.map((it) => ({
+            label: it.label.trim(),
+            quantity: parseFloat(it.quantity),
+            unit_price: parseFloat(it.unit_price),
+            item_type: it.item_type,
+            vat_rate_id: it.vat_rate_id,
+            product_id: it.product_id,
+            stock_product_id: it.stock_product_id,
+          })),
+        },
+      });
+      toast.success("Devis mis à jour");
+      onClose();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de la mise à jour du devis"));
+      console.error("Mise à jour devis échouée", err);
+    }
+  };
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4">
+      {/* Client : non modifiable ici (rappel en lecture seule) */}
+      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+        <span className="text-muted-foreground">Client : </span>
+        <span className="font-medium">
+          {quote.client?.company?.company_name ?? `Client #${quote.client_id}`}
+        </span>
+      </div>
+
+      {/* Statut */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Statut</Label>
+        <Select value={status} onValueChange={(v) => setStatus(v as QuoteType["status"])}>
+          <SelectTrigger className="sm:w-64"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(STATUS_LABELS).map(([k, label]) => (
+              <SelectItem key={k} value={k}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[10px] text-muted-foreground">
+          « Envoyé » rend le devis visible côté client. « Accepté » autorise la
+          transformation en mission.
+        </p>
+      </div>
+
+      {/* Lignes (éditeur partagé avec la création) */}
+      <QuoteLinesSection
+        items={items}
+        setItems={setItems}
+        products={products}
+        vatRates={vatRates}
+        stockOptions={stockOptions}
+      />
+
+      {/* Dates + commentaire */}
+      <div className="grid grid-cols-2 gap-3 border-t pt-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Date du devis *</Label>
+          <Input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Date de validité</Label>
+          <Input type="date" value={validityDate} onChange={(e) => setValidityDate(e.target.value)} />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Commentaire</Label>
+        <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Note interne ou client (optionnel)" />
+      </div>
+
+      <div className="text-right text-lg font-semibold border-t pt-3">
+        Total HT : {total.toFixed(2)} €
+      </div>
+
+      <DialogFooter className="gap-2 sm:gap-2">
+        <Button type="button" variant="outline" onClick={onClose} disabled={update.isPending} className="cursor-pointer">
+          Annuler
+        </Button>
+        <Button type="button" disabled={update.isPending}
+          onClick={handleSave}
+          className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer">
+          {update.isPending ? "Enregistrement…" : "Enregistrer les modifications"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
