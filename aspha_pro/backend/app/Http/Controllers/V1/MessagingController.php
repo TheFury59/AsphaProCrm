@@ -117,7 +117,8 @@ class MessagingController extends Controller
                 MessageThreadParticipant::create([
                     'thread_id' => $thread->id,
                     'user_id' => $uid,
-                    'joined_at' => now(),
+                    // pas de `joined_at` : colonne inexistante, `created_at`
+                    // fait foi de la date d'arrivée. Fix 2026-05-21.
                     'last_read_at' => $uid === $userId ? now() : null,
                 ]);
             }

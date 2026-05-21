@@ -17,17 +17,20 @@ class MessageThreadParticipant extends Model
     // un vrai `id` auto-increment et timestamps. Avant : `primaryKey=null`
     // sur table sans id → `create()` non déterministe, `find()` impossible.
     // Cf. audit 2026-05-19 (CRIT).
+    //
+    // ⚠️ 2026-05-21 — `joined_at` retiré : la table recréée par la migration
+    // de sécurité ne possède PAS cette colonne. L'insérer cassait toute
+    // création de conversation (erreur SQL colonne inconnue). `created_at`
+    // (timestamps) tient déjà lieu de date d'arrivée du participant.
     protected $fillable = [
         'thread_id',
         'user_id',
-        'joined_at',
         'last_read_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'joined_at' => 'datetime',
             'last_read_at' => 'datetime',
         ];
     }
