@@ -64,7 +64,7 @@ class InterventionExpander
             $interventions = Intervention::query()
                 ->with([
                     'employee:id,name',
-                    'client:id,code',
+                    'client:id,code,intervenant_notes',
                     'client.company:id,client_id,company_name,phone_mobile,primary_email,manager_first_name,manager_last_name',
                     'client.addresses',
                     'client.contacts',  // pour dropdown contact dans dialog
@@ -330,6 +330,9 @@ class InterventionExpander
                     'latitude' => $effectiveAddr->latitude,
                     'longitude' => $effectiveAddr->longitude,
                 ] : null,
+                // Consignes / infos libres rédigées côté admin pour les
+                // intervenants (B6/F2) — affichées dans le tooltip de l'extranet.
+                'intervenant_notes' => $iv->client->intervenant_notes,
                 // Pour le badge 🔑 sur le RDV planning
                 'keys_count' => $keysCount,
                 'has_keys' => $keysCount > 0,

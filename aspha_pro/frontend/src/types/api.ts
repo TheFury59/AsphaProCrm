@@ -79,6 +79,8 @@ export type Client = {
   owner_user_id: number | null;
   portal_user_id: number | null;
   print_intervention_detail: string | null;
+  /** Consignes / infos libres pour les intervenants (B6/F2). */
+  intervenant_notes: string | null;
   display_name: string;
   created_at: string | null;
   company?: ClientCompany | null;

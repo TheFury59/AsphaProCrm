@@ -17,6 +17,7 @@ class QuoteItem extends Model
         'vat_rate_id', // audit 2026-05-19 — TVA dynamique par ligne
         'label',
         'quantity',
+        'duration_minutes', // 2026-05-22 (C4) — durée standard saisie sur le devis
         'unit_price',
         'total',
         'order',
@@ -26,6 +27,7 @@ class QuoteItem extends Model
     {
         return [
             'quantity' => 'decimal:2',
+            'duration_minutes' => 'integer',
             'unit_price' => 'decimal:2',
             'total' => 'decimal:2',
             'order' => 'integer',

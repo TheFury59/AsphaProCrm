@@ -16,6 +16,7 @@ import { useClients } from "@/hooks/use-clients";
 import { useClientMissions } from "@/hooks/use-missions";
 import { useProducts } from "@/hooks/use-products";
 import { useConflictCheck, type ConflictItem } from "@/hooks/use-conflict-check";
+import { useClientAddresses } from "@/hooks/use-sub-resources";
 import { ConflictWarningDialog } from "./ConflictWarningDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -67,26 +68,45 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Couleur stable par employee_id — palette saturée mais cohérente avec
- * la marque Aspha (vert + bleu ciel dominants). 12 couleurs distinctes.
+ * Couleurs d'un event en fonction de SON STATUT (D2).
+ *
+ *  - annulee                       → 🔴 rouge
+ *  - a_pourvoir                    → 🟠 orange
+ *  - planifiee                     → 🔵 bleu
+ *  - realisee AVEC checkin badgé   → 🟢 vert
+ *  - realisee SANS checkin         → 🟣 violet (badgeage manquant)
+ *  - draft / terminated (fallback) → ⚪ gris neutre
+ *
+ * `borderColor` reste transparent sauf pour le vert "réalisé + badgé" où on
+ * garde une bordure verte plus soutenue (cohérence avec l'ancienne logique).
  */
-const EMPLOYEE_PALETTE = [
-  "#10b981", // emerald (signature Aspha)
-  "#0ea5e9", // sky
-  "#8b5cf6", // violet
-  "#f59e0b", // amber
-  "#ec4899", // pink
-  "#06b6d4", // cyan
-  "#84cc16", // lime
-  "#f97316", // orange
-  "#a855f7", // purple
-  "#14b8a6", // teal
-  "#6366f1", // indigo
-  "#22c55e", // green
-];
-function colorForEmployee(employeeId: number | null | undefined): string {
-  if (!employeeId) return "#94a3b8";  // slate pour "à pourvoir"
-  return EMPLOYEE_PALETTE[employeeId % EMPLOYEE_PALETTE.length];
+const STATUS_COLORS = {
+  annulee: "#ef4444",        // red-500
+  a_pourvoir: "#f97316",     // orange-500
+  planifiee: "#3b82f6",      // blue-500
+  realisee_done: "#22c55e",  // green-500 (réalisée + badgée)
+  realisee_pending: "#a855f7", // purple-500 (réalisée sans checkin)
+  neutral: "#94a3b8",        // slate-400 (draft / terminated / inconnu)
+} as const;
+
+function statusColor(iv: { status?: string | null; checkin?: { checkin_time?: string | null } | null }): {
+  background: string;
+  border: string;
+} {
+  switch (iv.status) {
+    case "annulee":
+      return { background: STATUS_COLORS.annulee, border: "transparent" };
+    case "a_pourvoir":
+      return { background: STATUS_COLORS.a_pourvoir, border: "transparent" };
+    case "planifiee":
+      return { background: STATUS_COLORS.planifiee, border: "transparent" };
+    case "realisee":
+      return iv.checkin?.checkin_time
+        ? { background: STATUS_COLORS.realisee_done, border: "#16a34a" }
+        : { background: STATUS_COLORS.realisee_pending, border: "transparent" };
+    default: // draft / terminated / inconnu
+      return { background: STATUS_COLORS.neutral, border: "transparent" };
+  }
 }
 
 export function PlanningPage() {
@@ -153,16 +173,16 @@ export function PlanningPage() {
   const events: EventInput[] = useMemo(() => (interventions.data ?? []).map((ev) => {
     const employeeName = ev.employee?.name ?? "À pourvoir";
     const clientLabel = ev.client?.company_name ?? ev.client?.code ?? "?";
+    // Couleurs pilotées par le STATUT du RDV (D2) — cf. statusColor().
+    const { background, border } = statusColor(ev);
     // Le titre est volontairement court ; l'event content riche fait le reste.
     return {
       id: ev.id,
       title: `${clientLabel}\n${employeeName}`,
       start: ev.start_datetime,
       end: ev.end_datetime,
-      backgroundColor: ev.status === "annulee"
-        ? "#ef4444"
-        : colorForEmployee(ev.employee?.id),
-      borderColor: ev.status === "realisee" ? "#10b981" : "transparent",
+      backgroundColor: background,
+      borderColor: border,
       textColor: "#ffffff",
       classNames: [
         ev.status === "annulee" ? "intervention-cancelled" : "",
@@ -515,6 +535,26 @@ export function PlanningPage() {
         )}
       </div>
 
+      {/* Légende des couleurs de statut (D2) */}
+      {hasFilter && (
+        <div className="mb-4 px-4 py-2 rounded-xl bg-card shadow-soft flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+          <span className="font-medium text-muted-foreground">Légende :</span>
+          {[
+            { c: STATUS_COLORS.a_pourvoir, label: "À pourvoir" },
+            { c: STATUS_COLORS.planifiee, label: "Planifiée" },
+            { c: STATUS_COLORS.realisee_done, label: "Réalisée + badgée" },
+            { c: STATUS_COLORS.realisee_pending, label: "Réalisée (badgeage manquant)" },
+            { c: STATUS_COLORS.annulee, label: "Annulée" },
+            { c: STATUS_COLORS.neutral, label: "Brouillon / Terminée" },
+          ].map((it) => (
+            <span key={it.label} className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: it.c }} />
+              <span className="text-muted-foreground">{it.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Bandeau absences longue durée */}
       {hasFilter && <LongAbsenceBanner from={window.from} to={window.to} />}
 
@@ -824,6 +864,8 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
     }>,
     employee_id: "",
     status: "planifiee",
+    // Adresse d'intervention (D1) — vide = adresse par défaut du client.
+    address_id: "",
     // ⚠️ date et heure séparés pour la lisibilité (recomposés à la soumission)
     start_date: initialDate,
     start_time_h: initialTime,
@@ -985,6 +1027,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
       client_prestation_id: linkedToMission && form.client_prestation_id
         ? parseInt(form.client_prestation_id, 10) : null,
       employee_id: form.employee_id ? parseInt(form.employee_id, 10) : null,
+      address_id: form.address_id ? parseInt(form.address_id, 10) : null,
       is_recurring: isRecurring,
       status: form.status,
       comment: form.comment || null,
@@ -1126,6 +1169,12 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
 
   const selectedClient = clients.find((c: any) => String(c.id) === form.client_id);
 
+  // Adresses du client sélectionné (D1) — pour le sélecteur d'adresse
+  // d'intervention. Le hook est désactivé tant qu'aucun client n'est choisi.
+  const { data: clientAddresses = [] } = useClientAddresses(
+    form.client_id ? parseInt(form.client_id, 10) : 0,
+  );
+
   // Détection de conflits horaires en temps réel (RDV qui se chevauchent,
   // temps de trajet trop court entre 2 RDV consécutifs). Pas bloquant : le
   // user peut quand même créer s'il accepte le risque. Désactivé pour les
@@ -1169,14 +1218,38 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
                 <select value={form.client_id} onChange={(e) => setForm((f: any) => ({
                   ...f,
                   client_id: e.target.value,
-                  // Reset rattachement quand on change de client
+                  // Reset rattachement + adresse quand on change de client
                   mission_id: "",
                   client_prestation_id: "",
+                  address_id: "",
                 }))}
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-10 cursor-pointer hover:border-primary/40 transition-colors" required>
                   <option value="">— Choisir un client —</option>
                   {clients.map((c: any) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
                 </select>
+
+                {/* Adresse d'intervention (D1) — affichée dès que le client
+                    a au moins une adresse enregistrée. */}
+                {step1Done && clientAddresses.length > 0 && (
+                  <div className="space-y-1 pt-2">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                      <MapIcon className="h-3 w-3" />
+                      Adresse d'intervention
+                    </Label>
+                    <select
+                      value={form.address_id}
+                      onChange={(e) => setForm((f: any) => ({ ...f, address_id: e.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm h-9 cursor-pointer hover:border-primary/40 transition-colors"
+                    >
+                      <option value="">Adresse par défaut du client</option>
+                      {clientAddresses.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          [{a.type}] {a.address}{a.city ? ` — ${a.postal_code ?? ""} ${a.city}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </WizardStep>
 
               {/* ÉTAPE 2 : Rattachement Mission/Ponctuel */}

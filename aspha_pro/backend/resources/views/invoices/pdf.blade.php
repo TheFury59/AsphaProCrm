@@ -64,7 +64,7 @@
     {{-- ===== Pied de page légal (toutes pages) ===== --}}
     <div class="footer">
         {{ $company['legal_name'] }}, siège social : {{ $company['head_office'] }} — {{ $company['legal_form'] }}<br>
-        SIRET : {{ $company['siret'] }} ({{ $company['rcs'] }})
+        SIRET : {{ $company['siret'] }} ({{ $company['rcs'] }})@if (! empty($company['vat_number'])) — N° TVA : {{ $company['vat_number'] }}@endif
     </div>
 
     {{-- ===== En-tête ===== --}}

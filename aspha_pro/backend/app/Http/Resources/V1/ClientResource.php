@@ -16,6 +16,8 @@ class ClientResource extends JsonResource
             'entity_id' => $this->entity_id,
             'owner_user_id' => $this->owner_user_id,
             'print_intervention_detail' => $this->print_intervention_detail,
+            // Consignes / infos libres pour les intervenants (B6/F2).
+            'intervenant_notes' => $this->intervenant_notes,
             'display_name' => $this->displayName(),
             'created_at' => $this->created_at?->toIso8601String(),
 

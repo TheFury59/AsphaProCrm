@@ -106,7 +106,6 @@ export function ProductsListPage() {
                   <Badge variant="outline" className="text-xs">{TYPE_LABELS[p.type] ?? p.type}</Badge>
                 </div>
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  {p.default_duration_minutes != null && <div>Durée standard : <span className="text-foreground">{p.default_duration_minutes} min</span></div>}
                   {p.vat_rate && <div>TVA : <span className="text-foreground">{p.vat_rate.rate}%</span></div>}
                   {p.has_degressive_pricing && <Badge variant="secondary" className="text-xs mt-1">Tarif dégressif</Badge>}
                 </div>
@@ -153,7 +152,9 @@ function ProductFormDialog({ product, onClose }: {
   const [status, setStatus] = useState(product?.status ?? "active");
   const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
   const [type, setType] = useState(product?.type ?? "hourly");
-  const [duration, setDuration] = useState<string>(product?.default_duration_minutes != null ? String(product.default_duration_minutes) : "");
+  // 2026-05-22 (C4) — la « durée standard » n'est plus une propriété du
+  // catalogue : elle se saisit sur le devis / la mission au moment de
+  // sélectionner la prestation (décision cliente). Plus de champ ici.
   const [price, setPrice] = useState<string>(product?.price != null ? String(product.price) : "");
   const [vatRateId, setVatRateId] = useState<string>(product?.vat_rate_id ? String(product.vat_rate_id) : "none");
   const [amountInclTax, setAmountInclTax] = useState(product?.amount_incl_tax ?? false);
@@ -191,7 +192,6 @@ function ProductFormDialog({ product, onClose }: {
       status,
       entity_id: entityId === "none" ? null : Number(entityId),
       type,
-      default_duration_minutes: duration === "" ? null : Number(duration),
       price: Number(price),
       vat_rate_id: vatRateId === "none" ? null : Number(vatRateId),
       amount_incl_tax: amountInclTax,
@@ -314,20 +314,15 @@ function ProductFormDialog({ product, onClose }: {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Durée standard (min)">
-              <Input type="number" min="0" value={duration} onChange={(e) => setDuration(e.target.value)} />
-            </Field>
-            <div className="flex flex-col justify-end gap-2 pb-1">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={amountInclTax} onCheckedChange={(v) => setAmountInclTax(v === true)} />
-                Prix saisi en TTC
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={specificForbidden} onCheckedChange={(v) => setSpecificForbidden(v === true)} />
-                Tarifs spécifiques interdits
-              </label>
-            </div>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={amountInclTax} onCheckedChange={(v) => setAmountInclTax(v === true)} />
+              Prix saisi en TTC
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={specificForbidden} onCheckedChange={(v) => setSpecificForbidden(v === true)} />
+              Tarifs spécifiques interdits
+            </label>
           </div>
 
           {/* Tarif dégressif */}

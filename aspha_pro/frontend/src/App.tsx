@@ -45,6 +45,7 @@ import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { HelpPage } from "@/pages/help/HelpPage";
+import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +60,19 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+
+            {/* Changement de mot de passe forcé (tâche A2).
+                Protégé (session requise) mais SANS RoleRouter ni layout :
+                accessible à tous les rôles sans redirection vers leur
+                extranet → évite la boucle de redirection. */}
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePasswordPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Extranet intervenant */}
             <Route

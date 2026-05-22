@@ -6,6 +6,7 @@ export type AuthUser = {
   name: string;
   email: string;
   status: "active" | "inactive";
+  must_change_password: boolean;
   role: string | null;
   permissions: string[];
   last_login_at: string | null;

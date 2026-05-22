@@ -51,6 +51,8 @@ function toDraft(p: Prestation): PrestationDraft {
   return {
     product_id: p.product_id,
     label: p.label ?? "",
+    // C4 2026-05-22 — durée standard relue depuis la prestation existante.
+    duration_minutes: p.duration_minutes ?? null,
     // `toDateInput` : le backend peut renvoyer un datetime ISO (anciens
     // enregistrements) — on le réduit à `YYYY-MM-DD` pour l'<input type=date>.
     start_date: toDateInput(p.start_date),

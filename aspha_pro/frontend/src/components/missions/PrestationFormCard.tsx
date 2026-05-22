@@ -113,6 +113,7 @@ export function emptyPrestation(): PrestationDraft {
   return {
     product_id: null,
     label: "",
+    duration_minutes: null,
     start_date: todayStr(),
     end_date: null,
     billing_type: "hourly",
@@ -181,6 +182,8 @@ export function serializePrestation(p: PrestationDraft) {
   return {
     product_id: p.product_id || null,
     label: p.label.trim(),
+    // C4 2026-05-22 — durée standard saisie sur la prestation (vide = null)
+    duration_minutes: p.duration_minutes != null ? Number(p.duration_minutes) : null,
     // Normalisation `YYYY-MM-DD` : protège contre un datetime ISO hérité d'un
     // ancien enregistrement (sinon la date dérive de -1 jour au re-save).
     start_date: toDateInput(p.start_date),
@@ -347,6 +350,24 @@ export function PrestationFormCard({
             value={p.label}
             onChange={(e) => onChange({ label: e.target.value })}
             placeholder="Ex: Ménage 2h"
+          />
+        </div>
+
+        {/* C4 2026-05-22 — durée standard saisie sur la prestation (optionnelle) */}
+        <div className="col-span-2">
+          <Label className="text-[10px] flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Durée (min)
+          </Label>
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            value={p.duration_minutes ?? ""}
+            onChange={(e) =>
+              onChange({ duration_minutes: e.target.value ? Number(e.target.value) : null })
+            }
+            placeholder="Durée standard en minutes (optionnel)"
           />
         </div>
 

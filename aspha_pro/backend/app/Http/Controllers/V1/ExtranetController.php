@@ -52,7 +52,24 @@ class ExtranetController extends Controller
         $to = Carbon::parse($data['to'])->endOfDay();
 
         $events = $expander->expandWindow($from, $to)
-            ->filter(fn ($e) => ($e['employee']['id'] ?? null) === $employee->id);
+            ->filter(fn ($e) => ($e['employee']['id'] ?? null) === $employee->id)
+            // F1 — l'intervenant ne doit JAMAIS voir les prix/totaux. On retire
+            // unit_price / billing_type / pricing_type du bloc prestation et on
+            // purge les flags facturation/paiement (cases « Facturer / Payer »).
+            // On garde le libellé de la prestation (utile pour l'intervenant).
+            ->map(function ($e) {
+                if (! empty($e['prestation']) && is_array($e['prestation'])) {
+                    $e['prestation'] = [
+                        'id' => $e['prestation']['id'] ?? null,
+                        'label' => $e['prestation']['label'] ?? null,
+                        'product_name' => $e['prestation']['product_name'] ?? null,
+                        'default_duration_minutes' => $e['prestation']['default_duration_minutes'] ?? null,
+                    ];
+                }
+                unset($e['bill_client'], $e['is_paid'], $e['is_billed']);
+
+                return $e;
+            });
 
         return ['data' => $events->values()];
     }

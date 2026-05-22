@@ -98,6 +98,9 @@ class AuthController extends Controller
                 ]);
             }
             $user->password = Hash::make($data['password']);
+            // L'utilisateur a posé son propre mot de passe → le flag de
+            // changement forcé (compte créé par un admin) retombe.
+            $user->must_change_password = false;
         }
 
         if (isset($data['name'])) $user->name = $data['name'];
@@ -115,6 +118,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'status' => $user->status ?? 'active',
+            'must_change_password' => (bool) ($user->must_change_password ?? false),
             'role' => $user->getRoleNames()->first(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
             'last_login_at' => optional($user->last_login_at)->toIso8601String(),

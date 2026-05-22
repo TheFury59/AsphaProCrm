@@ -69,6 +69,9 @@ class QuoteController extends Controller
             'items' => ['nullable', 'array'],
             'items.*.label' => ['required_with:items', 'string', 'max:255'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
+            // duration_minutes : durée standard de la prestation, saisie sur le
+            // devis (refonte C4 2026-05-22 — n'est plus portée par le catalogue).
+            'items.*.duration_minutes' => ['nullable', 'integer', 'min:0'],
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19 — TVA par ligne
@@ -129,6 +132,7 @@ class QuoteController extends Controller
                     'item_type' => $item['item_type'] ?? 'forfait',
                     'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
                     'quantity' => $item['quantity'],
+                    'duration_minutes' => $item['duration_minutes'] ?? null, // C4 2026-05-22
                     'unit_price' => $item['unit_price'],
                     'total' => $lineTotal,
                     'order' => $order++,
@@ -169,6 +173,7 @@ class QuoteController extends Controller
             'items' => ['sometimes', 'array'],
             'items.*.label' => ['required_with:items', 'string', 'max:255'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.duration_minutes' => ['nullable', 'integer', 'min:0'], // C4 2026-05-22
             'items.*.unit_price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.item_type' => ['nullable', 'in:hourly,forfait,frais,remise,produit,carte,adjustment'],
             'items.*.vat_rate_id' => ['nullable', 'exists:vat_rates,id'], // audit 2026-05-19
@@ -195,6 +200,7 @@ class QuoteController extends Controller
                         'item_type' => $item['item_type'] ?? 'forfait',
                         'vat_rate_id' => $item['vat_rate_id'] ?? null, // audit 2026-05-19
                         'quantity' => $item['quantity'],
+                        'duration_minutes' => $item['duration_minutes'] ?? null, // C4 2026-05-22
                         'unit_price' => $item['unit_price'],
                         'total' => $lineTotal,
                         'order' => $order++,
@@ -359,6 +365,8 @@ class QuoteController extends Controller
                     'product_id' => $item->product_id,
                     'quote_id' => $quote->id,
                     'label' => $item->label,
+                    // C4 2026-05-22 — la durée saisie sur le devis suit la prestation.
+                    'duration_minutes' => $item->duration_minutes,
                     'billing_type' => $this->itemTypeToBillingType($item->item_type),
                     // Pas de produit catalogue → prix custom (le prix vient du
                     // devis, pas du catalogue). Avec produit → tarif du catalogue

@@ -55,6 +55,8 @@ class EmployeePortalAccessController extends Controller
                 'email' => $data['email'],
                 'password' => Hash::make($plainPassword),
                 'status' => User::STATUS_ACTIVE,
+                // Mot de passe temporaire → changement forcé à la 1re connexion.
+                'must_change_password' => true,
             ]);
             $u->assignRole('intervenant');
             $employee->update(['user_id' => $u->id]);
@@ -84,7 +86,11 @@ class EmployeePortalAccessController extends Controller
 
         $send = $request->boolean('send_email', false);
         $plainPassword = $this->generatePassword();
-        $user->update(['password' => Hash::make($plainPassword)]);
+        // Nouveau mot de passe temporaire → changement forcé à la connexion.
+        $user->update([
+            'password' => Hash::make($plainPassword),
+            'must_change_password' => true,
+        ]);
 
         $emailSent = false;
         if ($send) {
@@ -108,7 +114,11 @@ class EmployeePortalAccessController extends Controller
         abort_unless($user, 404, "Cet intervenant n'a pas d'accès extranet.");
 
         $plainPassword = $this->generatePassword();
-        $user->update(['password' => Hash::make($plainPassword)]);
+        // Nouveau mot de passe temporaire → changement forcé à la connexion.
+        $user->update([
+            'password' => Hash::make($plainPassword),
+            'must_change_password' => true,
+        ]);
 
         $sent = $this->dispatchCredentialsMail($user, $plainPassword, $employee->name ?: "Intervenant #{$employee->id}");
 

@@ -219,6 +219,7 @@ class MissionController extends Controller
         $data = $request->validate([
             'product_id' => ['sometimes', 'nullable', 'exists:products,id'],
             'label' => ['sometimes', 'string', 'max:255'],
+            'duration_minutes' => ['sometimes', 'nullable', 'integer', 'min:0'], // C4 2026-05-22
             'start_date' => ['sometimes', 'nullable', 'date'],
             'end_date' => ['sometimes', 'nullable', 'date'],
             'billing_type' => ['sometimes', 'nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],
@@ -263,6 +264,9 @@ class MissionController extends Controller
         return [
             "{$prefix}product_id" => ['nullable', 'exists:products,id'],
             "{$prefix}label" => [$required, 'string', 'max:255'],
+            // duration_minutes : durée standard saisie sur la prestation
+            // (refonte C4 2026-05-22 — n'est plus portée par le catalogue).
+            "{$prefix}duration_minutes" => ['nullable', 'integer', 'min:0'],
             "{$prefix}start_date" => ['nullable', 'date'],
             "{$prefix}end_date" => ['nullable', 'date'],
             "{$prefix}billing_type" => ['nullable', 'in:hourly,forfait,frais,remise,carte,exceptional'],

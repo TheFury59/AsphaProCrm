@@ -22,6 +22,7 @@ class StoreClientRequest extends FormRequest
             'entity_id' => ['required', 'exists:entities,id'],
             'owner_user_id' => ['nullable', 'exists:users,id'],
             'print_intervention_detail' => ['nullable', 'in:always,never,except_forfait'],
+            'intervenant_notes' => ['nullable', 'string'],
 
             // Company (entreprise — table 1-1)
             'company.company_name' => ['required', 'string', 'max:255'],

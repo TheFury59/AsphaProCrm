@@ -81,6 +81,7 @@ class ClientController extends Controller
         $client = DB::transaction(function () use ($request) {
             $data = $request->only([
                 'code', 'status', 'entity_id', 'owner_user_id', 'print_intervention_detail',
+                'intervenant_notes',
             ]);
             // Si non précisé, l'utilisateur courant devient le gestionnaire par défaut
             $data['owner_user_id'] = $data['owner_user_id'] ?? $request->user()->id;
@@ -116,6 +117,7 @@ class ClientController extends Controller
         DB::transaction(function () use ($request, $client) {
             $clientFields = $request->only([
                 'code', 'status', 'entity_id', 'owner_user_id', 'print_intervention_detail',
+                'intervenant_notes',
             ]);
             if (! empty($clientFields)) {
                 $client->update($clientFields);

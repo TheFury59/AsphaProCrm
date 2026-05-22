@@ -90,6 +90,7 @@ class UsersController extends Controller
             'role' => ['required', Rule::in($this->availableRoles())],
         ]);
 
+        $passwordWasGenerated = empty($data['password']);
         $plainPassword = $data['password'] ?? $this->generatePassword();
 
         $user = User::create([
@@ -97,6 +98,8 @@ class UsersController extends Controller
             'email' => $data['email'],
             'password' => Hash::make($plainPassword),
             'status' => User::STATUS_ACTIVE,
+            // Mot de passe temporaire généré → changement forcé à la 1re connexion.
+            'must_change_password' => $passwordWasGenerated,
         ]);
 
         $user->syncRoles([$data['role']]);
@@ -111,7 +114,7 @@ class UsersController extends Controller
                 ],
                 // Affiché UNE seule fois côté UI — pas re-fetchable côté serveur
                 'password' => $plainPassword,
-                'password_was_generated' => empty($data['password']),
+                'password_was_generated' => $passwordWasGenerated,
             ],
         ], 201);
     }

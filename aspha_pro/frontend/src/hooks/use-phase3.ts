@@ -81,6 +81,8 @@ export type QuoteItem = {
   quote_id: number;
   label: string;
   quantity: number;
+  // C4 2026-05-22 — durée standard saisie sur le devis (nullable).
+  duration_minutes?: number | null;
   unit_price: number;
   total: number;
   item_type: string;
@@ -248,6 +250,8 @@ export type CalendarEvent = {
     address?: { id?: number; type?: string; address: string | null; postal_code: string | null; city: string | null; latitude?: number | null; longitude?: number | null } | null;
     keys_count?: number;
     has_keys?: boolean;
+    /** Consignes / infos libres pour les intervenants (B6/F2). */
+    intervenant_notes?: string | null;
     all_addresses?: Array<{ id: number; type: string; address: string | null; city: string | null; postal_code: string | null; latitude: number | null; longitude: number | null }>;
     all_contacts?: Array<{ id: number; first_name: string | null; last_name: string | null; phone: string | null; email: string | null; role: string | null }>;
   } | null;
@@ -264,9 +268,11 @@ export type CalendarEvent = {
     id: number;
     label: string | null;
     product_name: string | null;
-    unit_price: number;
-    billing_type: string | null;
-    pricing_type: string | null;
+    // unit_price / billing_type / pricing_type sont ABSENTS du payload de
+    // l'extranet intervenant (F1 — masquage des prix côté backend).
+    unit_price?: number | null;
+    billing_type?: string | null;
+    pricing_type?: string | null;
     default_duration_minutes: number | null;
   } | null;
   checkin?: {

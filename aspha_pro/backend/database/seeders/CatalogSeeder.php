@@ -31,14 +31,18 @@ class CatalogSeeder extends Seeder
         $entity = Entity::firstOrCreate(
             ['siret' => '00000000000000'],
             [
-                'name' => 'Aspha Service — Siège',
+                'name' => 'Aspha Pro',
                 'phone' => '01 23 45 67 89',
                 'email' => 'contact@aspha.fr',
+                // Adresse de rue laissée nulle : la cliente la saisira plus tard.
+                'address_line' => null,
+                'postal_code' => '59500',
+                'city' => 'Douai',
                 'status' => 'active',
                 'modulation_enabled' => false,
                 'annualisation_enabled' => false,
-                'latitude' => 48.8566,
-                'longitude' => 2.3522,
+                'latitude' => 50.3714,
+                'longitude' => 3.0800,
             ]
         );
 
@@ -200,7 +204,7 @@ class CatalogSeeder extends Seeder
         }
 
         $this->command->info('Catalog seeded:');
-        $this->command->info('  - 1 entité de démo (Aspha Service Siège)');
+        $this->command->info('  - 1 entité de démo (Aspha Pro · Douai)');
         $this->command->info('  - 4 taux TVA · 6 catégories produits · 4 raisons absence client · 8 raisons absence intervenant');
         $this->command->info('  - 12 compétences · 5 emplois repères · 3 barèmes km · 3 règles majoration');
         $this->command->info('  - 4 types événement client · 4 types événement intervenant · 4 catégories stock · 6 types notification');

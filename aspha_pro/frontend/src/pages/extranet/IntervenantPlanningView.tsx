@@ -217,6 +217,7 @@ export function IntervenantPlanningView() {
           x={hover.x}
           y={hover.y}
           onToggle={() => { /* lecture seule */ }}
+          hidePricing  /* F1 — l'intervenant ne voit pas les prix/totaux */
         />
       )}
     </>

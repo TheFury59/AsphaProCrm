@@ -11,6 +11,7 @@ return [
         'legal_form' => env('ASPHA_LEGAL_FORM', 'SARL au capital de 7 500 €'),
         'head_office' => env('ASPHA_HEAD_OFFICE', '233 rue Morel, 59500 Douai, France'),
         'siret' => env('ASPHA_SIRET', '000 000 000 00000'),
+        'vat_number' => env('ASPHA_VAT_NUMBER', ''),
         'rcs' => env('ASPHA_RCS', 'RCS de DOUAI'),
         'website' => env('ASPHA_WEBSITE', 'www.aspha-services.fr'),
     ],

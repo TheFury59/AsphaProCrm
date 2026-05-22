@@ -533,6 +533,7 @@ type DraftItem = {
   stock_product_id: number | null; // produit du stock (kind = stock)
   label: string;
   quantity: string;
+  duration_minutes: string;         // C4 2026-05-22 — durée standard saisie sur le devis
   unit_price: string;
   vat_rate_id: number | null;
   item_type: string;
@@ -612,6 +613,8 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         stock_product_id: null,
         label: pr.label,
         quantity: "1",
+        // C4 2026-05-22 — durée reprise de la prestation contractualisée.
+        duration_minutes: pr.duration_minutes != null ? String(pr.duration_minutes) : "",
         unit_price: String(Number(price) || 0),
         vat_rate_id: catalogProduct?.vat_rate_id ?? null,
         item_type: productTypeToItemType(catalogProduct?.type ?? pr.billing_type),
@@ -672,6 +675,8 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         items: validItems.map((it) => ({
           label: it.label.trim(),
           quantity: parseFloat(it.quantity),
+          // C4 2026-05-22 — durée standard saisie sur le devis (vide = null)
+          duration_minutes: it.duration_minutes.trim() === "" ? null : parseInt(it.duration_minutes, 10),
           unit_price: parseFloat(it.unit_price),
           item_type: it.item_type,
           vat_rate_id: it.vat_rate_id,
@@ -843,7 +848,7 @@ function QuoteLinesSection({
 }) {
   const blankLine = (kind: LineKind): DraftItem => ({
     uid: nextUid(), kind, product_id: null, stock_product_id: null,
-    label: "", quantity: "1", unit_price: "0", vat_rate_id: null,
+    label: "", quantity: "1", duration_minutes: "", unit_price: "0", vat_rate_id: null,
     item_type: kind === "stock" ? "produit" : "forfait",
   });
 
@@ -978,7 +983,7 @@ function QuoteLinesSection({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
+          <div className="grid grid-cols-[1fr_90px_100px_110px_90px] gap-2 items-center">
             {/* Le label catalogue/stock reste éditable une fois l'item choisi */}
             {it.kind !== "free" && (
               <Input
@@ -987,11 +992,18 @@ function QuoteLinesSection({
                 onChange={(e) => updateLine(it.uid, { label: e.target.value })}
               />
             )}
-            {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / PU / TVA</span>}
+            {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / Durée / PU / TVA</span>}
             <Input
               type="number" step="0.01" min="0" placeholder="Qté"
               value={it.quantity}
               onChange={(e) => updateLine(it.uid, { quantity: e.target.value })}
+            />
+            {/* C4 2026-05-22 — durée standard saisie sur le devis (optionnelle) */}
+            <Input
+              type="number" step="1" min="0" placeholder="Durée (min)"
+              title="Durée standard de la prestation, en minutes (optionnel)"
+              value={it.duration_minutes}
+              onChange={(e) => updateLine(it.uid, { duration_minutes: e.target.value })}
             />
             <Input
               type="number" step="0.01" min="0" placeholder="PU €"
@@ -1051,6 +1063,8 @@ function quoteItemsToDraft(items: any[]): DraftItem[] {
       stock_product_id: it.stock_product_id ?? null,
       label: it.label ?? "",
       quantity: String(it.quantity ?? "1"),
+      // C4 2026-05-22 — durée standard relue à l'édition d'un devis existant.
+      duration_minutes: it.duration_minutes != null ? String(it.duration_minutes) : "",
       unit_price: String(it.unit_price ?? "0"),
       vat_rate_id: it.vat_rate_id ?? null,
       item_type: it.item_type ?? "forfait",
@@ -1120,6 +1134,8 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
           items: validItems.map((it) => ({
             label: it.label.trim(),
             quantity: parseFloat(it.quantity),
+            // C4 2026-05-22 — durée standard saisie sur le devis (vide = null)
+            duration_minutes: it.duration_minutes.trim() === "" ? null : parseInt(it.duration_minutes, 10),
             unit_price: parseFloat(it.unit_price),
             item_type: it.item_type,
             vat_rate_id: it.vat_rate_id,

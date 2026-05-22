@@ -35,6 +35,12 @@ export function ClientFichePage() {
     await updateClient.mutateAsync({ id: clientId, patch: { billing_contact: { [field]: value } as any } });
   };
 
+  // B6/F2 — consignes libres pour les intervenants (champ direct sur le client).
+  const updateIntervenantNotes = async (value: string | null) => {
+    if (!clientId) return;
+    await updateClient.mutateAsync({ id: clientId, patch: { intervenant_notes: value } });
+  };
+
   if (isLoading || !c || !clientId) {
     return (
       <div className="space-y-4">
@@ -160,6 +166,27 @@ export function ClientFichePage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* B6/F2 — Consignes / infos pour les intervenants. Texte libre
+                visible par l'intervenant dans son extranet (tooltip planning). */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Consignes intervenants</CardTitle>
+                <CardDescription>
+                  Infos pratiques transmises aux intervenants (accès, code, animal,
+                  habitudes…). Visibles dans leur extranet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm">
+                <EditableField
+                  value={c.intervenant_notes}
+                  onSave={updateIntervenantNotes}
+                  label="Consignes intervenants"
+                  multiline
+                  placeholder="Aucune consigne — cliquer pour ajouter."
+                />
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

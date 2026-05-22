@@ -82,6 +82,8 @@ class ClientPortalAccessController extends Controller
                 'email' => $email,
                 'password' => Hash::make($plainPassword),
                 'status' => User::STATUS_ACTIVE,
+                // Mot de passe temporaire → changement forcé à la 1re connexion.
+                'must_change_password' => true,
             ]);
             $u->assignRole('client');
             $client->update(['portal_user_id' => $u->id]);
@@ -118,7 +120,11 @@ class ClientPortalAccessController extends Controller
 
         $send = $request->boolean('send_email', false);
         $plainPassword = $this->generatePassword();
-        $user->update(['password' => Hash::make($plainPassword)]);
+        // Nouveau mot de passe temporaire → changement forcé à la connexion.
+        $user->update([
+            'password' => Hash::make($plainPassword),
+            'must_change_password' => true,
+        ]);
 
         $emailSent = false;
         if ($send) {
@@ -150,7 +156,11 @@ class ClientPortalAccessController extends Controller
         abort_unless($user, 404, "Ce client n'a pas d'accès extranet.");
 
         $plainPassword = $this->generatePassword();
-        $user->update(['password' => Hash::make($plainPassword)]);
+        // Nouveau mot de passe temporaire → changement forcé à la connexion.
+        $user->update([
+            'password' => Hash::make($plainPassword),
+            'must_change_password' => true,
+        ]);
 
         $companyName = $client->company?->company_name ?? "Client {$client->code}";
         $sent = $this->dispatchCredentialsMail($user, $plainPassword, $companyName);

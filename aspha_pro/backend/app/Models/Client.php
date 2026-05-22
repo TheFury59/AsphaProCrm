@@ -26,6 +26,8 @@ class Client extends Model
         'owner_user_id',
         'portal_user_id',
         'print_intervention_detail',
+        // Consignes / infos libres pour les intervenants (B6/F2).
+        'intervenant_notes',
     ];
 
     protected function casts(): array

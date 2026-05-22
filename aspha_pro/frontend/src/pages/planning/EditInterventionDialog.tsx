@@ -177,16 +177,39 @@ export function EditInterventionDialog({
       "Validation administrative — oubli badgeage",
     );
     if (!reason) return;
+
+    // L'intervention DOIT avoir un intervenant assigné : `manualEntry` exige
+    // `employee_id`. On prend celui du formulaire (potentiellement modifié)
+    // ou, à défaut, celui d'origine de l'intervention.
+    const employeeId = form.employee_id
+      ? parseInt(form.employee_id, 10)
+      : (intervention.employee?.id ?? null);
+    if (!employeeId) {
+      toast.error("Assigne d'abord un intervenant au RDV pour valider le badgeage.");
+      return;
+    }
+
     try {
+      // 1. Crée le checkin via la saisie manuelle de télégestion.
+      //    Payload aligné sur ce qu'attend TelemanagementController::manualEntry
+      //    (employee_id + intervention_id + checkin_time naïf local + comment).
       await api.post("/telemanagement/manual-entry", {
+        employee_id: employeeId,
         intervention_id: intervention.intervention_id,
-        action: "in",
-        scanned_at: `${form.start_date}T${form.start_time}:00`,
-        reason,
+        checkin_time: `${form.start_date}T${form.start_time}:00`,
+        comment: reason,
       });
-      toast.success("Badgeage validé manuellement");
+      // 2. Passe l'intervention en « réalisée » → l'event devient vert sur le
+      //    planning (D2/D3). PATCH côté front pour ne pas toucher manualEntry
+      //    (utilisé aussi par la page Télégestion).
+      await update.mutateAsync({
+        id: intervention.intervention_id,
+        patch: { status: "realisee" } as any,
+      });
+      toast.success("Badgeage validé manuellement — RDV marqué « réalisé »");
       onClose();  // ferme le dialog, la query sera invalidée par les observers
     } catch (e: any) {
+      console.error("Validation manuelle du badgeage échouée", e);
       toast.error(apiErrorMessage(e));
     }
   };

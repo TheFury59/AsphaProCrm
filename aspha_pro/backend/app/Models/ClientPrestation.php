@@ -19,6 +19,7 @@ class ClientPrestation extends Model
         'product_id',
         'quote_id',
         'label',
+        'duration_minutes', // 2026-05-22 (C4) — durée standard saisie sur la prestation
         'start_date',
         'end_date',
         'billing_type',
@@ -54,6 +55,7 @@ class ClientPrestation extends Model
             'custom_price' => 'decimal:2',
             'base_price' => 'decimal:2',
             'no_intervention_no_bill' => 'boolean',
+            'duration_minutes' => 'integer',
             'recurrence_interval' => 'integer',
             'recurrence_occurrences_count' => 'integer',
         ];

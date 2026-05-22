@@ -17,6 +17,15 @@ export function RoleRouter({ children }: { children: React.ReactNode }) {
 
   if (!user) return <>{children}</>;
 
+  // Tâche A2 — un compte avec mot de passe temporaire doit d'abord passer
+  // par /change-password. ProtectedRoute l'y redirige déjà ; cette garde
+  // empêche RoleRouter de court-circuiter vers un extranet entre-temps
+  // (ordre : ProtectedRoute s'exécute avant RoleRouter). La route
+  // /change-password n'est pas enveloppée par RoleRouter → pas de boucle.
+  if (user.must_change_password) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   const role = user.role;
 
   // intervenant : forcé sur /extranet/intervenant/*

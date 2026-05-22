@@ -22,6 +22,7 @@ class UpdateClientRequest extends FormRequest
             'entity_id' => ['sometimes', 'exists:entities,id'],
             'owner_user_id' => ['sometimes', 'nullable', 'exists:users,id'],
             'print_intervention_detail' => ['sometimes', 'nullable', 'in:always,never,except_forfait'],
+            'intervenant_notes' => ['sometimes', 'nullable', 'string'],
 
             'company.company_name' => ['sometimes', 'string', 'max:255'],
             'company.legal_form' => ['sometimes', 'nullable', 'string', 'max:64'],

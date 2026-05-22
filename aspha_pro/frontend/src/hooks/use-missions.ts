@@ -23,6 +23,9 @@ export type Prestation = {
   product_id: number | null;
   quote_id: number | null;
   label: string;
+  // Durée standard en minutes (refonte C4 2026-05-22 — saisie sur la
+  // prestation, plus sur le catalogue). Nullable.
+  duration_minutes: number | null;
   start_date: string | null;
   end_date: string | null;
   billing_type: string | null;
@@ -145,6 +148,9 @@ export function useMission(missionId: number | null) {
 export type PrestationDraft = {
   product_id?: number | null;
   label: string;
+  // Durée standard de la prestation en minutes (refonte C4 2026-05-22 —
+  // saisie ici, plus sur le catalogue). Nullable : pas de durée imposée.
+  duration_minutes?: number | null;
   start_date?: string | null;
   end_date?: string | null;
   billing_type?: "hourly" | "forfait" | "frais" | "remise" | "carte" | "exceptional" | null;

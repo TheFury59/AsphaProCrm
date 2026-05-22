@@ -767,3 +767,25 @@ affectation d'intervenant(s), accès des 3 publics (admin/client/intervenant).
   intervenant poste → 2 notifs (admin+client). Auteur toujours exclu. 4 total.
 - Cascade delete ticket → messages + pivot purgés. Migration rollback+up OK.
 - `php -l` 0 erreur, `tsc --noEmit` 0 erreur, suite de tests 2/2.
+
+---
+
+## 2026-05-22 — Lot planning + extranet intervenant (D1/D2/D3/F1/B6+F2)
+
+- [x] D2 — helper `statusColor(iv)` + légende planning (a_pourvoir orange,
+      planifiee bleu, realisee+checkin vert, realisee sans checkin violet,
+      annulee rouge, draft/terminated gris).
+- [x] D3 — `handleValidateBadge` : payload aligné sur `manualEntry`
+      (employee_id + checkin_time naïf + comment) + PATCH status 'realisee'.
+- [x] D1 — sélecteur d'adresse dans `CreateInterventionDialog` (hook
+      `useClientAddresses`) + `address_id` au payload.
+- [x] F1 — `intervenantPlanning` retire unit_price/pricing_type/billing_type
+      + flags facturation ; `EventTooltip` prop `hidePricing`.
+- [x] B6+F2 — migration `intervenant_notes` (clients), model/Requests/Resource,
+      champ éditable fiche client, exposé extranet + affiché dans `EventTooltip`
+      (Note interne RDV + Consignes client).
+
+### Review
+- `php -l` : 0 erreur sur les 8 fichiers PHP touchés.
+- `tsc --noEmit` : 24 erreurs = baseline (aucune nouvelle, 0 sur mes fichiers).
+- Migration NON appliquée (à lancer manuellement). Pas de commit.

@@ -102,6 +102,8 @@ class SalesPdfPresenter
             'head_office' => $c['head_office'],
             // SIRET du siège : on privilégie celui de l'entité s'il est défini.
             'siret' => $entity?->siret ?: $c['siret'],
+            // N° TVA intracommunautaire : idem, l'entité prime, fallback config.
+            'vat_number' => $entity?->vat_number ?: ($c['vat_number'] ?? ''),
             'rcs' => $c['rcs'],
             'website' => $c['website'],
         ];
