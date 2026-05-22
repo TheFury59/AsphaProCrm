@@ -19,6 +19,7 @@ import {
   HelpCircle,
   Ticket,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -73,6 +74,7 @@ const NAV_GROUPS = [
   {
     label: "Administration",
     items: [
+      { to: "/notifications", label: "Notifications", icon: Bell },
       { to: "/parametres", label: "Paramètres", icon: Settings },
       // /admin/users sera ajouté dynamiquement ci-dessous si super_admin
       { to: "/aide", label: "Aide", icon: HelpCircle },
@@ -87,16 +89,15 @@ export function AppSidebar() {
   // On clone les groupes pour ajouter l'entrée "Utilisateurs" dans
   // Administration uniquement si l'utilisateur est super_admin.
   // (cf. règle métier 2026-05-18 : gestion des rôles réservée super_admin)
+  // "Utilisateurs" est inséré juste après "Paramètres" (recherché par `to`
+  // pour rester robuste si l'ordre des items évolue).
   const navGroups = NAV_GROUPS.map((g) => {
     if (g.label !== "Administration" || !isSuperAdmin) return g;
-    return {
-      ...g,
-      items: [
-        g.items[0],  // Paramètres
-        { to: "/admin/users", label: "Utilisateurs", icon: ShieldCheck },
-        ...g.items.slice(1),  // Aide
-      ],
-    };
+    const items = [...g.items];
+    const settingsIdx = items.findIndex((it) => it.to === "/parametres");
+    const at = settingsIdx >= 0 ? settingsIdx + 1 : items.length;
+    items.splice(at, 0, { to: "/admin/users", label: "Utilisateurs", icon: ShieldCheck });
+    return { ...g, items };
   });
 
   return (

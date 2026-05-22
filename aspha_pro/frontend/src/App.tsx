@@ -44,6 +44,7 @@ import {
 import { AdminSettingsPage } from "@/pages/settings/AdminSettingsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
+import { NotificationCenterPage } from "@/pages/notifications/NotificationCenterPage";
 import { HelpPage } from "@/pages/help/HelpPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 
@@ -157,6 +158,7 @@ export default function App() {
               <Route path="/factures" element={<InvoicesListPage />} />
               <Route path="/reglements" element={<ReglementsListPage />} />
               <Route path="/parametres" element={<AdminSettingsPage />} />
+              <Route path="/notifications" element={<NotificationCenterPage />} />
               <Route path="/profil" element={<ProfilePage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="/aide" element={<HelpPage />} />

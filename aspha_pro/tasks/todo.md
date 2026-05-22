@@ -27,7 +27,7 @@
 - [ ] **D3** 🟡 Badgeage manuel → RDV vert « terminé » (+ fix bug 422)
 - [ ] **E1** 🟡 SIRET + n° TVA entreprise sur devis & factures
 - [ ] **F1** 🟡 Masquer prix/total à l'intervenant
-- [ ] **G1** 🟡 Page « Centre de notifications »
+- [x] **G1** 🟡 Page « Centre de notifications »
 
 ### LOT 3 — Gros chantiers (à cadrer)
 - [ ] **B4** 🔴 Contrats pour les CLIENTS (nouvelle table dédiée)
@@ -789,3 +789,42 @@ affectation d'intervenant(s), accès des 3 publics (admin/client/intervenant).
 - `php -l` : 0 erreur sur les 8 fichiers PHP touchés.
 - `tsc --noEmit` : 24 erreurs = baseline (aucune nouvelle, 0 sur mes fichiers).
 - Migration NON appliquée (à lancer manuellement). Pas de commit.
+
+---
+
+## 2026-05-22 — G1 : Centre de notifications (page dédiée)
+
+- [x] Backend `NotificationController::history` — endpoint paginé+filtrable
+      SÉPARÉ (la cloche garde `index`, intacte). Filtres `status`/`type`/
+      `search`, `per_page` 25 (max 100), tri récent d'abord, eager-load
+      `notificationType`.
+- [x] Backend `NotificationController::types` — référentiel léger des types
+      actifs (alimente le filtre).
+- [x] Routes `GET /notifications/history` + `/notifications/types` dans le
+      groupe auth notifications.
+- [x] Hook `useNotificationHistory(params)` + `useNotificationTypes` dans
+      `use-operations.ts` ; mutations `useMarkRead`/`useMarkAllRead` réutilisées.
+- [x] Page `pages/notifications/NotificationCenterPage.tsx` : PageHeader,
+      filtres tout/non lues/lues + type (groupé par module) + recherche,
+      liste paginée avec icône/couleur via `notification-styles.ts`, badge
+      « Non lu », deep-link au clic (logique de la cloche), bouton « Tout
+      marquer comme lu », Skeleton + état vide.
+- [x] Route `/notifications` dans `App.tsx` (layout admin) + entrée sidebar
+      « Notifications » (icône `Bell`, groupe Administration).
+- [x] Lien « Voir toutes les notifications » en bas du dropdown de la cloche
+      (admin uniquement — les extranets n'ont pas la route).
+- [x] `notification-styles.ts` : ajout des styles manquants
+      `client_request_message` + `client_request_assigned` (module Ticket).
+
+### Review
+- La cloche reste intacte : `NotificationsBell` consomme toujours
+  `useNotifications` → `/notifications` (`index`, limité à 50). Le nouvel
+  endpoint `history` est totalement séparé. Seul ajout au composant cloche :
+  un lien de bas de panneau, sans toucher au rendu des notifications.
+- Fix au passage : l'injection dynamique de « Utilisateurs » (super_admin)
+  dans la sidebar reposait sur `g.items[0]` = Paramètres ; l'ajout de
+  « Notifications » en tête du groupe l'aurait cassée → remplacé par une
+  recherche de l'index de `/parametres`.
+- `php -l` : 0 erreur (NotificationController, api.php).
+- `tsc --noEmit` : 24 erreurs = baseline (aucune nouvelle, 0 sur mes fichiers).
+- Pas de migration nécessaire. Pas de commit.

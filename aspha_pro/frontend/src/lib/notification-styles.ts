@@ -167,6 +167,22 @@ const STYLES: Record<string, NotificationStyle> = {
     border: "border-l-sky-500",
     module: "Ticket",
   },
+  // Nouveau message dans le fil de discussion d'un ticket
+  client_request_message: {
+    icon: MessageSquare,
+    color: "text-sky-600",
+    bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300",
+    border: "border-l-sky-500",
+    module: "Ticket",
+  },
+  // Intervenant affecté à un ticket
+  client_request_assigned: {
+    icon: UsersIcon,
+    color: "text-sky-600",
+    bg: "bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300",
+    border: "border-l-sky-500",
+    module: "Ticket",
+  },
   // RDV à pourvoir (intervention sans intervenant)
   intervention_unassigned: {
     icon: UsersIcon,

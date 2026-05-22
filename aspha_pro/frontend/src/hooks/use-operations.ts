@@ -402,6 +402,66 @@ export function useNotifications() {
   });
 }
 
+/** Type de notification (référentiel) — alimente le filtre du Centre. */
+export type NotificationTypeOption = {
+  id: number;
+  code: string;
+  label: string;
+  module: string;
+};
+
+/** Liste des types de notification actifs (pour le sélecteur de filtre). */
+export function useNotificationTypes() {
+  return useQuery({
+    queryKey: ["notifications", "types"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: NotificationTypeOption[] }>("/notifications/types");
+      return data.data;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Une page de l'historique paginé renvoyée par `GET /notifications/history`. */
+export type NotificationHistoryPage = {
+  data: Notification[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  [k: string]: any;
+};
+
+export type NotificationHistoryParams = {
+  page?: number;
+  per_page?: number;
+  status?: "read" | "unread" | "";
+  type?: string;
+  search?: string;
+};
+
+/**
+ * Centre de notifications — historique paginé et filtrable.
+ * Endpoint séparé de `useNotifications` (cloche) → ne casse pas la cloche.
+ */
+export function useNotificationHistory(params: NotificationHistoryParams = {}) {
+  return useQuery({
+    queryKey: ["notifications", "history", params],
+    queryFn: async () => {
+      const qp: Record<string, any> = {};
+      if (params.page) qp.page = params.page;
+      if (params.per_page) qp.per_page = params.per_page;
+      if (params.status) qp.status = params.status;
+      if (params.type) qp.type = params.type;
+      if (params.search) qp.search = params.search;
+      const { data } = await api.get<NotificationHistoryPage>("/notifications/history", {
+        params: qp,
+      });
+      return data;
+    },
+  });
+}
+
 export function useUnreadCount() {
   return useQuery({
     queryKey: ["notifications", "unread-count"],

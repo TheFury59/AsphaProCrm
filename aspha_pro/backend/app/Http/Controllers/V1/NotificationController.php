@@ -19,6 +19,60 @@ class NotificationController extends Controller
             ->get()];
     }
 
+    /**
+     * Centre de notifications — historique paginé et filtrable.
+     *
+     * Endpoint SÉPARÉ de `index` (qui sert la cloche, limitée à 50 sans
+     * pagination) pour ne pas casser le comportement existant.
+     *
+     * Filtres optionnels via query params :
+     *  - `status` : 'read' | 'unread'
+     *  - `type`   : code de notification_type (ex. 'new_message')
+     *  - `search` : recherche texte sur le titre OU le corps
+     *  - `per_page` : taille de page (défaut 25, max 100)
+     */
+    public function history(Request $request)
+    {
+        $perPage = (int) $request->query('per_page', 25);
+        $perPage = max(1, min(100, $perPage));
+
+        $query = Notification::where('user_id', $request->user()->id)
+            ->with('notificationType:id,code,label,module')
+            ->orderByDesc('id');
+
+        $status = $request->query('status');
+        if ($status === 'read') {
+            $query->where('is_read', true);
+        } elseif ($status === 'unread') {
+            $query->where('is_read', false);
+        }
+
+        if ($code = $request->query('type')) {
+            $query->whereHas('notificationType', fn ($q) => $q->where('code', $code));
+        }
+
+        if ($search = trim((string) $request->query('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('body', 'like', "%{$search}%");
+            });
+        }
+
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * Référentiel léger des types de notification actifs — alimente le
+     * sélecteur de filtre du Centre de notifications.
+     */
+    public function types()
+    {
+        return ['data' => NotificationType::where('status', 'active')
+            ->orderBy('module')
+            ->orderBy('label')
+            ->get(['id', 'code', 'label', 'module'])];
+    }
+
     public function unreadCount(Request $request)
     {
         return ['count' => Notification::where('user_id', $request->user()->id)

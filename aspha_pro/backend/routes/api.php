@@ -274,6 +274,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // === Notifications ===
     Route::get('notifications', [NotificationController::class, 'index']);
+    // Centre de notifications — historique paginé + filtrable (page dédiée).
+    Route::get('notifications/history', [NotificationController::class, 'history']);
+    Route::get('notifications/types', [NotificationController::class, 'types']);
     Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);

@@ -65,7 +65,7 @@ export function NotificationsBell() {
           )}
         </div>
 
-        <ScrollArea className="h-[480px]">
+        <ScrollArea className="h-[440px]">
           {notifications.length === 0 ? (
             <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
               Aucune notification
@@ -143,6 +143,20 @@ export function NotificationsBell() {
             </ul>
           )}
         </ScrollArea>
+
+        {/* Accès à la page « Centre de notifications » (CRM admin uniquement —
+            les extranets n'ont pas cette route). */}
+        {!isExtranet && (
+          <div className="border-t px-4 py-2">
+            <Link
+              to="/notifications"
+              className="flex items-center justify-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              Voir toutes les notifications
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
