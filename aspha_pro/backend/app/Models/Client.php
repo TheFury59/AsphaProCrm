@@ -118,6 +118,12 @@ class Client extends Model
         return $this->hasMany(Key::class, 'client_id');
     }
 
+    // Contrats client (tâche B4) — distincts des contrats RH intervenants.
+    public function clientContracts(): HasMany
+    {
+        return $this->hasMany(ClientContract::class, 'client_id');
+    }
+
     // === Adresses polymorphiques ===
     public function addresses(): MorphMany
     {

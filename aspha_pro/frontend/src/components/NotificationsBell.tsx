@@ -1,4 +1,5 @@
-import { Bell, Check, CheckCheck, ExternalLink } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Bell, Check, CheckCheck, ExternalLink, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -9,8 +10,41 @@ import { Badge } from "@/components/ui/badge";
 import {
   useMarkAllRead, useMarkRead, useNotifications, useUnreadCount,
 } from "@/hooks/use-operations";
-import { getNotificationStyle, getNotificationLink } from "@/lib/notification-styles";
+import {
+  getNotificationStyle, getNotificationLink, getPriorityClasses,
+} from "@/lib/notification-styles";
 import { useAuthStore } from "@/stores/auth";
+
+/**
+ * Bip court (Web Audio) joué à l'arrivée d'une notification haute priorité.
+ * Pas d'asset audio : oscillateur synthétisé. Échoue silencieusement si le
+ * navigateur bloque l'audio (pas d'interaction utilisateur préalable).
+ */
+function playPriorityBeep() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.34);
+    osc.onended = () => ctx.close().catch(() => {});
+  } catch {
+    // Audio indisponible — on ignore (le surlignage visuel reste).
+  }
+}
 
 /**
  * Cloche de notifications avec rendu typé.
@@ -31,6 +65,33 @@ export function NotificationsBell() {
   // en contexte extranet, les deep-links pointent vers l'espace client.
   const role = useAuthStore((s) => s.user?.role);
   const isExtranet = role === "client" || role === "intervenant";
+
+  // Anti-spam sonore : on mémorise les ids des notifs haute priorité non lues
+  // déjà « vues » par ce composant. Le bip ne joue qu'une fois par notif.
+  const seenPriorityIds = useRef<Set<number>>(new Set());
+  const primed = useRef(false);
+
+  useEffect(() => {
+    const highUnread = notifications.filter(
+      (n) =>
+        !n.is_read &&
+        (n.priority === "high" || n.priority === "critical"),
+    );
+
+    // Premier rendu : on amorce le set sans jouer de son (sinon bip à chaque
+    // rechargement de page pour des notifs déjà existantes).
+    if (!primed.current) {
+      highUnread.forEach((n) => seenPriorityIds.current.add(n.id));
+      primed.current = true;
+      return;
+    }
+
+    const fresh = highUnread.filter((n) => !seenPriorityIds.current.has(n.id));
+    if (fresh.length > 0) {
+      playPriorityBeep(); // un seul bip, quel que soit le nombre de nouvelles
+      fresh.forEach((n) => seenPriorityIds.current.add(n.id));
+    }
+  }, [notifications]);
 
   return (
     <Popover>
@@ -77,6 +138,10 @@ export function NotificationsBell() {
                 const style = getNotificationStyle(code);
                 const Icon = style.icon;
                 const link = getNotificationLink(n.target_type, n.target_id, isExtranet);
+                const isUrgent =
+                  !n.is_read &&
+                  (n.priority === "high" || n.priority === "critical");
+                const priorityClasses = getPriorityClasses(n.priority);
 
                 return (
                   <li
@@ -84,7 +149,8 @@ export function NotificationsBell() {
                     className={
                       "group flex items-start gap-3 px-4 py-3 hover:bg-accent transition-colors border-l-4 " +
                       style.border +
-                      (!n.is_read ? " bg-accent/30" : " border-l-transparent")
+                      (!n.is_read ? " bg-accent/30" : " border-l-transparent") +
+                      (priorityClasses ? " " + priorityClasses : "")
                     }
                   >
                     {/* Icône typée */}
@@ -97,6 +163,15 @@ export function NotificationsBell() {
                         <Badge className={"text-[9px] h-4 px-1.5 " + style.bg}>
                           {style.module}
                         </Badge>
+                        {isUrgent && (
+                          <Badge
+                            variant="destructive"
+                            className="text-[9px] h-4 px-1.5 inline-flex items-center gap-0.5"
+                          >
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            {n.priority === "critical" ? "Critique" : "Urgent"}
+                          </Badge>
+                        )}
                         <p className="text-sm font-medium leading-tight">
                           {n.title ?? "Notification"}
                         </p>

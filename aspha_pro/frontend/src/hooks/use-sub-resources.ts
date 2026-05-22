@@ -91,6 +91,21 @@ export type DocumentItem = {
   created_at: string | null;
 };
 
+export type ClientContract = {
+  id: number;
+  client_id: number;
+  reference: string | null;
+  type: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  commitment_duration: string | null;
+  billing_rhythm: string | null;
+  tacit_renewal: boolean;
+  status: string;
+  notes: string | null;
+  created_at: string | null;
+};
+
 export type Skill = { id: number; label: string };
 export type AbsenceReason = { id: number; label: string; code?: string; color?: string };
 export type ClientAbsenceReason = { id: number; label: string };
@@ -358,6 +373,44 @@ export function useCreateKeyMovement(clientId: number, keyId: number) {
       qc.invalidateQueries({ queryKey: ["client", clientId, "keys"] });
       qc.invalidateQueries({ queryKey: ["client", clientId, "key", keyId, "movements"] });
     },
+  });
+}
+
+// === Contrats client (tâche B4) ===
+// Entité dédiée `client_contracts`, distincte des contrats RH intervenants.
+
+export function useClientContracts(clientId: number) {
+  return useQuery({
+    queryKey: ["client", clientId, "contracts"],
+    queryFn: async () =>
+      (await api.get<ListResponse<ClientContract>>(`/clients/${clientId}/contracts`)).data.data,
+    enabled: !!clientId,
+  });
+}
+
+export function useCreateClientContract(clientId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Partial<ClientContract>) =>
+      (await api.post<SingleResponse<ClientContract>>(`/clients/${clientId}/contracts`, payload)).data.data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "contracts"] }),
+  });
+}
+
+export function useUpdateClientContract(clientId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<ClientContract> }) =>
+      (await api.patch<SingleResponse<ClientContract>>(`/clients/${clientId}/contracts/${id}`, patch)).data.data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "contracts"] }),
+  });
+}
+
+export function useDeleteClientContract(clientId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/clients/${clientId}/contracts/${id}`); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", clientId, "contracts"] }),
   });
 }
 

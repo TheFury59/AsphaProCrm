@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, FileText, Key, Receipt, Users, Calendar, MessageSquare, MapPin } from "lucide-react";
+import { Building2, FileText, FileSignature, Key, Receipt, Users, Calendar, MessageSquare, MapPin } from "lucide-react";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { PortalAccessCard } from "./PortalAccessCard";
@@ -17,6 +17,7 @@ import { ClientKeysTab } from "./tabs/ClientKeysTab";
 import { ClientPortalTab } from "./tabs/ClientPortalTab";
 import { ClientSalesTab } from "./tabs/ClientSalesTab";
 import { ClientMissionsTab } from "./tabs/ClientMissionsTab";
+import { ClientContractsTab } from "./tabs/ClientContractsTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 
 export function ClientFichePage() {
@@ -84,6 +85,7 @@ export function ClientFichePage() {
           <TabsTrigger value="keys"><Key className="h-3.5 w-3.5 mr-1.5" /> Clés ({c.counts?.keys ?? 0})</TabsTrigger>
           <TabsTrigger value="documents"><FileText className="h-3.5 w-3.5 mr-1.5" /> Documents</TabsTrigger>
           <TabsTrigger value="missions"><Calendar className="h-3.5 w-3.5 mr-1.5" /> Missions ({c.counts?.missions ?? 0})</TabsTrigger>
+          <TabsTrigger value="contracts"><FileSignature className="h-3.5 w-3.5 mr-1.5" /> Contrats</TabsTrigger>
           <TabsTrigger value="sales"><Receipt className="h-3.5 w-3.5 mr-1.5" /> Devis & factures</TabsTrigger>
           <TabsTrigger value="requests"><MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Demandes</TabsTrigger>
         </TabsList>
@@ -212,6 +214,9 @@ export function ClientFichePage() {
 
         <TabsContent value="missions" className="mt-4">
           <ClientMissionsTab clientId={clientId} />
+        </TabsContent>
+        <TabsContent value="contracts" className="mt-4">
+          <ClientContractsTab clientId={clientId} />
         </TabsContent>
         <TabsContent value="sales" className="mt-4">
           <ClientSalesTab clientId={clientId} />

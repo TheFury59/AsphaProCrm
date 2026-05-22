@@ -36,8 +36,13 @@ class NotificationTypesSeeder extends Seeder
             // 'signature_requested' retire le 2026-05-18 (Pennylane gere les signatures).
 
             // Télégestion
-            ['code' => 'checkin_late', 'label' => 'Retard de badgeage', 'module' => 'telemanagement', 'default_channels' => 'push'],
+            // checkin_late : alerte CRITIQUE — RDV non pointé 30 min après le
+            // début (cf. NotifyOverdueCheckins). Canaux in-app + email.
+            ['code' => 'checkin_late', 'label' => 'RDV non pointé', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
             ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
+            // Récap des heures travaillées (hebdo le lundi, mensuel le 1er) envoyé
+            // à chaque intervenant (cf. NotifyWorkedHours). Canaux in-app + email.
+            ['code' => 'worked_hours_summary', 'label' => 'Récap heures travaillées', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
 
             // Missions / contrats
             ['code' => 'mission_created', 'label' => 'Nouvelle mission', 'module' => 'missions', 'default_channels' => 'push'],

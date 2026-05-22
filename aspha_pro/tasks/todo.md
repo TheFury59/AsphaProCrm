@@ -17,24 +17,28 @@
 - [x] **C6** 🟢 Produit stock : retirer le champ « Entité ID » (auto)
 - [x] **D4** 🟢 Suivi de clés : corriger le bug d'horaire (timezone)
 
-### LOT 2 — Moyens
-- [ ] **A2** 🟡 Forcer changement de mot de passe à la 1re connexion
-- [ ] **B1** 🟡 Entité « Aspha Service » → « Aspha Pro » à Douai
-- [ ] **B6+F2** 🟡 Champ « consignes intervenants » fiche client + note interne visible intervenant
-- [ ] **C4** 🟡 Durée standard : du catalogue → ligne de devis
-- [ ] **D1** 🟡 Multi-adresse dans la création de RDV ponctuel
-- [ ] **D2** 🟡 Statuts + couleurs planning (rouge/orange/bleu/vert/violet)
-- [ ] **D3** 🟡 Badgeage manuel → RDV vert « terminé » (+ fix bug 422)
-- [ ] **E1** 🟡 SIRET + n° TVA entreprise sur devis & factures
-- [ ] **F1** 🟡 Masquer prix/total à l'intervenant
+### LOT 2 — Moyens ✅ TERMINÉ (commits 512fa6f, 250f8d7)
+- [x] **A2** 🟡 Forcer changement de mot de passe à la 1re connexion
+- [x] **B1** 🟡 Entité « Aspha Service » → « Aspha Pro » à Douai
+- [x] **B6+F2** 🟡 Champ « consignes intervenants » fiche client + note interne visible intervenant
+- [x] **C4** 🟡 Durée standard : du catalogue → ligne de devis/mission
+- [x] **D1** 🟡 Multi-adresse dans la création de RDV ponctuel
+- [x] **D2** 🟡 Statuts + couleurs planning (rouge/orange/bleu/vert/violet)
+- [x] **D3** 🟡 Badgeage manuel → RDV vert « terminé » (+ fix bug 422)
+- [x] **E1** 🟡 SIRET + n° TVA entreprise sur devis & factures
+- [x] **F1** 🟡 Masquer prix/total à l'intervenant
 - [x] **G1** 🟡 Page « Centre de notifications »
 
-### LOT 3 — Gros chantiers (à cadrer)
-- [ ] **B4** 🔴 Contrats pour les CLIENTS (nouvelle table dédiée)
-- [ ] **G2** 🔴 Notification heures semaine/mois intervenant (scheduler requis)
-- [ ] **G3** 🔴 Notification critique RDV non pointé +30 min (scheduler requis ; push mobile indisponible)
+### LOT 3 — Gros chantiers
+- [x] **B4** 🔴 Contrats pour les CLIENTS (table `client_contracts` + onglet fiche)
+- [x] **G2** 🔴 Notification heures semaine/mois intervenant (commande planifiée)
+- [x] **G3** 🔴 Notification RDV non pointé +30 min (commande 10 min + colonne priority + bip cloche)
 - [ ] **H** 🔴 Refonte DOCUMENTS (onglets par public, destinataires, expiration, coche verte)
-- [ ] **I** 🔴 Système de notation des intervenants (greenfield)
+- [ ] **I** 🔴 Système de notation des intervenants (greenfield — note auto)
+
+> Push mobile (G3) : in-app + email opérationnels ; le canal push FCM reste à
+> brancher (credentials Firebase + app mobile requis) — colonne `priority` prête.
+> Scheduler : à câbler côté o2switch (`cron php artisan schedule:run` /min).
 
 ### Bugs préexistants découverts (à corriger au passage du LOT concerné)
 - `documents` : colonne `deleted_at` absente malgré `SoftDeletes`

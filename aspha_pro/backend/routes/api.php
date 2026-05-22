@@ -4,6 +4,7 @@ use App\Http\Controllers\V1\AuthController;
 use App\Http\Controllers\V1\UsersController;
 use App\Http\Controllers\V1\ClientController;
 use App\Http\Controllers\V1\ClientPortalController;
+use App\Http\Controllers\V1\ClientContractController;
 use App\Http\Controllers\V1\ClientSubResourceController;
 use App\Http\Controllers\V1\ContractController;
 use App\Http\Controllers\V1\DocumentController;
@@ -79,6 +80,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('keys', 'listKeys'); Route::post('keys', 'storeKey');
         Route::patch('keys/{keyId}', 'updateKey'); Route::delete('keys/{keyId}', 'destroyKey');
         Route::get('keys/{keyId}/movements', 'listKeyMovements'); Route::post('keys/{keyId}/movements', 'storeKeyMovement');
+    });
+    // Contrats client (tâche B4) — sous-ressource Client, table dédiée client_contracts.
+    Route::prefix('clients/{client}')->controller(ClientContractController::class)->group(function () {
+        Route::get('contracts', 'index'); Route::post('contracts', 'store');
+        Route::patch('contracts/{contractId}', 'update'); Route::delete('contracts/{contractId}', 'destroy');
     });
 
     // === Missions client + Prestations contractualisées ===

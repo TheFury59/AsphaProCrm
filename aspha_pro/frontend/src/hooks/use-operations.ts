@@ -384,6 +384,9 @@ export type Notification = {
   target_type: string | null;
   target_id: number | null;
   channel: string | null;
+  /** Priorité : 'normal' (défaut) / 'high' / 'critical'. Pilote la mise en
+   *  évidence visuelle + le bip sonore de la cloche. */
+  priority?: "normal" | "high" | "critical" | null;
   is_read: boolean;
   read_at: string | null;
   sent_at: string | null;

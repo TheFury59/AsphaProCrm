@@ -15,6 +15,7 @@ class Notification extends Model
         'target_type',
         'target_id',
         'channel',
+        'priority',
         'is_read',
         'read_at',
         'sent_at',

@@ -34,16 +34,25 @@ use Illuminate\Support\Facades\Log;
  *     title: 'Nouvelle intervention',
  *     body: 'Demain 10h chez Dupont',
  *     target: $intervention,
+ *     priority: 'high',  // optionnel — 'normal' (défaut) / 'high' / 'critical'
  *   );
  */
 class NotificationDispatcher
 {
+    /**
+     * @param  string  $priority  Priorité de la notif : 'normal' (défaut),
+     *                             'high' ou 'critical'. Met en évidence
+     *                             l'alerte côté cloche (bordure + bip).
+     *                             Paramètre optionnel en fin de signature
+     *                             pour ne pas casser les appels existants.
+     */
     public function dispatch(
         string $code,
         array $userIds,
         string $title,
         ?string $body = null,
         $target = null,
+        string $priority = 'normal',
     ): void {
         $type = NotificationType::where('code', $code)->where('status', 'active')->first();
         if (! $type) {
@@ -75,6 +84,10 @@ class NotificationDispatcher
                 // Cf. audit 2026-05-19 (CRIT).
                 'target_id' => $target?->id,
                 'channel' => 'push',
+                // Sécurise contre une valeur hors énum (fallback 'normal').
+                'priority' => in_array($priority, ['normal', 'high', 'critical'], true)
+                    ? $priority
+                    : 'normal',
                 'is_read' => false,
                 'sent_at' => now(),
             ]);

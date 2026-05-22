@@ -110,6 +110,14 @@ const STYLES: Record<string, NotificationStyle> = {
     border: "border-l-rose-500",
     module: "Badgeage",
   },
+  // Récap des heures travaillées (hebdo / mensuel)
+  worked_hours_summary: {
+    icon: Clock,
+    color: "text-teal-600",
+    bg: "bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300",
+    border: "border-l-teal-500",
+    module: "Heures",
+  },
 
   // === Ventes ===
   invoice_paid: {
@@ -222,6 +230,25 @@ const FALLBACK: NotificationStyle = {
 export function getNotificationStyle(code?: string | null): NotificationStyle {
   if (!code) return FALLBACK;
   return STYLES[code] ?? FALLBACK;
+}
+
+/**
+ * Classes de mise en évidence selon la priorité de la notification.
+ * Renvoie une chaîne vide pour 'normal' (rendu standard inchangé).
+ * - high     → fond ambré marqué + bordure gauche épaisse ambrée
+ * - critical → fond rouge marqué + bordure gauche épaisse rouge
+ */
+export function getPriorityClasses(
+  priority?: string | null,
+): string {
+  switch (priority) {
+    case "critical":
+      return "bg-rose-50 dark:bg-rose-950/40 !border-l-rose-600 border-l-[6px]";
+    case "high":
+      return "bg-amber-50 dark:bg-amber-950/40 !border-l-amber-500 border-l-[6px]";
+    default:
+      return "";
+  }
 }
 
 /**

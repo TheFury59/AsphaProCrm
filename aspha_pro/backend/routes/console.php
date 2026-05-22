@@ -13,15 +13,29 @@ Artisan::command('inspire', function () {
 | Tâches planifiées
 |--------------------------------------------------------------------------
 |
-| Récap quotidien des RDV à pourvoir (sans intervenant) sur 7 jours glissants.
-|
-| ⚠️ Déclenchement Render : le scheduler Laravel a besoin d'un tick externe.
-|    Sur Render, câbler un « Cron Job » (ou un ping HTTP) qui exécute
-|    `php artisan schedule:run` chaque minute. Tant que ce déclencheur n'est
-|    pas configuré côté infra, la commande peut être lancée manuellement :
-|    `php artisan app:notify-unassigned-interventions`.
+| ⚠️ Déclenchement du scheduler : Laravel a besoin d'un tick externe.
+|    En production (o2switch), un cron exécute `php artisan schedule:run`
+|    chaque minute — toutes les commandes ci-dessous sont alors actives.
+|    Sinon, elles peuvent être lancées manuellement.
 |
 */
+
+// Récap quotidien des RDV à pourvoir (sans intervenant) sur 7 jours glissants.
 Schedule::command('app:notify-unassigned-interventions')
     ->dailyAt('08:00')
+    ->withoutOverlapping();
+
+// Récap des heures travaillées — hebdomadaire (semaine précédente), lundi 07:00.
+Schedule::command('app:notify-worked-hours week')
+    ->weeklyOn(1, '07:00')
+    ->withoutOverlapping();
+
+// Récap des heures travaillées — mensuel (mois précédent), le 1er à 07:00.
+Schedule::command('app:notify-worked-hours month')
+    ->monthlyOn(1, '07:00')
+    ->withoutOverlapping();
+
+// Alerte RDV non pointé 30 min après le début — vérification toutes les 10 min.
+Schedule::command('app:notify-overdue-checkins')
+    ->everyTenMinutes()
     ->withoutOverlapping();
