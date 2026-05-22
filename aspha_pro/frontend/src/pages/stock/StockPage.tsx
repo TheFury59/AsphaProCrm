@@ -186,7 +186,6 @@ export function StockPage() {
 
 function CreateProductDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
-    entity_id: 1,
     name: "",
     reference: "",
     unit: "unit" as "unit" | "liter" | "kg" | "pack",
@@ -214,7 +213,6 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
     }
 
     const payload = {
-      entity_id: form.entity_id,
       name: form.name,
       reference: form.reference,
       unit: form.unit,
@@ -257,31 +255,20 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setForm({ ...form, reference: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="grid gap-1">
-              <Label>Unité</Label>
-              <Select
-                value={form.unit}
-                onValueChange={(v) => setForm({ ...form, unit: v as any })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unit">Unité</SelectItem>
-                  <SelectItem value="liter">Litre</SelectItem>
-                  <SelectItem value="kg">Kg</SelectItem>
-                  <SelectItem value="pack">Pack</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1">
-              <Label>Entité ID</Label>
-              <Input
-                type="number"
-                required
-                value={form.entity_id}
-                onChange={(e) => setForm({ ...form, entity_id: +e.target.value })}
-              />
-            </div>
+          <div className="grid gap-1">
+            <Label>Unité</Label>
+            <Select
+              value={form.unit}
+              onValueChange={(v) => setForm({ ...form, unit: v as any })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unit">Unité</SelectItem>
+                <SelectItem value="liter">Litre</SelectItem>
+                <SelectItem value="kg">Kg</SelectItem>
+                <SelectItem value="pack">Pack</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="grid gap-1">

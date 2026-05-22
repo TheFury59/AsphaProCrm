@@ -17,6 +17,7 @@ export type Address = {
 
 export type Contact = {
   id: number;
+  name: string | null;
   type: "phone" | "email" | "mobile";
   value: string;
   is_primary: boolean;

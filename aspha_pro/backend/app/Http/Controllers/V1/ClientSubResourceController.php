@@ -84,6 +84,7 @@ class ClientSubResourceController extends Controller
     {
         $this->authorizeEdit($request);
         $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'in:phone,email,mobile'],
             'value' => ['required', 'string', 'max:255'],
             'is_primary' => ['nullable', 'boolean'],
@@ -101,6 +102,7 @@ class ClientSubResourceController extends Controller
         $this->authorizeEdit($request);
         $contact = ClientContact::where('client_id', $client->id)->where('id', $contactId)->firstOrFail();
         $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
             'type' => ['sometimes', 'in:phone,email,mobile'],
             'value' => ['sometimes', 'string', 'max:255'],
             'is_primary' => ['sometimes', 'boolean'],

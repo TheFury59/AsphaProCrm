@@ -1,5 +1,51 @@
 # Aspha Pro — Todo
 
+## 📋 2026-05-22 — Plan post-RDV cliente (EN ATTENTE DE VALIDATION)
+
+> Analyse via 7 sous-agents d'exploration parallèles. **Ne rien implémenter avant accord du client.**
+> Risque : 🟢 faible · 🟡 moyen · 🔴 gros chantier / zone sensible.
+
+### LOT 1 — Rapides, faible risque
+- [x] **A1** 🟢 Login : reformuler texte B2C → B2B (`LoginPage.tsx` l.69, l.75-77)
+- [x] **B2** 🟢 Supprimer la carte « Contacts liés » (`ClientContactsTab.tsx`)
+- [x] **B3** 🟢 « Contacts entreprise » : champ NOM obligatoire (migration `client_contacts.name`)
+- [x] **B5** 🟢 Contrat intervenant : retirer « Pendant intervention (€/km) »
+- [x] **C1** 🟢 Prestations : retirer le sélecteur de catégorie
+- [x] **C2** 🟢 Prestations : retirer le champ « Coût »
+- [x] **C3** 🟢 TVA : désactiver 10/5,5/0 %, ne garder que 20 %
+- [x] **C5** ✅ Produit stock prix de vente : DÉJÀ optionnel — rien à faire
+- [x] **C6** 🟢 Produit stock : retirer le champ « Entité ID » (auto)
+- [x] **D4** 🟢 Suivi de clés : corriger le bug d'horaire (timezone)
+
+### LOT 2 — Moyens
+- [ ] **A2** 🟡 Forcer changement de mot de passe à la 1re connexion
+- [ ] **B1** 🟡 Entité « Aspha Service » → « Aspha Pro » à Douai
+- [ ] **B6+F2** 🟡 Champ « consignes intervenants » fiche client + note interne visible intervenant
+- [ ] **C4** 🟡 Durée standard : du catalogue → ligne de devis
+- [ ] **D1** 🟡 Multi-adresse dans la création de RDV ponctuel
+- [ ] **D2** 🟡 Statuts + couleurs planning (rouge/orange/bleu/vert/violet)
+- [ ] **D3** 🟡 Badgeage manuel → RDV vert « terminé » (+ fix bug 422)
+- [ ] **E1** 🟡 SIRET + n° TVA entreprise sur devis & factures
+- [ ] **F1** 🟡 Masquer prix/total à l'intervenant
+- [ ] **G1** 🟡 Page « Centre de notifications »
+
+### LOT 3 — Gros chantiers (à cadrer)
+- [ ] **B4** 🔴 Contrats pour les CLIENTS (nouvelle table dédiée)
+- [ ] **G2** 🔴 Notification heures semaine/mois intervenant (scheduler requis)
+- [ ] **G3** 🔴 Notification critique RDV non pointé +30 min (scheduler requis ; push mobile indisponible)
+- [ ] **H** 🔴 Refonte DOCUMENTS (onglets par public, destinataires, expiration, coche verte)
+- [ ] **I** 🔴 Système de notation des intervenants (greenfield)
+
+### Bugs préexistants découverts (à corriger au passage du LOT concerné)
+- `documents` : colonne `deleted_at` absente malgré `SoftDeletes`
+- `RequiredDocumentType::checklist()` : relation `documents()` + colonne `category` inexistantes
+- `EditInterventionDialog::handleValidateBadge` : payload erroné → 422 (badgeage manuel cassé)
+
+### Review
+_(à remplir après validation + implémentation)_
+
+---
+
 ## 🎯 2026-05-21 — Missions / devis / RDV ponctuels (agent dédié)
 
 ### TÂCHE 1 — Bug format horaire à la modification de mission

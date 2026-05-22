@@ -49,7 +49,7 @@ class StockController extends Controller
     {
         abort_unless($request->user()?->can('stock.manage'), 403);
         $data = $request->validate([
-            'entity_id' => ['required', 'exists:entities,id'],
+            'entity_id' => ['nullable', 'exists:entities,id'],
             'category_id' => ['nullable', 'exists:stock_categories,id'],
             'name' => ['required', 'string', 'max:255'],
             'reference' => ['nullable', 'string', 'max:128'],
@@ -60,6 +60,9 @@ class StockController extends Controller
             'selling_price' => ['nullable', 'numeric', 'min:0'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
         ]);
+        // `entity_id` n'est plus saisi dans le formulaire (décision 2026-05-22) :
+        // si absent, on rattache le produit à la première entité disponible.
+        $data['entity_id'] ??= \App\Models\Entity::query()->orderBy('id')->value('id');
         $product = StockProduct::create($data + ['status' => 'active']);
         return response()->json(['data' => $product->load(['category:id,label', 'supplier:id,name'])], 201);
     }

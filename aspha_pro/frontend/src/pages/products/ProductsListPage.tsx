@@ -3,7 +3,7 @@ import { Search, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
-  useVatRates, useProductCategories, useEntities,
+  useVatRates, useEntities,
 } from "@/hooks/use-products";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
@@ -106,7 +106,6 @@ export function ProductsListPage() {
                   <Badge variant="outline" className="text-xs">{TYPE_LABELS[p.type] ?? p.type}</Badge>
                 </div>
                 <div className="space-y-1 text-xs text-muted-foreground">
-                  {p.category && <div>Catégorie : <span className="text-foreground">{p.category.label}</span></div>}
                   {p.default_duration_minutes != null && <div>Durée standard : <span className="text-foreground">{p.default_duration_minutes} min</span></div>}
                   {p.vat_rate && <div>TVA : <span className="text-foreground">{p.vat_rate.rate}%</span></div>}
                   {p.has_degressive_pricing && <Badge variant="secondary" className="text-xs mt-1">Tarif dégressif</Badge>}
@@ -143,7 +142,6 @@ function ProductFormDialog({ product, onClose }: {
   const del = useDeleteProduct();
 
   const { data: vatRates } = useVatRates();
-  const { data: categories } = useProductCategories();
   const { data: entities } = useEntities();
 
   // État du formulaire — initialisé depuis le produit en édition
@@ -155,10 +153,8 @@ function ProductFormDialog({ product, onClose }: {
   const [status, setStatus] = useState(product?.status ?? "active");
   const [entityId, setEntityId] = useState<string>(product?.entity_id ? String(product.entity_id) : "none");
   const [type, setType] = useState(product?.type ?? "hourly");
-  const [categoryId, setCategoryId] = useState<string>(product?.category_id ? String(product.category_id) : "none");
   const [duration, setDuration] = useState<string>(product?.default_duration_minutes != null ? String(product.default_duration_minutes) : "");
   const [price, setPrice] = useState<string>(product?.price != null ? String(product.price) : "");
-  const [cost, setCost] = useState<string>(product?.cost != null ? String(product.cost) : "");
   const [vatRateId, setVatRateId] = useState<string>(product?.vat_rate_id ? String(product.vat_rate_id) : "none");
   const [amountInclTax, setAmountInclTax] = useState(product?.amount_incl_tax ?? false);
   const [degressive, setDegressive] = useState(product?.has_degressive_pricing ?? false);
@@ -195,10 +191,8 @@ function ProductFormDialog({ product, onClose }: {
       status,
       entity_id: entityId === "none" ? null : Number(entityId),
       type,
-      category_id: categoryId === "none" ? null : Number(categoryId),
       default_duration_minutes: duration === "" ? null : Number(duration),
       price: Number(price),
-      cost: cost === "" ? null : Number(cost),
       vat_rate_id: vatRateId === "none" ? null : Number(vatRateId),
       amount_incl_tax: amountInclTax,
       has_degressive_pricing: degressive,
@@ -294,34 +288,20 @@ function ProductFormDialog({ product, onClose }: {
             </Select>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Catégorie">
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Aucune —</SelectItem>
-                  {categories?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Entité (vide = global)">
-              <Select value={entityId} onValueChange={setEntityId}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Global —</SelectItem>
-                  {entities?.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
+          <Field label="Entité (vide = global)">
+            <Select value={entityId} onValueChange={setEntityId}>
+              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— Global —</SelectItem>
+                {entities?.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
 
           {/* Tarification */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Prix *">
               <Input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
-            </Field>
-            <Field label="Coût">
-              <Input type="number" step="0.01" min="0" value={cost} onChange={(e) => setCost(e.target.value)} />
             </Field>
             <Field label="TVA">
               <Select value={vatRateId} onValueChange={setVatRateId}>

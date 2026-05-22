@@ -35,7 +35,6 @@ export function ContractFormDialog({ employeeId, entityId, open, onClose }: Prop
     monthly_salary: "",
     hourly_rate: "",
     km_rate_inter_vacation: 0.35,
-    km_rate_intervention: 0.35,
     employee_status: "non_cadre",
     geographic_zone: "france_metro",
     comment: "",
@@ -47,7 +46,7 @@ export function ContractFormDialog({ employeeId, entityId, open, onClose }: Prop
     try {
       // Coerce numeric strings
       const payload = { ...form };
-      ["monthly_duration", "weekly_duration", "monthly_salary", "hourly_rate", "km_rate_inter_vacation", "km_rate_intervention"]
+      ["monthly_duration", "weekly_duration", "monthly_salary", "hourly_rate", "km_rate_inter_vacation"]
         .forEach((k) => {
           if (payload[k] === "" || payload[k] === null) delete payload[k];
           else payload[k] = parseFloat(payload[k]);
@@ -165,17 +164,13 @@ export function ContractFormDialog({ employeeId, entityId, open, onClose }: Prop
             <TabsContent value="km" className="mt-3">
               <Card><CardContent className="pt-4 space-y-3">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Deux barèmes : inter-vacations (entre clients) et pendant l'intervention (courses, etc.).
+                  Barème inter-vacations (entre clients).
                   Le premier trajet domicile→1ʳᵉ intervention n'est jamais comptabilisé.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Inter-vacation (€/km)</Label>
                     <Input type="number" step="0.01" value={form.km_rate_inter_vacation} onChange={(e) => set("km_rate_inter_vacation", e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Pendant intervention (€/km)</Label>
-                    <Input type="number" step="0.01" value={form.km_rate_intervention} onChange={(e) => set("km_rate_intervention", e.target.value)} />
                   </div>
                 </div>
               </CardContent></Card>

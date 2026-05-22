@@ -93,18 +93,32 @@ export function ClientKeysTab({ clientId }: { clientId: number }) {
   );
 }
 
+/**
+ * Valeur d'un `<input type="datetime-local">` construite à partir des
+ * composantes LOCALES (pas `toISOString()` qui renvoie de l'UTC et décale le
+ * mouvement de clé de 1-2h). Format attendu par l'input : "YYYY-MM-DDTHH:MM".
+ */
+function localDateTimeInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function KeyHistoryDialog({ clientId, keyId, onClose }: { clientId: number; keyId: number; onClose: () => void }) {
   const { data: movements = [] } = useKeyMovements(clientId, keyId);
   const create = useCreateKeyMovement(clientId, keyId);
   const [form, setForm] = useState({
     from_holder: "",
     to_holder: "",
-    date: new Date().toISOString().slice(0, 16),
+    date: localDateTimeInput(new Date()),
   });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await create.mutateAsync({ ...form, date: form.date });
+    // On envoie une chaîne datetime naïve LOCALE (sans Z ni offset) : le
+    // backend la parse en timezone applicative (Europe/Paris). On ajoute les
+    // secondes si l'input ne les fournit pas (datetime-local = "...THH:MM").
+    const dateNaive = form.date.length === 16 ? `${form.date}:00` : form.date;
+    await create.mutateAsync({ ...form, date: dateNaive });
     setForm((f) => ({ ...f, from_holder: form.to_holder, to_holder: "" }));
   };
 

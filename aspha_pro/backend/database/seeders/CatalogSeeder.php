@@ -43,15 +43,20 @@ class CatalogSeeder extends Seeder
         );
 
         // === Taux de TVA ===
+        // Décision cliente 2026-05-22 : seul le taux 20 % est proposé. Les
+        // autres taux restent créés (pour la rétro-compat des devis/factures
+        // historiques) mais en `status = inactive` → ils n'apparaissent plus
+        // dans les sélecteurs (`/referentials/vat-rates` ne renvoie que les
+        // taux `active`).
         foreach ([
-            ['label' => 'TVA 20%', 'rate' => 20.00],
-            ['label' => 'TVA 10%', 'rate' => 10.00],
-            ['label' => 'TVA 5.5%', 'rate' => 5.50],
-            ['label' => 'TVA 0% (exonéré)', 'rate' => 0.00],
+            ['label' => 'TVA 20%', 'rate' => 20.00, 'status' => 'active'],
+            ['label' => 'TVA 10%', 'rate' => 10.00, 'status' => 'inactive'],
+            ['label' => 'TVA 5.5%', 'rate' => 5.50, 'status' => 'inactive'],
+            ['label' => 'TVA 0% (exonéré)', 'rate' => 0.00, 'status' => 'inactive'],
         ] as $vat) {
             VatRate::firstOrCreate(
                 ['label' => $vat['label']],
-                ['rate' => $vat['rate'], 'status' => 'active']
+                ['rate' => $vat['rate'], 'status' => $vat['status']]
             );
         }
 
