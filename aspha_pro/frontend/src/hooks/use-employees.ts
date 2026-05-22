@@ -72,3 +72,44 @@ export function useDeleteEmployee() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
   });
 }
+
+// =========================================================================
+// Notation de l'intervenant (note auto 0-100 sur 4 critères)
+// =========================================================================
+
+/** Détail lisible d'un critère de notation (clés variables selon le critère). */
+export type EmployeeScoreCriterionDetail = {
+  label: string;
+  summary: string;
+  neutral?: boolean;
+  [k: string]: unknown;
+};
+
+export type EmployeeScore = {
+  global: number;
+  criteria: {
+    absences: number;
+    assiduite: number;
+    badgeage: number;
+    relation: number;
+  };
+  details: {
+    absences: EmployeeScoreCriterionDetail;
+    assiduite: EmployeeScoreCriterionDetail;
+    badgeage: EmployeeScoreCriterionDetail;
+    relation: EmployeeScoreCriterionDetail;
+  };
+  period: { since: string; until: string; days: number };
+};
+
+/** Note de notation d'un intervenant — calculée côté backend à la volée. */
+export function useEmployeeScore(employeeId: number | null) {
+  return useQuery({
+    queryKey: ["employees", employeeId, "score"],
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const res = await api.get<{ data: EmployeeScore }>(`/employees/${employeeId}/score`);
+      return res.data.data;
+    },
+  });
+}

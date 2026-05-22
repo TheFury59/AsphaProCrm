@@ -8,6 +8,7 @@ use App\Http\Requests\V1\UpdateEmployeeRequest;
 use App\Http\Resources\V1\EmployeeResource;
 use App\Models\Employee;
 use App\Models\Intervention;
+use App\Services\EmployeeScoringService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -119,5 +120,32 @@ class EmployeeController extends Controller
 
         $employee->delete();
         return response()->noContent();
+    }
+
+    /**
+     * GET /employees/{employee}/score
+     *
+     * Note de notation de l'intervenant : note globale 0-100 + 4 critères
+     * (absences, assiduité, badgeage, relation) calculés depuis les données
+     * réelles. Période par défaut : 90 derniers jours, surchargeable via
+     * `?since=YYYY-MM-DD`.
+     *
+     * Réservé aux admins (permission `employees.view`, comme `show`).
+     */
+    public function score(Request $request, Employee $employee, EmployeeScoringService $scoring)
+    {
+        abort_unless($request->user()?->can('employees.view'), 403);
+
+        $since = null;
+        if ($request->filled('since')) {
+            try {
+                $since = \Carbon\Carbon::parse((string) $request->query('since'))->startOfDay();
+            } catch (\Throwable) {
+                // Date invalide → on ignore et on retombe sur la période par défaut.
+                $since = null;
+            }
+        }
+
+        return ['data' => $scoring->computeScore($employee, $since)];
     }
 }

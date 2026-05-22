@@ -58,6 +58,7 @@ class ClientRequestController extends Controller
             'assignedTo:id,name,email',
             'createdByUser:id,name',
             'assignedEmployees:id,name,user_id,avatar_path,updated_at',
+            'faultEmployee:id,name,avatar_path,updated_at',
         ]);
         return ['data' => $clientRequest];
     }
@@ -94,6 +95,11 @@ class ClientRequestController extends Controller
             'status' => ['sometimes', 'in:open,in_progress,resolved,closed'],
             'priority' => ['sometimes', 'nullable', 'in:low,normal,high,urgent'],
             'assigned_to' => ['sometimes', 'nullable', 'exists:users,id'],
+            // Levier « faute » du système de notation : l'admin désigne (ou
+            // retire en envoyant null) l'intervenant responsable du ticket.
+            // `nullable` explicite — sinon `exists:` rejette null (cf. lessons).
+            'fault_employee_id' => ['sometimes', 'nullable', 'integer', 'exists:employees,id'],
+            'fault_comment' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
 
         // Auto-fill resolved_at quand on passe à resolved
@@ -101,8 +107,18 @@ class ClientRequestController extends Controller
             $data['resolved_at'] = now();
         }
 
+        // Cohérence : retirer la faute (fault_employee_id = null) purge aussi
+        // le commentaire associé, pour ne pas laisser un commentaire orphelin.
+        if (array_key_exists('fault_employee_id', $data) && $data['fault_employee_id'] === null) {
+            $data['fault_comment'] = null;
+        }
+
         $clientRequest->update($data);
-        $clientRequest->load(['client.company:id,client_id,company_name,photo,updated_at', 'assignedTo:id,name']);
+        $clientRequest->load([
+            'client.company:id,client_id,company_name,photo,updated_at',
+            'assignedTo:id,name',
+            'faultEmployee:id,name,avatar_path,updated_at',
+        ]);
         return ['data' => $clientRequest];
     }
 

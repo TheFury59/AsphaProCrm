@@ -19,6 +19,10 @@ class ClientRequest extends Model
         'assigned_to',
         'created_by_user_id',
         'resolved_at',
+        // Levier « faute » du système de notation (2026-05-22) : l'admin
+        // désigne l'intervenant responsable d'un ticket — null = aucune faute.
+        'fault_employee_id',
+        'fault_comment',
     ];
 
     protected function casts(): array
@@ -46,6 +50,16 @@ class ClientRequest extends Model
     public function createdByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /**
+     * Intervenant désigné fautif pour ce ticket (système de notation).
+     * Nullable — null signifie qu'aucune faute n'est imputée. Chaque ticket
+     * fautif retranche des points au critère « relation » de l'intervenant.
+     */
+    public function faultEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'fault_employee_id');
     }
 
     /**

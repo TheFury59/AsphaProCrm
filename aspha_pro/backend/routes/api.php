@@ -116,6 +116,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Tickets d'un intervenant (affectés OU créés) — onglet fiche intervenant admin.
     Route::get('employees/{employee}/client-requests', [ClientRequestController::class, 'forEmployee']);
 
+    // Notation d'un intervenant (note auto 0-100 sur 4 critères) — onglet fiche admin.
+    Route::get('employees/{employee}/score', [EmployeeController::class, 'score']);
+
     // === Accès extranet client (création / reset / email / révocation) ===
     Route::post('clients/{client}/portal-access', [ClientPortalAccessController::class, 'create']);
     Route::post('clients/{client}/portal-access/reset', [ClientPortalAccessController::class, 'reset']);

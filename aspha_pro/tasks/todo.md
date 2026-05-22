@@ -36,6 +36,39 @@
 
 ---
 
+## 🌟 2026-05-22 — I : Système de notation des intervenants (LIVRÉ)
+
+### A. Levier « faute » sur les tickets
+- [x] Migration `2026_05_22_160000_add_fault_employee_to_client_requests`
+      — `fault_employee_id` (FK nullable nullOnDelete) + `fault_comment` (text)
+- [x] Model `ClientRequest` : fillable + relation `faultEmployee()`
+- [x] `ClientRequestController::update` étendu (accepte `fault_employee_id`
+      nullable + `fault_comment`) ; retirer la faute purge le commentaire
+
+### B. Service de calcul
+- [x] `EmployeeScoringService::computeScore()` — note 0-100 sur 4 critères
+      (absences, assiduité, badgeage, relation) + détails lisibles
+
+### C. Endpoint
+- [x] `GET /employees/{employee}/score` (permission `employees.view`)
+
+### D. Frontend fiche intervenant
+- [x] Onglet « Notation » + hook `useEmployeeScore` + `EmployeeScoreTab`
+
+### E. Frontend désignation de la faute
+- [x] `FaultCard` dans `TicketDetailPage` + hook `useSetTicketFault`
+
+### Review
+- Formules : chaque critère part de 100 et retranche. Pondération globale
+  25 % chacun (neutre, explicable). badgeage = % RDV passés badgés ;
+  assiduité = 100 − 2 pts/min de retard moyen ; absences = −25 (non
+  justifiée) / −8 (justifiée) par absence ; relation = −20 par ticket fautif.
+  Cas « aucune donnée » → note neutre 100 (assiduité/badgeage sans data).
+- `php -l` : 0 erreur (6 fichiers). `tsc --noEmit` : 23 erreurs = baseline,
+  0 sur mes fichiers. Migration NON appliquée (pretend-run validé). Pas de commit.
+
+---
+
 ## 📋 2026-05-22 — Plan post-RDV cliente (EN ATTENTE DE VALIDATION)
 
 > Analyse via 7 sous-agents d'exploration parallèles. **Ne rien implémenter avant accord du client.**
@@ -65,12 +98,14 @@
 - [x] **F1** 🟡 Masquer prix/total à l'intervenant
 - [x] **G1** 🟡 Page « Centre de notifications »
 
-### LOT 3 — Gros chantiers
+### LOT 3 — Gros chantiers ✅ TERMINÉ
 - [x] **B4** 🔴 Contrats pour les CLIENTS (table `client_contracts` + onglet fiche)
 - [x] **G2** 🔴 Notification heures semaine/mois intervenant (commande planifiée)
 - [x] **G3** 🔴 Notification RDV non pointé +30 min (commande 10 min + colonne priority + bip cloche)
-- [ ] **H** 🔴 Refonte DOCUMENTS (onglets par public, destinataires, expiration, coche verte)
-- [ ] **I** 🔴 Système de notation des intervenants (greenfield — note auto)
+- [x] **H** 🔴 Refonte DOCUMENTS (onglets par public, destinataires, expiration, coche verte)
+- [x] **I** 🔴 Système de notation des intervenants (greenfield — note auto)
+
+> ✅ Plan post-RDV cliente intégralement livré (LOT 1 + 2 + 3).
 
 > Push mobile (G3) : in-app + email opérationnels ; le canal push FCM reste à
 > brancher (credentials Firebase + app mobile requis) — colonne `priority` prête.

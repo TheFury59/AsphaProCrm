@@ -3,25 +3,29 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
-  Ticket as TicketIcon, AlertCircle, MessageSquare, PackageOpen,
+  AlertCircle, MessageSquare, PackageOpen,
   Building2, Calendar, User, Trash2, ArrowRight, Users, Plus, X,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { TicketThread } from "@/components/TicketThread";
+import { apiErrorMessage } from "@/lib/api";
 import {
   useTicket, useUpdateTicket, useDeleteTicket,
   useTicketMessages, usePostTicketMessage,
   useAttachTicketEmployee, useDetachTicketEmployee,
-  type TicketStatus, type TicketPriority,
+  useSetTicketFault,
+  type TicketStatus, type TicketPriority, type ClientRequest,
 } from "@/hooks/use-tickets";
 import { useEmployees } from "@/hooks/use-employees";
 import { useAuthStore } from "@/stores/auth";
@@ -313,9 +317,172 @@ export function TicketDetailPage() {
 
           {/* Intervenants affectés au ticket */}
           <AssignedEmployeesCard ticketId={ticketId} assigned={t.assigned_employees ?? []} />
+
+          {/* Désignation de l'intervenant responsable (système de notation) */}
+          <FaultCard ticketId={ticketId} ticket={t} />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Carte « Intervenant responsable » — l'admin désigne quel intervenant est
+ * fautif pour ce ticket. La sélection est restreinte aux intervenants
+ * affectés au ticket. Imputer une faute pénalise le critère « relation »
+ * de la note de l'intervenant.
+ */
+function FaultCard({ ticketId, ticket }: { ticketId: number; ticket: ClientRequest }) {
+  const assigned = ticket.assigned_employees ?? [];
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<string>(
+    ticket.fault_employee_id ? String(ticket.fault_employee_id) : "",
+  );
+  const [comment, setComment] = useState<string>(ticket.fault_comment ?? "");
+  const setFault = useSetTicketFault(ticketId);
+
+  const faultEmployee = ticket.fault_employee ?? null;
+
+  const handleSave = async () => {
+    if (!selected) {
+      toast.error("Sélectionnez l'intervenant responsable, ou utilisez « Retirer la faute ».");
+      return;
+    }
+    try {
+      await setFault.mutateAsync({
+        fault_employee_id: parseInt(selected, 10),
+        fault_comment: comment.trim() || null,
+      });
+      toast.success("Intervenant responsable enregistré.");
+      setEditing(false);
+    } catch (err) {
+      console.error("setFault failed", { ticketId, selected, comment, err });
+      toast.error(apiErrorMessage(err, "Enregistrement impossible"));
+    }
+  };
+
+  const handleClear = async () => {
+    try {
+      await setFault.mutateAsync({ fault_employee_id: null, fault_comment: null });
+      toast.success("Faute retirée.");
+      setSelected("");
+      setComment("");
+      setEditing(false);
+    } catch (err) {
+      console.error("clearFault failed", { ticketId, err });
+      toast.error(apiErrorMessage(err, "Retrait impossible"));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-amber-600" />
+          Intervenant responsable
+        </CardTitle>
+        <CardDescription>
+          Désigner un intervenant comme fautif pénalise sa note (critère « relation »).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* État courant : faute imputée ou non */}
+        {faultEmployee ? (
+          <div className="flex items-start gap-2.5 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-2.5">
+            <EntityAvatar
+              src={faultEmployee.avatar_url}
+              name={faultEmployee.name ?? `Intervenant #${faultEmployee.id}`}
+              variant="employee"
+              size="xs"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                {faultEmployee.name ?? `Intervenant #${faultEmployee.id}`}
+              </div>
+              {ticket.fault_comment && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 whitespace-pre-wrap">
+                  {ticket.fault_comment}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">
+            Aucune faute imputée pour ce ticket.
+          </p>
+        )}
+
+        {!editing && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelected(ticket.fault_employee_id ? String(ticket.fault_employee_id) : "");
+                setComment(ticket.fault_comment ?? "");
+                setEditing(true);
+              }}
+            >
+              {faultEmployee ? "Modifier" : "Désigner un responsable"}
+            </Button>
+            {faultEmployee && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-rose-600"
+                onClick={handleClear}
+                disabled={setFault.isPending}
+              >
+                Retirer la faute
+              </Button>
+            )}
+          </div>
+        )}
+
+        {editing && (
+          <div className="space-y-2">
+            <Select value={selected} onValueChange={setSelected}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir parmi les intervenants affectés…" />
+              </SelectTrigger>
+              <SelectContent>
+                {assigned.length === 0 && (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Affectez d'abord un intervenant au ticket.
+                  </div>
+                )}
+                {assigned.map((e) => (
+                  <SelectItem key={e.id} value={String(e.id)}>
+                    {e.name ?? `Intervenant #${e.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Textarea
+              value={comment}
+              onChange={(ev) => setComment(ev.target.value)}
+              placeholder="Commentaire (optionnel) — contexte de la faute"
+              rows={3}
+            />
+            <div className="flex gap-2">
+              <Button type="button" size="sm" onClick={handleSave} disabled={setFault.isPending}>
+                Enregistrer
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditing(false)}
+              >
+                Annuler
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

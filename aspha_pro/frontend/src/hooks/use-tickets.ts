@@ -28,6 +28,9 @@ export type ClientRequest = {
   created_by_user_id: number | null;
   resolved_at: string | null;
   created_at: string;
+  // Levier « faute » du système de notation : intervenant désigné responsable.
+  fault_employee_id: number | null;
+  fault_comment: string | null;
   client?: {
     id: number;
     code: string;
@@ -38,6 +41,7 @@ export type ClientRequest = {
   assignedTo?: { id: number; name: string } | null;
   created_by_user?: { id: number; name: string } | null;
   assigned_employees?: TicketAssignedEmployee[];
+  fault_employee?: { id: number; name: string | null; avatar_url?: string | null } | null;
 };
 
 /** Un message du fil de discussion d'un ticket. */
@@ -194,6 +198,29 @@ export function useDetachTicketEmployee(ticketId: number) {
       )).data.data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["client-requests", ticketId] });
+    },
+  });
+}
+
+// =========================================================================
+// Désignation de la faute (système de notation)
+// =========================================================================
+
+/**
+ * Définit ou retire l'intervenant fautif d'un ticket. Passe par l'endpoint
+ * `update` du ticket (qui accepte `fault_employee_id` / `fault_comment`).
+ * `fault_employee_id: null` retire la faute (et purge le commentaire côté
+ * backend). Invalide la note de l'intervenant concerné (critère « relation »).
+ */
+export function useSetTicketFault(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { fault_employee_id: number | null; fault_comment: string | null }) =>
+      (await api.patch<SingleResponse<ClientRequest>>(`/client-requests/${ticketId}`, payload)).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["client-requests", ticketId] });
+      // La note des intervenants dépend des tickets fautifs → on rafraîchit.
+      qc.invalidateQueries({ queryKey: ["employees"] });
     },
   });
 }
