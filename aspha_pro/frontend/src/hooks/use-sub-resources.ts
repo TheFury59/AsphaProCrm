@@ -78,14 +78,20 @@ export type KeyMovement = {
   date: string;
 };
 
+/** Public destinataire d'un document. */
+export type DocumentAudience = "client" | "intervenant" | "encadrement";
+
 export type DocumentItem = {
   id: number;
   owner_type: string;
   owner_id: number;
   label: string;
   document_type: string;
+  /** Public destinataire : client / intervenant / encadrement. */
+  audience: DocumentAudience | null;
   is_client_visible: boolean;
-  file_path: string;
+  /** Date de fin de validité / renouvellement (YYYY-MM-DD) ou null. */
+  expiry_date: string | null;
   download_url: string;
   size_kb: number | null;
   created_at: string | null;
@@ -493,14 +499,24 @@ export function useDocuments(ownerType: string, ownerId: number) {
 export function useUploadDocument(ownerType: string, ownerId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { file: File; label: string; document_type: string; is_client_visible?: boolean }) => {
+    mutationFn: async (payload: {
+      file: File;
+      label: string;
+      document_type: string;
+      audience: DocumentAudience;
+      is_client_visible?: boolean;
+      /** Date de fin de validité (YYYY-MM-DD), optionnelle. */
+      expiry_date?: string | null;
+    }) => {
       const fd = new FormData();
       fd.append("owner_type", ownerType);
       fd.append("owner_id", String(ownerId));
       fd.append("file", payload.file);
       fd.append("label", payload.label);
       fd.append("document_type", payload.document_type);
+      fd.append("audience", payload.audience);
       if (payload.is_client_visible) fd.append("is_client_visible", "1");
+      if (payload.expiry_date) fd.append("expiry_date", payload.expiry_date);
       const res = await api.post<SingleResponse<DocumentItem>>("/documents", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });

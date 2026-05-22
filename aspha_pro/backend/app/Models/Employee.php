@@ -137,6 +137,17 @@ class Employee extends Model
         return $this->morphMany(Address::class, 'owner');
     }
 
+    /**
+     * Documents rattachés à l'intervenant (`owner` polymorphe).
+     * Utilisé entre autres par RequiredDocumentTypesController::checklist().
+     * Le `owner_type` stocké est la chaîne courte 'employee' (morph map de
+     * AppServiceProvider) — morphMany la résout via getMorphClass().
+     */
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'owner');
+    }
+
     // === Helpers ===
     public function fullName(): string
     {

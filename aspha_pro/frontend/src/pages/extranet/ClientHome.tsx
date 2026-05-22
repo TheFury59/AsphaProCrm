@@ -1,12 +1,14 @@
 import { Receipt, FileText, Briefcase, Ticket as TicketIcon } from "lucide-react";
 import {
   useClientInvoices, useClientPrestations, useClientQuotes, useClientTickets,
+  useClientProfile,
 } from "@/hooks/use-extranet";
 import {
   ClientGreetingHeader, StatCard,
   ClientInvoicesSection, ClientPrestationsSection, ClientTicketsSection,
   ClientQuotesSection,
 } from "./client-sections";
+import { ExtranetDocumentsSection } from "./ExtranetDocumentsSection";
 
 /**
  * Accueil de l'extranet client — vue d'overview.
@@ -24,6 +26,7 @@ export function ClientHome() {
   const { data: quotes = [] } = useClientQuotes();
   const { data: prestations = [] } = useClientPrestations();
   const { data: tickets = [] } = useClientTickets();
+  const { data: profile } = useClientProfile();
 
   // Devis « à valider » = ceux au statut `sent` (en attente d'une action client).
   const pendingQuotes = quotes.filter((q: any) => q.status === "sent").length;
@@ -51,6 +54,8 @@ export function ClientHome() {
       <ClientQuotesSection />
       <ClientInvoicesSection />
       <ClientPrestationsSection />
+      {/* Documents destinés au client (filtrage backend : audience=client). */}
+      <ExtranetDocumentsSection ownerType="client" ownerId={profile?.id} />
     </div>
   );
 }

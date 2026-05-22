@@ -39,3 +39,10 @@ Schedule::command('app:notify-worked-hours month')
 Schedule::command('app:notify-overdue-checkins')
     ->everyTenMinutes()
     ->withoutOverlapping();
+
+// Alerte de renouvellement des documents (expiry_date proche/dépassée).
+// Tourne chaque jour ; un anti-spam interne (7 jours) évite le rappel
+// quotidien pour un même document.
+Schedule::command('app:notify-document-renewals')
+    ->dailyAt('07:30')
+    ->withoutOverlapping();

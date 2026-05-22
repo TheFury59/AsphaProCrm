@@ -61,6 +61,9 @@ class AppServiceProvider extends ServiceProvider
             // Ajout 2026-05-20 — deep-link cloche vers une mission
             // ('invoice' et 'quote' sont déjà mappés ci-dessus).
             'mission' => Mission::class,
+            // Ajout 2026-05-22 — target_type des notifications de
+            // renouvellement de document (chantier H).
+            'document' => \App\Models\Document::class,
         ]);
 
         // Observers pour déclencher les notifications applicatives.

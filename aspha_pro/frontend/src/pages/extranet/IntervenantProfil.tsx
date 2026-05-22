@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useIntervenantContract, useIntervenantProfile } from "@/hooks/use-extranet";
 import { usePublicSettings } from "@/hooks/use-planning-summary";
+import { ExtranetDocumentsSection } from "./ExtranetDocumentsSection";
 
 /**
  * Page profil intervenant (`/extranet/intervenant/profil`) : profil + contrat
@@ -103,6 +104,9 @@ export function IntervenantProfil() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Documents destinés à l'intervenant (filtrage backend : audience=intervenant). */}
+      <ExtranetDocumentsSection ownerType="employee" ownerId={profile?.id} />
     </div>
   );
 }

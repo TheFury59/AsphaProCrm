@@ -1,5 +1,41 @@
 # Aspha Pro — Todo
 
+## 📂 2026-05-22 — H : Refonte système Documents (LIVRÉ)
+
+### A. Schéma
+- [x] Migration `2026_05_22_150000_add_audience_expiry_and_softdeletes_to_documents`
+      — `audience`, `expiry_date`, `softDeletes` (corrige le bug deleted_at)
+- [x] Model `Document` : fillable + cast `expiry_date` en `date:Y-m-d`
+
+### B. Backend
+- [x] `DocumentController::store` — audience required + expiry_date + is_client_visible
+- [x] `DocumentController::index`/`download` — filtre d'accès UNIQUE et cohérent
+- [x] Relations `documents()` morphMany sur Employee + Client
+- [x] `RequiredDocumentType::checklist` — `$d->document_type` (bug `category` corrigé)
+- [x] `serialize()` expose `audience` + `expiry_date`
+
+### C. Frontend DocumentsTab
+- [x] Onglets par audience Client/Intervenant/Encadrement
+- [x] Dialogue : sélecteur destinataire + champ date expiration
+- [x] Date expiration + couleur dépassée/proche + coche verte
+
+### D. Extranet
+- [x] Composant `ExtranetDocumentsSection` monté sur ClientHome + IntervenantProfil
+
+### E. Notifications
+- [x] Type `document_renewal` (module documents) dans seeder
+- [x] Commande `NotifyDocumentRenewals` + anti-spam 7j + schedule quotidien 07:30
+- [x] `document` ajouté à la morph map (target des notifs)
+
+### Review
+- `php -l` : 0 erreur sur les 10 fichiers PHP touchés.
+- `tsc --noEmit` : 24 erreurs = baseline (0 sur mes fichiers).
+- Migration NON appliquée (à lancer manuellement). Pas de commit.
+- Contrôle d'accès : prédicat unique `extranetAudienceForUser()` ; `index`
+  applique le filtre Eloquent, `download` le même prédicat sur 1 document.
+
+---
+
 ## 📋 2026-05-22 — Plan post-RDV cliente (EN ATTENTE DE VALIDATION)
 
 > Analyse via 7 sous-agents d'exploration parallèles. **Ne rien implémenter avant accord du client.**

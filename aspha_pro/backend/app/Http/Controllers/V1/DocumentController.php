@@ -35,6 +35,14 @@ class DocumentController extends Controller
     private const ALLOWED_OWNER_TYPES = ['client', 'employee', 'contract', 'invoice', 'quote'];
 
     /**
+     * Publics destinataires d'un document (chantier H, 2026-05-22).
+     *  - client      : visible dans l'extranet client si is_client_visible=true.
+     *  - intervenant : visible dans l'extranet intervenant si is_client_visible=true.
+     *  - encadrement : INTERNE — jamais exposé en extranet, quel que soit le flag.
+     */
+    private const ALLOWED_AUDIENCES = ['client', 'intervenant', 'encadrement'];
+
+    /**
      * Mimes acceptés à l'upload. La validation `mimes:` Laravel vérifie le
      * vrai content du fichier (via fileinfo), pas juste l'extension client.
      */
@@ -56,14 +64,15 @@ class DocumentController extends Controller
         // Ownership : non-admins ne voient que les docs de LEUR client / employee
         $this->ensureOwnerOwnership($request, $ownerType, $ownerId);
 
-        $docs = Document::where('owner_type', $ownerType)
-            ->where('owner_id', $ownerId)
-            ->when(
-                $this->isClientPortalUser($request),
-                fn ($q) => $q->where('is_client_visible', true)
-            )
-            ->orderByDesc('id')
-            ->get();
+        $query = Document::where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId);
+
+        // ⚠️ FILTRE D'ACCÈS EXTRANET — point critique IDOR (cf. audit 2026-05-19).
+        // Le MÊME filtre est appliqué dans `download()`. Toute divergence
+        // entre les deux rouvre la faille. Voir applyExtranetVisibilityFilter().
+        $this->applyExtranetVisibilityFilter($request, $query);
+
+        $docs = $query->orderByDesc('id')->get();
 
         return ['data' => $docs->map(fn ($d) => $this->serialize($d))];
     }
@@ -75,7 +84,12 @@ class DocumentController extends Controller
             'owner_id' => ['required', 'integer'],
             'label' => ['required', 'string', 'max:255'],
             'document_type' => ['required', 'in:contract,invoice,insurance,product_sheet,protocol,other'],
+            // Public destinataire — obligatoire depuis le chantier H. Pilote
+            // les onglets côté fiche et la visibilité extranet.
+            'audience' => ['required', 'in:' . implode(',', self::ALLOWED_AUDIENCES)],
             'is_client_visible' => ['nullable', 'boolean'],
+            // Date de fin de validité / renouvellement — optionnelle.
+            'expiry_date' => ['nullable', 'date'],
             // MIME validation stricte. Sans ça on accepterait .html/.svg (XSS),
             // .exe, .php, etc. — cf. audit 2026-05-19.
             'file' => ['required', 'file', 'max:10240', 'mimes:' . self::ALLOWED_MIMES],
@@ -106,7 +120,9 @@ class DocumentController extends Controller
             'file_path' => $path,
             'label' => $data['label'],
             'document_type' => $data['document_type'],
+            'audience' => $data['audience'],
             'is_client_visible' => $data['is_client_visible'] ?? false,
+            'expiry_date' => $data['expiry_date'] ?? null,
         ]);
 
         return response()->json(['data' => $this->serialize($doc)], 201);
@@ -117,9 +133,11 @@ class DocumentController extends Controller
         $this->authorizeForOwner($request, $document->owner_type, 'view');
         $this->ensureOwnerOwnership($request, $document->owner_type, $document->owner_id);
 
-        // Client portal user : ne voit que les docs `is_client_visible=true`
-        if ($this->isClientPortalUser($request) && ! $document->is_client_visible) {
-            abort(403, 'Ce document n\'est pas accessible depuis le portail.');
+        // ⚠️ MÊME filtre d'accès que `index()` — appliqué ici en garde
+        // explicite (un document accessible en téléchargement DOIT l'être en
+        // liste, et inversement). Une divergence rouvrirait l'IDOR.
+        if (! $this->documentVisibleToExtranetUser($request, $document)) {
+            abort(403, 'Ce document n\'est pas accessible depuis votre extranet.');
         }
 
         // Fallback rétro-compat : les fichiers stockés AVANT le 2026-05-19
@@ -263,9 +281,86 @@ class DocumentController extends Controller
         };
     }
 
-    private function isClientPortalUser(Request $request): bool
+    /**
+     * ⚠️ RÈGLE D'ACCÈS EXTRANET — SOURCE DE VÉRITÉ UNIQUE.
+     *
+     * Applique sur une requête Eloquent (`index`) le filtre de visibilité
+     * propre au rôle de l'utilisateur. La règle métier exacte est :
+     *
+     *  - admin / super_admin :
+     *      aucun filtre — accès à TOUS les documents de l'owner (l'ownership
+     *      de l'owner lui-même est déjà couvert par ensureOwnerOwnership()).
+     *
+     *  - client (extranet) :
+     *      le owner ciblé est DÉJÀ garanti être son propre client par
+     *      ensureOwnerOwnership(). On restreint en plus à :
+     *        audience = 'client'  ET  is_client_visible = true.
+     *
+     *  - intervenant (extranet) :
+     *      le owner ciblé est DÉJÀ garanti être son propre employee/contract
+     *      par ensureOwnerOwnership(). On restreint en plus à :
+     *        audience = 'intervenant'  ET  is_client_visible = true.
+     *
+     *  - audience = 'encadrement' : interne, jamais matché par client ni
+     *    intervenant → jamais exposé en extranet.
+     *
+     * `documentVisibleToExtranetUser()` ci-dessous applique EXACTEMENT le
+     * même prédicat sur un document unique (`download`). Les deux DOIVENT
+     * rester synchronisés — sinon un document listé serait non
+     * téléchargeable, ou pire un document caché serait téléchargeable (IDOR).
+     */
+    private function applyExtranetVisibilityFilter(Request $request, $query): void
     {
-        return $request->user()->hasRole('client');
+        $audience = $this->extranetAudienceForUser($request);
+        if ($audience === null) {
+            return; // admin / super_admin : pas de filtre.
+        }
+
+        $query->where('audience', $audience)
+            ->where('is_client_visible', true);
+    }
+
+    /**
+     * Prédicat unitaire : ce document est-il visible par l'utilisateur
+     * courant ? Pendant exact de applyExtranetVisibilityFilter() pour un
+     * seul document (utilisé par `download`).
+     */
+    private function documentVisibleToExtranetUser(Request $request, Document $document): bool
+    {
+        $audience = $this->extranetAudienceForUser($request);
+        if ($audience === null) {
+            return true; // admin / super_admin.
+        }
+
+        return $document->audience === $audience
+            && (bool) $document->is_client_visible === true;
+    }
+
+    /**
+     * Audience extranet attendue pour le rôle de l'utilisateur courant :
+     *  - admin/super_admin → null (= pas de restriction d'audience)
+     *  - client            → 'client'
+     *  - intervenant       → 'intervenant'
+     *  - autre rôle        → '__none__' (ne matche aucun document)
+     *
+     * Aucun rôle ne peut obtenir 'encadrement' : ces documents restent
+     * strictement internes.
+     */
+    private function extranetAudienceForUser(Request $request): ?string
+    {
+        $user = $request->user();
+        if ($user->hasRole('super_admin') || $user->hasRole('admin')) {
+            return null;
+        }
+        if ($user->hasRole('client')) {
+            return 'client';
+        }
+        if ($user->hasRole('intervenant')) {
+            return 'intervenant';
+        }
+
+        // Rôle inconnu : sentinelle qui ne matchera jamais une audience valide.
+        return '__none__';
     }
 
     /**
@@ -280,7 +375,10 @@ class DocumentController extends Controller
             'owner_id' => $d->owner_id,
             'label' => $d->label,
             'document_type' => $d->document_type,
+            'audience' => $d->audience,
             'is_client_visible' => (bool) $d->is_client_visible,
+            // Cast date:Y-m-d → string 'YYYY-MM-DD' ou null.
+            'expiry_date' => $d->expiry_date?->format('Y-m-d'),
             'download_url' => "/api/v1/documents/{$d->id}/download",
             'size_kb' => $d->file_path && Storage::disk('local')->exists($d->file_path)
                 ? round(Storage::disk('local')->size($d->file_path) / 1024)

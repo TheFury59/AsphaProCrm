@@ -19,13 +19,20 @@ class Document extends Model
         'file_path',
         'label',
         'document_type',
+        // Public destinataire : 'client' / 'intervenant' / 'encadrement'.
+        'audience',
         'is_client_visible',
+        // Date de fin de validité / renouvellement (saisie manuelle).
+        'expiry_date',
     ];
 
     protected function casts(): array
     {
         return [
             'is_client_visible' => 'boolean',
+            // Cast date pur : le JSON renvoie 'YYYY-MM-DD' (pas un datetime
+            // ISO), exploitable directement par un <input type="date">.
+            'expiry_date' => 'date:Y-m-d',
             'created_at' => 'datetime',
         ];
     }

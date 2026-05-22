@@ -130,6 +130,16 @@ class Client extends Model
         return $this->morphMany(Address::class, 'owner');
     }
 
+    /**
+     * Documents rattachés au client (`owner` polymorphe).
+     * Le `owner_type` stocké est la chaîne courte 'client' (morph map de
+     * AppServiceProvider) — morphMany la résout via getMorphClass().
+     */
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'owner');
+    }
+
     // === Helpers ===
     public function displayName(): string
     {

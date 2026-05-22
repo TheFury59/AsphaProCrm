@@ -27,6 +27,11 @@ class NotificationTypesSeeder extends Seeder
             ['code' => 'absence_created', 'label' => 'Absence enregistrée', 'module' => 'rh', 'default_channels' => 'push'],
             ['code' => 'training_due', 'label' => 'Formation à renouveler', 'module' => 'rh', 'default_channels' => 'email'],
 
+            // Documents — renouvellement : document dont la date de fin de
+            // validité (`expiry_date`) approche ou est dépassée. Émise par
+            // la commande `app:notify-document-renewals` (quotidienne).
+            ['code' => 'document_renewal', 'label' => 'Document à renouveler', 'module' => 'documents', 'default_channels' => 'push,email'],
+
             // Stock
             ['code' => 'stock_alert', 'label' => 'Stock sous le seuil', 'module' => 'stock', 'default_channels' => 'push,email'],
 

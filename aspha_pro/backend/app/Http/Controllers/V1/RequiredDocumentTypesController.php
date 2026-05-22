@@ -66,11 +66,17 @@ class RequiredDocumentTypesController extends Controller
             })
             ->orderBy('display_order')->orderBy('label')->get();
 
-        $docs = $employee->documents ?? collect();  // assume Employee a une relation documents
+        // Relation `documents()` (morphMany) ajoutée sur Employee — chantier H.
+        // Avant le 2026-05-22, `$employee->documents` était NULL (relation
+        // inexistante) → la checklist matchait toujours `present=false`.
+        $docs = $employee->documents()->get();
 
         return ['data' => $applicable->map(function ($type) use ($docs) {
+            // `category_match` du référentiel se compare au `document_type`
+            // du Document — la colonne `category` n'a jamais existé (bug
+            // historique corrigé le 2026-05-22).
             $matched = $type->category_match
-                ? $docs->first(fn ($d) => ($d->category ?? null) === $type->category_match)
+                ? $docs->first(fn ($d) => ($d->document_type ?? null) === $type->category_match)
                 : null;
             return [
                 'type' => $type,
