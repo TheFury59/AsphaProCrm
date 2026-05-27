@@ -273,9 +273,16 @@ export function getNotificationLink(
   if (!targetType || !targetId) return null;
 
   // Normalise FQN → short code : "App\\Models\\ClientRequest" → "client_request"
-  const short = targetType.includes("\\")
-    ? targetType.split("\\").pop()!.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()
-    : targetType;
+  // Garde défensive : `.pop()` peut renvoyer undefined sur string vide
+  // (`"".split("\\").pop()` retourne `""`, mais on couvre quand même undefined).
+  let short: string;
+  if (targetType.includes("\\")) {
+    const tail = targetType.split("\\").pop();
+    if (!tail) return null;
+    short = tail.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  } else {
+    short = targetType;
+  }
 
   if (isExtranet) {
     // Espace client : on dirige vers les pages de l'extranet. La page liste

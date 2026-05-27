@@ -18,29 +18,45 @@ import { useAuthStore } from "@/stores/auth";
 /**
  * Bip court (Web Audio) joué à l'arrivée d'une notification haute priorité.
  * Pas d'asset audio : oscillateur synthétisé. Échoue silencieusement si le
- * navigateur bloque l'audio (pas d'interaction utilisateur préalable).
+ * navigateur bloque l'audio (pas d'interaction utilisateur préalable, contexte
+ * suspendu, navigateur sans Web Audio, etc.).
+ *
+ * CRITIQUE : cette fonction ne doit JAMAIS throw. La cloche est montée sur
+ * toutes les pages (admin + extranet) — un throw ici = page blanche partout.
+ * D'où le double try/catch et toutes les guards sur `typeof window`.
  */
 function playPriorityBeep() {
   try {
+    if (typeof window === "undefined") return;
     const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.34);
-    osc.onended = () => ctx.close().catch(() => {});
+      (window as any).AudioContext ||
+      (window as any).webkitAudioContext;
+    if (typeof Ctx !== "function") return;
+    let ctx: AudioContext;
+    try {
+      ctx = new Ctx();
+    } catch {
+      // Certains navigateurs throw si l'AudioContext est créé sans
+      // interaction utilisateur (politique autoplay). On abandonne en silence.
+      return;
+    }
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.34);
+      osc.onended = () => { try { ctx.close(); } catch { /* noop */ } };
+    } catch {
+      try { ctx.close(); } catch { /* noop */ }
+    }
   } catch {
     // Audio indisponible — on ignore (le surlignage visuel reste).
   }
@@ -57,7 +73,7 @@ function playPriorityBeep() {
  * Cf. lib/notification-styles.ts pour le mapping complet.
  */
 export function NotificationsBell() {
-  const { data: notifications = [] } = useNotifications();
+  const { data: notificationsRaw } = useNotifications();
   const { data: unreadCount = 0 } = useUnreadCount();
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
@@ -66,30 +82,44 @@ export function NotificationsBell() {
   const role = useAuthStore((s) => s.user?.role);
   const isExtranet = role === "client" || role === "intervenant";
 
+  // Garde défensive : si l'API renvoie quelque chose d'inattendu (objet,
+  // erreur silencieuse, payload non normalisé…), on tombe sur un array vide
+  // plutôt que de laisser `.filter` / `.map` throw → page blanche.
+  const notifications = Array.isArray(notificationsRaw) ? notificationsRaw : [];
+
   // Anti-spam sonore : on mémorise les ids des notifs haute priorité non lues
   // déjà « vues » par ce composant. Le bip ne joue qu'une fois par notif.
   const seenPriorityIds = useRef<Set<number>>(new Set());
   const primed = useRef(false);
 
   useEffect(() => {
-    const highUnread = notifications.filter(
-      (n) =>
-        !n.is_read &&
-        (n.priority === "high" || n.priority === "critical"),
-    );
+    // Try/catch global : la cloche est montée sur toutes les pages — toute
+    // exception ici ferait écran blanc partout. Mieux vaut perdre le bip.
+    try {
+      const highUnread = notifications.filter(
+        (n) =>
+          n &&
+          !n.is_read &&
+          (n.priority === "high" || n.priority === "critical"),
+      );
 
-    // Premier rendu : on amorce le set sans jouer de son (sinon bip à chaque
-    // rechargement de page pour des notifs déjà existantes).
-    if (!primed.current) {
-      highUnread.forEach((n) => seenPriorityIds.current.add(n.id));
-      primed.current = true;
-      return;
-    }
+      // Premier rendu : on amorce le set sans jouer de son (sinon bip à chaque
+      // rechargement de page pour des notifs déjà existantes).
+      if (!primed.current) {
+        highUnread.forEach((n) => seenPriorityIds.current.add(n.id));
+        primed.current = true;
+        return;
+      }
 
-    const fresh = highUnread.filter((n) => !seenPriorityIds.current.has(n.id));
-    if (fresh.length > 0) {
-      playPriorityBeep(); // un seul bip, quel que soit le nombre de nouvelles
-      fresh.forEach((n) => seenPriorityIds.current.add(n.id));
+      const fresh = highUnread.filter((n) => !seenPriorityIds.current.has(n.id));
+      if (fresh.length > 0) {
+        playPriorityBeep(); // un seul bip, quel que soit le nombre de nouvelles
+        fresh.forEach((n) => seenPriorityIds.current.add(n.id));
+      }
+    } catch (e) {
+      // Ne JAMAIS remonter une exception : la cloche doit rester silencieuse
+      // si quelque chose tourne mal (payload imprévu, etc.).
+      console.warn("NotificationsBell: priority beep effect failed", e);
     }
   }, [notifications]);
 

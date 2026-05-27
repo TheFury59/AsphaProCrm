@@ -290,11 +290,17 @@ export function PlanningPage() {
       onError: (err: any) => {
         // Avant : arg.revert() silencieux -> impression "le drag-drop ne marche pas".
         // On affiche maintenant l'erreur backend pour debug.
+        // Précédence `??` vs ternaire `?:` : on extrait proprement le premier
+        // message de validation Laravel (errors[champ][0]) puis le message
+        // global, sinon un fallback générique.
+        const errors = err?.response?.data?.errors;
+        const firstFieldError = errors
+          ? (Object.values(errors).flat()[0] as string | undefined)
+          : undefined;
         const msg = err?.response?.data?.message
-          ?? err?.response?.data?.errors
-            ? Object.values(err.response.data.errors)[0]?.[0]
-            : null;
-        toast.error(msg ?? "Impossible de déplacer cette intervention");
+          ?? firstFieldError
+          ?? "Impossible de déplacer cette intervention";
+        toast.error(msg);
         console.error("Drag-drop intervention KO", err?.response?.data);
         arg.revert();
       },

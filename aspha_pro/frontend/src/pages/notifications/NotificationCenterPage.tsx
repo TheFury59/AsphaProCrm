@@ -18,7 +18,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel,
+  SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
 /**
@@ -160,15 +161,18 @@ export function NotificationCenterPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous les types</SelectItem>
+                {/* Radix Select n'accepte que SelectItem/Group/Label/Separator
+                    comme enfants directs de SelectContent — pas de <div> brut
+                    (sinon erreur au render → page blanche). */}
                 {Object.entries(typeGroups).map(([module, items]) => (
-                  <div key={module}>
-                    <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <SelectGroup key={module}>
+                    <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {module}
-                    </div>
+                    </SelectLabel>
                     {items.map((it) => (
                       <SelectItem key={it.code} value={it.code}>{it.label}</SelectItem>
                     ))}
-                  </div>
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
