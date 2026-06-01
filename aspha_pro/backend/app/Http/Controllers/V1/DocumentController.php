@@ -193,9 +193,12 @@ class DocumentController extends Controller
             default => $action === 'view' ? 'clients.view' : 'clients.edit',
         };
 
-        // Cas spécial : client extranet a `portal.requests.create` mais pas
-        // `clients.view`. On l'autorise quand même à voir ses propres docs.
-        if ($action === 'view' && $user->hasRole('client')) {
+        // Cas spécial : les rôles extranet (client / intervenant) n'ont PAS
+        // les permissions admin `clients.view` / `employees.view` (audit
+        // 2026-05-19 — isolation stricte). On les laisse passer en lecture
+        // de leurs propres documents ; `ensureOwnerOwnership` + le filtre
+        // d'audience garantissent qu'ils ne voient QUE leurs docs visibles.
+        if ($action === 'view' && ($user->hasRole('client') || $user->hasRole('intervenant'))) {
             return;
         }
 
