@@ -51,8 +51,15 @@ echo "==> 3/8 — build du frontend"
 cd "$FRONTEND"
 # Si Node n'est pas dans le PATH par défaut, source ton NVM ou module load ici :
 #   . ~/.nvm/nvm.sh && nvm use 20
-npm ci
-npm run build
+#
+# `--include=dev` est OBLIGATOIRE : sur o2switch, l'app Node est créée en
+# mode "production" (= `NODE_ENV=production`), ce qui pousse npm à ignorer
+# les devDependencies par défaut. Or `@vitejs/plugin-react`, `vite`,
+# `typescript` et toute la chaîne de build vivent en devDependencies.
+# Sans ce flag, le `vite build` plante avec "Cannot find package
+# '@vitejs/plugin-react'".
+NODE_ENV=development npm ci --include=dev
+NODE_ENV=development npm run build
 
 echo "==> 4/8 — copie du build dans backend/public/"
 # On copie le contenu de dist/ DANS backend/public/ SANS écraser .htaccess
