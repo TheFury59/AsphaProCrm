@@ -1,9 +1,10 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Shield, FileWarning, Lock } from "lucide-react";
+import { Settings, Shield, FileWarning, Lock, Building2 } from "lucide-react";
 import { SettingsPage } from "./SettingsPage";
 import { PermissionsMatrix } from "./PermissionsMatrix";
 import { RequiredDocsManager } from "./RequiredDocsManager";
+import { EntityCompanyTab } from "./EntityCompanyTab";
 import { useAuthStore } from "@/stores/auth";
 
 /**
@@ -23,8 +24,9 @@ export function AdminSettingsPage() {
   return (
     <div>
       <PageHeader title="Paramètres" description="Configuration globale, permissions et référentiels." />
-      <Tabs defaultValue="settings">
+      <Tabs defaultValue="company">
         <TabsList>
+          <TabsTrigger value="company"><Building2 className="mr-2 h-3 w-3" />Mon entreprise</TabsTrigger>
           <TabsTrigger value="settings"><Settings className="mr-2 h-3 w-3" />Paramètres</TabsTrigger>
           <TabsTrigger value="permissions" disabled={!isSuperAdmin}>
             {isSuperAdmin
@@ -34,6 +36,9 @@ export function AdminSettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="docs"><FileWarning className="mr-2 h-3 w-3" />Docs requis</TabsTrigger>
         </TabsList>
+        <TabsContent value="company" className="mt-4">
+          <EntityCompanyTab />
+        </TabsContent>
         <TabsContent value="settings" className="mt-4">
           {/* Réutilise SettingsPage mais sans son propre PageHeader (on a celui d'au-dessus) */}
           <SettingsPageBody />

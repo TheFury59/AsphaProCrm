@@ -9,6 +9,7 @@ use App\Http\Controllers\V1\ClientSubResourceController;
 use App\Http\Controllers\V1\ContractController;
 use App\Http\Controllers\V1\DocumentController;
 use App\Http\Controllers\V1\EmployeeController;
+use App\Http\Controllers\V1\EntityController;
 use App\Http\Controllers\V1\EmployeeSubResourceController;
 use App\Http\Controllers\V1\ExtranetController;
 use App\Http\Controllers\V1\FleetController;
@@ -61,6 +62,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/referentials/client-absence-reasons', [ReferentialsController::class, 'clientAbsenceReasons']);
     Route::get('/referentials/employee-absence-reasons', [ReferentialsController::class, 'employeeAbsenceReasons']);
     Route::get('/referentials/entities', [ReferentialsController::class, 'entities']);
+    // Admin : gestion complète des entités (page « Mon entreprise » des paramètres)
+    Route::get('/entities', [EntityController::class, 'index']);
+    Route::get('/entities/{entity}', [EntityController::class, 'show']);
+    Route::patch('/entities/{entity}', [EntityController::class, 'update']);
     Route::get('/referentials/job-references', [ReferentialsController::class, 'jobReferences']);
     Route::get('/referentials/vat-rates', [ReferentialsController::class, 'vatRates']);
     Route::get('/referentials/product-categories', [ReferentialsController::class, 'productCategories']);
