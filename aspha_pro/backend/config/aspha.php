@@ -7,7 +7,7 @@ return [
 
     // Pied de page légal présent sur toutes les pages des devis et factures.
     'company' => [
-        'legal_name' => env('ASPHA_LEGAL_NAME', 'ASPHA Services'),
+        'legal_name' => env('ASPHA_LEGAL_NAME', 'Aspha Pro'),
         'legal_form' => env('ASPHA_LEGAL_FORM', 'SARL au capital de 7 500 €'),
         'head_office' => env('ASPHA_HEAD_OFFICE', '233 rue Morel, 59500 Douai, France'),
         'siret' => env('ASPHA_SIRET', '000 000 000 00000'),

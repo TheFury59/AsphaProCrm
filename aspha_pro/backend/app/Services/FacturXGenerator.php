@@ -81,7 +81,7 @@ class FacturXGenerator
         );
 
         // Émetteur
-        $doc->setDocumentSeller($entity?->name ?? 'Aspha Service');
+        $doc->setDocumentSeller($entity?->name ?? 'Aspha Pro');
         if ($entity?->siret) {
             $doc->addDocumentSellerTaxRegistration('FC', $entity->siret);
         }

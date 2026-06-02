@@ -109,7 +109,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col text-sm leading-tight">
             <span className="font-semibold tracking-tight">Aspha <span className="text-gradient-aspha">Pro</span></span>
-            <span className="text-[10px] text-muted-foreground tracking-wide">ERP services à la personne</span>
+            <span className="text-[10px] text-muted-foreground tracking-wide">ERP entreprises de services</span>
           </div>
         </div>
       </SidebarHeader>

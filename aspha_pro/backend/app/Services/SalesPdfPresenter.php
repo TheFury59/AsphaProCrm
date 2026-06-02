@@ -117,7 +117,7 @@ class SalesPdfPresenter
     private function headerInfo(?Entity $entity): array
     {
         return [
-            'agency_name' => $entity?->name ?: 'Aspha Services',
+            'agency_name' => $entity?->name ?: 'Aspha Pro',
             'address' => config('aspha.agency_address_fallback'),
             'postal_city' => config('aspha.agency_postal_city_fallback'),
             'phone' => $entity?->phone,
