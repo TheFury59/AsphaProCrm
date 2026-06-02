@@ -22,10 +22,10 @@ APP_DIR="$HOME/aspha_pro"
 
 # Le dépôt GitHub a une structure imbriquée : le code Laravel/React est dans
 # le sous-dossier `aspha_pro/` du clone (cf. racine du repo). On détecte
-# automatiquement où se trouve `backend/` pour rester compatible avec
-# l'arborescence officielle du clone (`$HOME/aspha_pro/aspha_pro/`) sans
-# casser une éventuelle structure aplatie manuelle.
-if [ -d "$APP_DIR/aspha_pro/backend" ] && [ ! -d "$APP_DIR/backend" ]; then
+# automatiquement où se trouve le VRAI Laravel en cherchant un composer.json
+# (et pas juste un dossier `backend/` — un dossier vide ou résiduel suffirait
+# à induire la mauvaise détection en erreur).
+if [ -f "$APP_DIR/aspha_pro/backend/composer.json" ]; then
   APP_DIR="$APP_DIR/aspha_pro"
 fi
 
