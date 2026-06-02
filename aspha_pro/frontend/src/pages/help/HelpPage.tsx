@@ -141,10 +141,12 @@ export function HelpPage() {
         description="Tous les guides d'utilisation de l'ERP Aspha. Cherche par mot-clé ou parcours par catégorie."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 h-[80vh]">
-        {/* Sidebar */}
-        <Card className="overflow-hidden flex flex-col">
-          <div className="p-3 border-b space-y-2">
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 h-[80vh] min-h-0">
+        {/* Sidebar — pareil que le contenu : `min-h-0` sur Card + ScrollArea
+            pour que le scroll s'enclenche quand toutes les catégories sont
+            dépliées (48 articles ne tiennent pas en hauteur 80vh). */}
+        <Card className="overflow-hidden flex flex-col min-h-0">
+          <div className="p-3 border-b space-y-2 shrink-0">
             <div className="relative">
               <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -167,7 +169,7 @@ export function HelpPage() {
               )}
             </div>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-2 space-y-1">
               {loadingList && (
                 <>
