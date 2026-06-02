@@ -228,9 +228,11 @@ export function HelpPage() {
           </ScrollArea>
         </Card>
 
-        {/* Contenu */}
-        <Card className="overflow-hidden">
-          <ScrollArea className="h-full">
+        {/* Contenu — `flex flex-col` + `flex-1 min-h-0` sur le ScrollArea pour
+            qu'il prenne effectivement la hauteur du grid row (sinon h-full
+            résout à `auto` et le contenu déborde sans scrollbar). */}
+        <Card className="overflow-hidden flex flex-col min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
             <CardContent className="p-8">
               {loadingArticle && activeSlug && (
                 <div className="space-y-3">
