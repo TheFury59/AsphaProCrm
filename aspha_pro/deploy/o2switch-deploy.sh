@@ -19,13 +19,29 @@
 set -euo pipefail
 
 APP_DIR="$HOME/aspha_pro"
+
+# Le dépôt GitHub a une structure imbriquée : le code Laravel/React est dans
+# le sous-dossier `aspha_pro/` du clone (cf. racine du repo). On détecte
+# automatiquement où se trouve `backend/` pour rester compatible avec
+# l'arborescence officielle du clone (`$HOME/aspha_pro/aspha_pro/`) sans
+# casser une éventuelle structure aplatie manuelle.
+if [ -d "$APP_DIR/aspha_pro/backend" ] && [ ! -d "$APP_DIR/backend" ]; then
+  APP_DIR="$APP_DIR/aspha_pro"
+fi
+
 BACKEND="$APP_DIR/backend"
 FRONTEND="$APP_DIR/frontend"
 
+echo "==> Détection : APP_DIR=$APP_DIR"
 cd "$APP_DIR"
 
 echo "==> 1/8 — git pull"
-git pull --ff-only origin main
+# Le `git pull` doit être lancé depuis la racine du dépôt, pas depuis le
+# sous-dossier `aspha_pro/`. On remonte d'un niveau si on a auto-détecté
+# l'imbrication.
+GIT_ROOT="$APP_DIR"
+[ -d "$APP_DIR/../.git" ] && GIT_ROOT="$(dirname "$APP_DIR")"
+(cd "$GIT_ROOT" && git pull --ff-only origin main)
 
 echo "==> 2/8 — composer install (prod, no-dev)"
 cd "$BACKEND"
