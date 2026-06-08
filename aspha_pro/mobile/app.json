@@ -13,7 +13,15 @@
       "bundleIdentifier": "fr.asphapro.mobile"
     },
     "android": {
-      "package": "fr.asphapro.mobile"
+      "package": "fr.asphapro.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro"
