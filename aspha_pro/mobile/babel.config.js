@@ -3,9 +3,9 @@ module.exports = function (api) {
   return {
     presets: [["babel-preset-expo", { jsxImportSource: "react" }]],
     plugins: [
-      // expo-router/babel is included in babel-preset-expo since SDK 50+,
-      // so it's no longer required as a standalone plugin.
-      "react-native-reanimated/plugin",
+      // SDK 54 + Reanimated 4 : le plugin babel n'est plus nécessaire
+      // (Reanimated 4 utilise un Metro transformer). On garde la liste
+      // de plugins vide pour permettre un ajout futur sans réécrire.
     ],
   };
 };

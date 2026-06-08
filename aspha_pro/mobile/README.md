@@ -1,12 +1,12 @@
 # Aspha Pro — Mobile
 
-App mobile (iOS + Android) compagnon du CRM Aspha Pro. Construite avec Expo SDK 53 +
-Expo Router + TypeScript strict.
+App mobile (iOS + Android) compagnon du CRM Aspha Pro. Construite avec Expo SDK 54 +
+Expo Router 6 + TypeScript strict.
 
 ## Stack
 
-- Expo SDK 53 (managed workflow)
-- Expo Router 5 (file-based routing — dossier `app/`)
+- Expo SDK 54 (managed workflow, React Native 0.81, React 19.1)
+- Expo Router 6 (file-based routing — dossier `app/`)
 - TypeScript strict
 - `@tanstack/react-query` pour la donnée serveur
 - `zustand` pour le store auth client
