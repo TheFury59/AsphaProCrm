@@ -24,6 +24,8 @@ export default function IntervenantLayout() {
         name="planning"
         options={{
           title: "Planning",
+          // Header custom dans planning.tsx (titre + sous-titre + bouton today/refresh).
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
         }}
       />
@@ -53,6 +55,15 @@ export default function IntervenantLayout() {
         options={{
           title: "Profil",
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+        }}
+      />
+      {/* Route detail RDV : accessible par push depuis le planning, masquee de la
+          tab bar (href: null) et avec son propre header (titre dynamique). */}
+      <Tabs.Screen
+        name="rdv/[id]"
+        options={{
+          href: null,
+          title: "Detail du RDV",
         }}
       />
     </Tabs>

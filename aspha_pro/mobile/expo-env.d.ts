@@ -1,8 +1,3 @@
-/// <reference types="expo-router/types" />
+/// <reference types="expo/types" />
 
-// Declares EXPO_PUBLIC_* env vars used at runtime.
-declare namespace NodeJS {
-  interface ProcessEnv {
-    EXPO_PUBLIC_API_URL?: string;
-  }
-}
+// NOTE: This file should not be edited and should be in your git ignore
