@@ -209,7 +209,7 @@ export default function RdvDetailScreen() {
   // Loading : le cache est en cours d'hydration depuis le planning ; on attend.
   if (query.isLoading) {
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.centered}>
           <Text style={styles.subtleMessage}>Chargement…</Text>
         </View>
@@ -219,7 +219,7 @@ export default function RdvDetailScreen() {
 
   if (!event) {
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.centered}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
           <Text style={styles.notFoundTitle}>RDV introuvable</Text>
@@ -244,7 +244,7 @@ export default function RdvDetailScreen() {
   const addr = event.client.address;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* ============== HEADER ============== */}
         <View style={styles.headerBlock}>
