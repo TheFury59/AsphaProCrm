@@ -340,8 +340,11 @@ class TelemanagementController extends Controller
         if ($e = $request->integer('employee_id')) $q->where('employee_id', $e);
         if ($et = $request->query('event_type')) $q->where('event_type', $et);
 
+        // Réponse en tableau plat (le hook useCheckinLogs front attend
+        // `CheckinLog[]`, pas un payload paginé). `per_page` joue le rôle
+        // de `limit`.
         $perPage = $request->integer('per_page') ?: 50;
-        return ['data' => $q->paginate($perPage)];
+        return ['data' => $q->limit($perPage)->get()];
     }
 
     public function listCheckins(Request $request, Intervention $intervention)
