@@ -59,3 +59,62 @@ export type ApiErrorBody = {
   message?: string;
   errors?: Record<string, string[]>;
 };
+
+// === TICKETS / SIGNALEMENTS ===
+// Le backend ne distingue pas « ticket » de « signalement » : c'est la
+// meme entite ClientRequest, mais avec un champ `type` qui differencie
+// reclamation / signalement / reassort.
+export type TicketType = "complaint" | "problem_report" | "consumable_reorder";
+export type TicketPriority = "low" | "normal" | "high" | "urgent";
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+
+export type TicketClientCompany = {
+  id: number;
+  client_id: number;
+  company_name: string;
+  photo: string | null;
+  updated_at: string;
+};
+
+export type TicketClient = {
+  id: number;
+  code: string;
+  company?: TicketClientCompany | null;
+};
+
+export type Ticket = {
+  id: number;
+  client_id: number;
+  type: TicketType;
+  subject: string;
+  body: string | null;
+  status: TicketStatus;
+  priority: TicketPriority;
+  created_by_user_id: number;
+  created_at: string;
+  updated_at: string;
+  client?: TicketClient | null;
+};
+
+export type TicketMessage = {
+  id: number;
+  client_request_id: number;
+  sender_id: number;
+  body: string;
+  created_at: string;
+  sender: { id: number; name: string } | null;
+};
+
+export type MyClient = {
+  id: number;
+  code: string;
+  company?: TicketClientCompany | null;
+};
+
+export type CreateTicketRequest = {
+  client_id: number;
+  type: TicketType;
+  subject: string;
+  body?: string | null;
+  priority?: TicketPriority;
+};

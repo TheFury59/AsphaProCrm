@@ -40,12 +40,19 @@ export default function IntervenantLayout() {
         name="signalements"
         options={{
           title: "Signalements",
+          // Le dossier signalements/ contient index/new/[id] ; les sous-pages
+          // ont leur propre header configuré via Stack.Screen options.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => <Ionicons name="warning-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="messagerie"
         options={{
+          // Tab masquée en V1 : toute la communication passe par les fils de
+          // signalements. On la garde dans le code pour V2 (DM directe avec
+          // les admins / collègues, hors tickets).
+          href: null,
           title: "Messages",
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={color} />,
         }}
