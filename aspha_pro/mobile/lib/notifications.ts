@@ -15,11 +15,18 @@
 
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
 import { router } from "expo-router";
 
 import { api } from "./api";
+
+// Expo Go ne supporte plus les push Android depuis SDK 53. Pour les vrais
+// push, il faut un dev build / preview build EAS. On détecte le mode Expo Go
+// pour skip l'enregistrement proprement (les notifs in-app via cloche
+// continuent de fonctionner, c'est juste les push système qui sont muettes).
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // === Foreground display ===
 // Affiche la bannière + son + entrée liste quand l'app est ouverte.
@@ -62,6 +69,14 @@ async function ensureAndroidChannels(): Promise<void> {
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
     console.warn("[push] Skip — pas un device physique");
+    return null;
+  }
+
+  if (isExpoGo) {
+    // Expo Go ≥ SDK 53 : pas de push remote. On ne tente pas l'enregistrement
+    // pour éviter le bruit de logs ; on continue à recevoir les notifs in-app
+    // via le centre de notif (cloche).
+    console.info("[push] Expo Go détecté — push remote désactivées (passe en dev build EAS pour activer).");
     return null;
   }
 
@@ -112,6 +127,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
  *     notif pour l'instant (à enrichir au fil des modules mobiles).
  */
 export function setupNotificationTapListener(): Notifications.EventSubscription {
+  // En Expo Go on attache quand même le listener (pas de risque), il ne sera
+  // simplement jamais déclenché puisqu'aucune push n'arrive.
   return Notifications.addNotificationResponseReceivedListener((response) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = response.notification.request.content.data as any;
