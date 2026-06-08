@@ -16,7 +16,6 @@ import { Slot, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import * as SplashScreen from "expo-splash-screen";
 import Toast from "react-native-toast-message";
 
 import { bindAuthBridge, useAuthStore } from "@/stores/auth";
@@ -24,10 +23,11 @@ import { colors } from "@/lib/theme";
 import { toastConfig } from "@/components/ui/Toast";
 import type { UserRole } from "@/types/api";
 
-// Garde la splash visible tant que l'hydration n'est pas finie.
-void SplashScreen.preventAutoHideAsync().catch(() => {
-  // no-op : si l'API n'est pas dispo (web par ex.) on continue silencieusement.
-});
+// NB : on n'utilise pas `expo-splash-screen` programmatiquement pour
+// l'instant — Expo gère le splash via `app.json` (image + couleur)
+// jusqu'à ce que le bundle JS soit prêt. On ajoutera le contrôle fin
+// (cacher manuellement après l'hydration auth) dans un sprint ultérieur
+// si la transition visuelle n'est pas assez fluide.
 
 // React Query : config conservative pour mobile (peu de refetch).
 const queryClient = new QueryClient({
@@ -60,12 +60,7 @@ function AuthGate() {
     void hydrate();
   }, [hydrate]);
 
-  // Cache la splash des qu'on a une decision a prendre.
-  useEffect(() => {
-    if (status !== "idle" && status !== "hydrating") {
-      void SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [status]);
+  // (Splash : géré par Expo via app.json, voir commentaire en haut de fichier.)
 
   // Gate de navigation.
   useEffect(() => {
