@@ -22,6 +22,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -99,7 +100,7 @@ async function getCurrentPositionWithTimeout(
 // Ecran
 // ============================================================
 
-type Phase = "scanning" | "submitting" | "success" | "error";
+type Phase = "scanning" | "manual" | "submitting" | "success" | "error";
 
 export default function BadgeageScreen() {
   const router = useRouter();
@@ -120,6 +121,8 @@ export default function BadgeageScreen() {
   const [eventType, setEventType] = useState<BadgeEventType>(initialEventType);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [result, setResult] = useState<BadgeResponseData | null>(null);
+  // Saisie manuelle : valeur de l'input + submit en cours.
+  const [manualCode, setManualCode] = useState<string>("");
 
   // Debounce du scanner : ref synchrone pour bloquer le 2eme tick d'un meme scan
   // (cf. lessons.md 2026-05-19 — useState async laisse passer le double-fire
@@ -196,24 +199,13 @@ export default function BadgeageScreen() {
   // Handlers
   // ============================================================
 
-  const onBarcodeScanned = useCallback(
-    async (event: BarcodeScanningResult) => {
-      if (scanLockRef.current) return;
-      if (phase !== "scanning") return;
-
-      // Lock IMMEDIAT (avant tout await) pour empecher le double-fire.
-      scanLockRef.current = true;
-      setPhase("submitting");
-
-      const qrCode = event.data?.trim();
-      if (!qrCode) {
-        showToast("QR code illisible, réessaie", "error");
-        setPhase("scanning");
-        scanLockRef.current = false;
-        return;
-      }
-
-      // Haptic medium : confirme au user que le scan a ete detecte.
+  // Helper unique : POST badge avec un qr_code donne (scan OU manuel).
+  // Gere haptic, GPS, mutation, transitions de phase, toast d'erreur.
+  // Le caller a la responsabilite de poser scanLockRef et setPhase("submitting")
+  // AVANT d'appeler ce helper s'il vient d'un scan camera (anti double-fire).
+  const submitBadge = useCallback(
+    async (qrCode: string) => {
+      // Haptic medium : confirme au user que la soumission a commence.
       try {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } catch {
@@ -255,8 +247,55 @@ export default function BadgeageScreen() {
         setPhase("error");
       }
     },
-    [eventType, interventionId, locationGranted, mutation, phase],
+    [eventType, interventionId, locationGranted, mutation],
   );
+
+  const onBarcodeScanned = useCallback(
+    async (event: BarcodeScanningResult) => {
+      if (scanLockRef.current) return;
+      if (phase !== "scanning") return;
+
+      // Lock IMMEDIAT (avant tout await) pour empecher le double-fire.
+      scanLockRef.current = true;
+      setPhase("submitting");
+
+      const qrCode = event.data?.trim();
+      if (!qrCode) {
+        showToast("QR code illisible, réessaie", "error");
+        setPhase("scanning");
+        scanLockRef.current = false;
+        return;
+      }
+
+      await submitBadge(qrCode);
+    },
+    [phase, submitBadge],
+  );
+
+  // Bascule scan camera ↔ saisie manuelle (fallback si camera HS / refusee).
+  const onOpenManual = useCallback(() => {
+    setManualCode("");
+    setErrorMessage("");
+    setPhase("manual");
+    scanLockRef.current = false;
+  }, []);
+
+  const onCancelManual = useCallback(() => {
+    setManualCode("");
+    setPhase("scanning");
+    scanLockRef.current = false;
+  }, []);
+
+  const onSubmitManual = useCallback(async () => {
+    // Validation au clic (pas de submit disabled metier).
+    const code = manualCode.trim();
+    if (!code) {
+      showToast("Saisis le code du QR pour valider", "error");
+      return;
+    }
+    setPhase("submitting");
+    await submitBadge(code);
+  }, [manualCode, submitBadge]);
 
   const onRetry = useCallback(() => {
     setErrorMessage("");
@@ -324,7 +363,63 @@ export default function BadgeageScreen() {
               <Button label="Ouvrir les réglages" onPress={onOpenSettings} />
             )}
             <View style={{ height: spacing.sm }} />
+            <Button
+              label="Saisir le code à la main"
+              onPress={onOpenManual}
+              variant="outline"
+            />
+            <View style={{ height: spacing.sm }} />
             <Button label="Retour" onPress={onClose} variant="ghost" />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 2bis. Mode saisie manuelle (fallback caméra HS / refusée / pas pratique)
+  if (phase === "manual") {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.manualScreen}>
+          <Ionicons name="keypad-outline" size={56} color={colors.primary} />
+          <Text style={styles.permissionTitle}>Saisie manuelle</Text>
+          <Text style={styles.permissionBody}>
+            Saisis le code inscrit sous le QR du site d'intervention (généralement 8 caractères,
+            chiffres et lettres).
+          </Text>
+
+          <View style={styles.manualInputBlock}>
+            <Text style={styles.manualLabel}>Code QR</Text>
+            <TextInput
+              value={manualCode}
+              onChangeText={(text) => setManualCode(text.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
+              placeholder="ASPHA-XXXX"
+              placeholderTextColor={colors.textMuted}
+              style={styles.manualInput}
+              returnKeyType="go"
+              onSubmitEditing={() => void onSubmitManual()}
+            />
+            <Text style={styles.manualHint}>
+              {eventTypeLabel(eventType)}
+              {interventionId ? ` · RDV #${interventionId}` : ""}
+            </Text>
+          </View>
+
+          <View style={styles.permissionActions}>
+            <Button
+              label="Valider le badgeage"
+              onPress={() => void onSubmitManual()}
+              loading={mutation.isPending}
+            />
+            <View style={{ height: spacing.sm }} />
+            {cameraPermission.granted && (
+              <Button label="Retour au scan" onPress={onCancelManual} variant="outline" />
+            )}
+            <View style={{ height: spacing.sm }} />
+            <Button label="Annuler" onPress={onClose} variant="ghost" />
           </View>
         </View>
       </SafeAreaView>
@@ -434,8 +529,8 @@ export default function BadgeageScreen() {
         </View>
       </View>
 
-      {/* Footer info / statut */}
-      <View style={styles.overlayFooter} pointerEvents="none">
+      {/* Footer info / statut + bouton saisie manuelle (fallback) */}
+      <View style={styles.overlayFooter} pointerEvents="box-none">
         {phase === "submitting" ? (
           <View style={styles.footerCenter}>
             <ActivityIndicator color={colors.textInverse} />
@@ -451,6 +546,16 @@ export default function BadgeageScreen() {
                 GPS désactivé · le badge sera enregistré sans position
               </Text>
             ) : null}
+            <Pressable
+              onPress={onOpenManual}
+              style={({ pressed }) => [
+                styles.manualLink,
+                pressed && styles.manualLinkPressed,
+              ]}
+            >
+              <Ionicons name="keypad-outline" size={18} color={colors.textInverse} />
+              <Text style={styles.manualLinkText}>Saisir le code à la main</Text>
+            </Pressable>
           </>
         )}
       </View>
@@ -505,6 +610,67 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     alignSelf: "stretch",
     paddingHorizontal: spacing.xl,
+  },
+
+  // === Saisie manuelle (fallback) ===
+  manualScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    paddingTop: spacing.xl * 2,
+    paddingHorizontal: spacing.xl,
+  },
+  manualInputBlock: {
+    alignSelf: "stretch",
+    marginTop: spacing.xl,
+  },
+  manualLabel: {
+    fontSize: typography.sm,
+    fontWeight: "600",
+    color: colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs,
+  },
+  manualInput: {
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 22,
+    fontWeight: "700",
+    color: colors.text,
+    letterSpacing: 2,
+    textAlign: "center",
+  },
+  manualHint: {
+    marginTop: spacing.xs,
+    fontSize: typography.sm,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  manualLink: {
+    marginTop: spacing.md,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+  },
+  manualLinkPressed: {
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  manualLinkText: {
+    color: colors.textInverse,
+    fontSize: typography.base,
+    fontWeight: "600",
+    marginLeft: spacing.xs,
   },
 
   // === Header overlay (au-dessus de la camera) ===
