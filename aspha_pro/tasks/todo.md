@@ -1,5 +1,177 @@
 # Aspha Pro — Todo
 
+## 📱 2026-06-02 — App mobile Aspha Pro (PLAN — en attente de validation)
+
+> Décisions cliente :
+> - **Audience** : intervenants + clients (deux flows dans la même app, switch au login selon le rôle).
+> - **Plateformes** : iOS + Android dès la V1.
+> - **Distribution V1** : test interne via Expo Go (QR pour lancer l'app) + APK Android direct. Pas de stores officiels au début (on les ajoutera quand le test cliente sera validé → comptes Apple Developer $99/an + Google Play $25 + 1-2 sem. de review).
+> - **Backend** : ERP Laravel à `https://asphapro-erp.fr` reste la seule source de vérité ; l'app consomme l'API existante via tokens Sanctum.
+
+### ARCHITECTURE
+- **Stack** : React Native + Expo SDK 53 (managed workflow), TypeScript strict
+- **Navigation** : `@react-navigation/native-stack` + bottom tabs
+- **State serveur** : `@tanstack/react-query` (même hooks pattern que le web — possible code-share via package `@aspha/shared`)
+- **State client** : Zustand pour auth (token + user) — réutilise le pattern web
+- **Auth** : Sanctum Personal Access Tokens (et NON cookies — incompatible mobile). 2 nouveaux endpoints backend à ajouter :
+  - `POST /api/v1/mobile/login` : `{email, password, device_name}` → `{token, user}`
+  - `POST /api/v1/mobile/logout` : invalide le token courant
+- **Stockage token** : `expo-secure-store` (Keychain iOS / Keystore Android)
+- **HTTP client** : `axios` avec interceptor qui ajoute `Authorization: Bearer {token}` + gère 401 → relogin
+- **Push notifs** : `expo-notifications` (gère APNs + FCM en abstraction). Backend dispatch via API Expo Push (gratuit, illimité).
+- **Scan QR** : `expo-camera` avec `BarCodeScanner`
+- **GPS** : `expo-location` (proof of presence au badgeage, facultatif)
+- **Bio auth** : `expo-local-authentication` (Face ID / Touch ID / empreinte) — pour ouverture rapide après 1re connexion
+- **i18n** : tout en français hardcodé V1 (pas de besoin multi-langue cliente)
+- **Theming** : 2 thèmes (clair par défaut + sombre auto), couleurs reprises du gradient Aspha (vert + bleu)
+
+### STRUCTURE DU REPO
+```
+aspha_pro/
+├── backend/                 # Laravel — existant
+├── frontend/                # React web — existant
+├── mobile/                  # ← NOUVEAU dossier
+│   ├── app/                 # routes Expo Router (file-based)
+│   │   ├── (auth)/
+│   │   │   ├── login.tsx
+│   │   │   └── change-password.tsx
+│   │   ├── (intervenant)/
+│   │   │   ├── _layout.tsx        # bottom tabs intervenant
+│   │   │   ├── planning.tsx
+│   │   │   ├── rdv/[id].tsx
+│   │   │   ├── badgeage.tsx       # scan QR
+│   │   │   ├── signalements/...
+│   │   │   ├── messagerie/...
+│   │   │   ├── documents.tsx
+│   │   │   └── profil.tsx
+│   │   ├── (client)/
+│   │   │   ├── _layout.tsx        # bottom tabs client
+│   │   │   ├── index.tsx          # accueil
+│   │   │   ├── devis/...
+│   │   │   ├── factures/...
+│   │   │   ├── prestations.tsx
+│   │   │   ├── demandes/...
+│   │   │   └── documents.tsx
+│   │   └── _layout.tsx            # root layout (auth gate, role router)
+│   ├── components/                # composants UI partagés (Button, Card, …)
+│   ├── hooks/                     # use-auth, use-planning, use-tickets, …
+│   ├── lib/
+│   │   ├── api.ts                 # axios + interceptor
+│   │   ├── secure-store.ts        # wrapper expo-secure-store
+│   │   └── notifications.ts       # setup expo-notifications
+│   ├── stores/
+│   │   └── auth.ts                # Zustand
+│   ├── types/
+│   │   └── api.ts                 # types partagés avec le web (copie)
+│   ├── app.json                   # config Expo
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── babel.config.js
+└── README.md
+```
+
+### SPRINTS
+
+#### Sprint P0-1 — Setup + Auth (1-2 jours)
+- [ ] `mobile/` : init Expo SDK 53 avec template TS Expo Router
+- [ ] Backend : ajout des 2 endpoints `mobile/login` + `mobile/logout` (Sanctum tokens) + tests tinker
+- [ ] LoginScreen : email + mdp + bouton « Se souvenir de moi » (= biométrique au prochain lancement)
+- [ ] Auth Zustand store + secure-store persistance
+- [ ] Axios interceptor (token + 401 redirect login)
+- [ ] Root layout : auth gate qui route selon `user.role` (intervenant → `/intervenant/planning`, client → `/client/index`)
+- [ ] ChangePasswordScreen (réutilise endpoint web existant `PATCH /auth/me`) + flow forcing identique au web
+
+#### Sprint P0-2 — Intervenant : planning + détail RDV (2 jours)
+- [ ] Tab layout intervenant (Planning / Badgeage / Signalements / Messages / Profil)
+- [ ] `PlanningScreen` : liste verticale des RDV groupés par jour (aujourd'hui + 7 jours suivants). Card par RDV : heure, client, adresse, statut couleur (5 couleurs comme le web : rouge/orange/bleu/vert/violet)
+- [ ] Pull-to-refresh (React Query refetch)
+- [ ] `RdvDetailScreen` : adresse + map link (ouvre Maps natif) + client + prestations + consignes intervenants + note interne + bouton « Lancer le badgeage »
+- [ ] Endpoint backend : `/extranet/intervenant/planning` existant — pas de changement (déjà sans prix grâce au F1)
+
+#### Sprint P0-3 — Badgeage QR + GPS (1-2 jours)
+- [ ] `BadgeageScreen` : `<CameraView>` plein écran avec viseur QR
+- [ ] Scan → POST `/telemanagement/badge` avec le qr_code_id décodé + GPS optionnel
+- [ ] Feedback haptique (vibration) + son + écran de confirmation
+- [ ] Endpoint backend : déjà existant (cf. `TelemanagementController` + `Checkin`)
+- [ ] Permission caméra + permission GPS (avec explication claire pour l'utilisateur)
+- [ ] Mode hors-ligne minimal : si pas de réseau, on stocke localement + on réessaie
+
+#### Sprint P0-4 — Push notifications (1 jour)
+- [ ] Setup `expo-notifications` + récupération du `expoPushToken` à l'install
+- [ ] Backend : nouvelle colonne `users.expo_push_token` (migration) + endpoint `POST /api/v1/mobile/push-token` pour enregistrer
+- [ ] Backend : rewrite `SendPushNotificationJob` pour envoyer via API Expo Push (au lieu du stub actuel) — POST https://exp.host/--/api/v2/push/send
+- [ ] Tests : émettre une notif `intervention_assigned` → reçue sur le téléphone
+- [ ] Notif `checkin_late` (priority high) → son + vibration accentuée
+
+#### Sprint P1-1 — Intervenant : signalements + messagerie (2 jours)
+- [ ] `SignalementsListScreen` : liste tickets affectés ou créés
+- [ ] `SignalementDetailScreen` : fil de discussion (réutilise `TicketThread` du web, adapté RN)
+- [ ] `CreateSignalementScreen` : sujet + description + priorité
+- [ ] Endpoints extranet intervenant existants (`tickets`, `tickets/{id}/messages`) — pas de changement
+- [ ] `MessagerieScreen` : liste conversations + threads (endpoints `/messaging/*` existants)
+
+#### Sprint P1-2 — Intervenant : documents + profil (1 jour)
+- [ ] `DocumentsScreen` : liste documents intervenant + alerte expiration
+- [ ] Download PDF (ouvre dans le viewer natif via `expo-sharing`)
+- [ ] `ProfilScreen` : infos perso + bouton changer mdp + bouton déconnexion
+
+#### Sprint P1-3 — Client : accueil + devis + factures + demandes (2 jours)
+- [ ] Tab layout client (Accueil / Devis / Factures / Demandes / Profil)
+- [ ] `ClientHomeScreen` : stats (devis à valider, factures, prestations actives, demandes ouvertes)
+- [ ] `DevisListScreen` + `DevisDetailScreen` avec actions valider/refuser (endpoints `/extranet/client/quotes/{id}/accept|refuse`)
+- [ ] `FacturesListScreen` + download PDF
+- [ ] `DemandesListScreen` + création + fil de discussion
+- [ ] Tous endpoints `/extranet/client/*` existants
+
+#### Sprint P1-4 — Documents extranet (client + intervenant) (1 jour)
+- [ ] `DocumentsScreen` côté client + côté intervenant
+- [ ] Liste + download + filtre par audience (déjà géré côté backend)
+
+#### Sprint P2 — Polish + distribution (3-4 jours)
+- [ ] Mode hors-ligne avancé : cache local du planning du jour
+- [ ] Biométrique : Face ID / empreinte au lancement
+- [ ] Icône d'app + splash screen aux couleurs Aspha
+- [ ] Réglages dark mode auto
+- [ ] Tests sur 3-4 modèles iPhone + Android
+- [ ] **Distribution** :
+  - Expo Go (QR pour démarrage rapide pendant les tests)
+  - Build APK Android signé (Expo Application Services → eas build)
+  - Build IPA iOS (nécessite compte Apple Developer — décision V2)
+
+### BACKEND — CHANGEMENTS NÉCESSAIRES
+- [ ] Endpoints mobile auth :
+  - `POST /api/v1/mobile/login` (email + password + device_name → token Sanctum)
+  - `POST /api/v1/mobile/logout` (invalide le token)
+  - `POST /api/v1/mobile/push-token` (enregistre l'expoPushToken)
+- [ ] Colonne `users.expo_push_token` (string nullable, migration)
+- [ ] `SendPushNotificationJob` réécrit pour Expo Push API
+- [ ] CORS : ajouter le scheme mobile (`exp://` en dev, et la prod app via headers)
+- [ ] Rate limiting `mobile/login` : 10/min/IP (légèrement plus permissif que le web vu les reconnexions)
+
+### POINTS D'ATTENTION
+- **Tokens longs** : configurer `personal_access_tokens.expires_at` à NULL (token persistant) — l'app ne demande le re-login que si l'utilisateur logout volontairement.
+- **Token revocation** : si l'admin désactive un user, ses tokens doivent être révoqués → ajouter dans `UsersController::update` un `$user->tokens()->delete()` si `status` passe à `inactive`.
+- **Tests intervenant terrain** : à valider en condition réelle (un intervenant pendant une vraie tournée).
+- **iOS** : sans compte Apple Developer, on ne peut faire QUE des builds Expo Go (pas d'IPA installable). Décision à prendre avant Sprint P2.
+
+### LIVRABLES DE FIN DE V1 MOBILE
+- App `mobile/` complète sur le repo
+- README mobile/ : install local + build APK + test sur Expo Go
+- Backend : 3 nouveaux endpoints + 1 migration + SendPushNotificationJob fonctionnel
+- Tests : login intervenant + client OK, badgeage QR OK, push notif reçue OK
+- Documentation utilisateur : 2-3 articles dans `/aide` côté ERP (« Installer l'app mobile »)
+
+### TIMING ESTIMÉ
+- P0 (Sprint 1-4) : **6-8 jours** de dev → MVP testable intervenant
+- P1 (Sprint 1-4) : **6-7 jours** → complet intervenant + client
+- P2 : **3-4 jours** → polish + distribution
+- **Total V1 mobile** : ~15-20 jours de dev concentrés
+
+### Review (à remplir après validation et livraison)
+_(à remplir)_
+
+---
+
 ## 📂 2026-05-22 — H : Refonte système Documents (LIVRÉ)
 
 ### A. Schéma

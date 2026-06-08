@@ -190,6 +190,16 @@ class UsersController extends Controller
 
         $user->update($data);
 
+        // Désactivation : on révoque les tokens Sanctum mobile + push token Expo.
+        // Sinon un user désactivé pourrait continuer à utiliser l'app via son
+        // Bearer token existant (faille de sécurité).
+        if (($data['status'] ?? null) === 'inactive') {
+            $user->tokens()->delete();
+            if ($user->expo_push_token) {
+                $user->forceFill(['expo_push_token' => null])->save();
+            }
+        }
+
         return ['data' => $user->fresh()->only(['id', 'name', 'email', 'status'])];
     }
 

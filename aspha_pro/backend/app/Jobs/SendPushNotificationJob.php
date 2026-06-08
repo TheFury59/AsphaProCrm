@@ -2,32 +2,35 @@
 
 namespace App\Jobs;
 
-use App\Models\DeviceToken;
 use App\Models\Notification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Envoi push via Firebase Cloud Messaging (FCM).
+ * Envoi push via Expo Push Notification Service.
  *
- * audit 2026-05-19 — désactivation propre de la feature plutôt que de crasher :
- *   - Si FCM_SERVER_KEY vide → log INFO "skipped" et return (mode dev/staging).
- *   - Sinon → tentative d'envoi via HTTP v1 (TODO Firebase Admin SDK pour OAuth2),
- *     mais ne crashe jamais si endpoint en erreur. Le job ne retry que sur
- *     exception transport, pas sur 4xx/5xx du provider.
+ * Pourquoi Expo plutôt que FCM brut ?
+ *  - L'app mobile Aspha est faite avec Expo (managed workflow).
+ *  - Expo gère APNs (iOS) + FCM (Android) en un seul endpoint REST gratuit
+ *    et illimité (https://exp.host/--/api/v2/push/send), sans avoir à
+ *    générer des access tokens OAuth2 ni stocker un service-account JSON.
+ *  - Permet de basculer plus tard vers FCM v1 direct si on sort du
+ *    managed workflow.
  *
- * Device token : lu depuis device_tokens (1ère ligne pour l'user). Si table
- * vide (cas par défaut au déploiement), log "no device token" et return.
- *
- * NB : l'ancien endpoint https://fcm.googleapis.com/fcm/send est DÉPRÉCIÉ
- * depuis juin 2024. La vraie migration nécessite Firebase Admin SDK pour
- * générer un access token OAuth2 + endpoint v1
- * (https://fcm.googleapis.com/v1/projects/{project-id}/messages:send).
- * Marqué TODO ci-dessous — pas critique tant que l'app mobile n'est pas livrée.
+ * Comportement :
+ *  - Lit le `expo_push_token` directement sur `users` (1 token par user
+ *    actif, suffit pour V1 — voir migration 2026_06_02_100000).
+ *  - Si le token est absent ou invalide → log INFO "skipped" et return.
+ *  - Mappe la priorité `high`/`critical` → son par défaut + priority `high`
+ *    côté Expo (vibration + écran allumé sur Android).
+ *  - Payload data inclut le code de notif + target → permet à l'app
+ *    d'ouvrir directement la bonne page au tap.
+ *  - 3 retries avec backoff exponentiel sur erreur transport.
  */
 class SendPushNotificationJob implements ShouldQueue
 {
@@ -40,55 +43,81 @@ class SendPushNotificationJob implements ShouldQueue
 
     public function handle(): void
     {
-        $notification = Notification::with('user')->find($this->notificationId);
-        if (! $notification || ! $notification->user_id) return;
+        $notification = Notification::with(['user', 'notificationType'])
+            ->find($this->notificationId);
 
-        $serverKey = config('services.fcm.server_key');
+        if (! $notification || ! $notification->user_id) {
+            return;
+        }
 
-        // audit 2026-05-19 — feature désactivée tant que FCM pas configuré.
-        // Le code mort historique passait quand même par un POST vers un endpoint
-        // déprécié + device_token codé en dur à null → 100% des envois échouaient
-        // silencieusement. On préfère un log explicite "skipped" en attendant
-        // la vraie migration HTTP v1 + intégration mobile.
-        if (! $serverKey) {
-            Log::info('[PUSH SKIPPED] FCM not configured (FCM_SERVER_KEY empty)', [
+        $token = $notification->user->expo_push_token ?? null;
+
+        if (! $token || ! str_starts_with($token, 'ExponentPushToken[')) {
+            Log::info('[PUSH SKIPPED] No expo_push_token for user', [
                 'notification_id' => $notification->id,
                 'user_id' => $notification->user_id,
-                'title' => $notification->title,
             ]);
             return;
         }
 
-        // audit 2026-05-19 — lecture du device_token depuis device_tokens.
-        // Table vide au déploiement → on log et on return proprement.
-        $deviceToken = DeviceToken::where('user_id', $notification->user_id)
-            ->latest('id')
-            ->value('token');
+        $priority = $notification->priority ?? 'normal';
+        $isHighPriority = in_array($priority, ['high', 'critical'], true);
 
-        if (! $deviceToken) {
-            Log::info("[PUSH SKIPPED] no device_token for user #{$notification->user_id}", [
+        $payload = [
+            'to' => $token,
+            'title' => $notification->title ?? 'Aspha Pro',
+            'body' => $notification->body ?? '',
+            'data' => [
                 'notification_id' => $notification->id,
-            ]);
-            return;
-        }
+                'code' => $notification->notificationType?->code,
+                'target_type' => $notification->target_type,
+                'target_id' => $notification->target_id,
+                'priority' => $priority,
+            ],
+            // Son par défaut iOS uniquement sur les notifs importantes.
+            'sound' => $isHighPriority ? 'default' : null,
+            // Channel Android — l'app crée un channel "default" + un channel
+            // "critical" avec son et vibration accentuée (configurés côté
+            // expo-notifications dans l'app).
+            'channelId' => $isHighPriority ? 'critical' : 'default',
+            // Priorité de delivery Android : "high" force le réveil de
+            // l'écran ; "normal" est plus économe.
+            'priority' => $isHighPriority ? 'high' : 'normal',
+        ];
 
-        // TODO audit 2026-05-19 — migrer vers FCM HTTP v1 :
-        //   1. Installer firebase/php-jwt + récupérer un service account JSON
-        //   2. Échanger le service account → access_token OAuth2
-        //   3. POST https://fcm.googleapis.com/v1/projects/{project_id}/messages:send
-        //      avec Authorization: Bearer {access_token}
-        //   4. Payload : { "message": { "token": "...", "notification": {...}, "data": {...} } }
-        //
-        // En attendant : on log ce qu'on aurait envoyé, sans appeler l'endpoint
-        // déprécié (qui retourne 404 NotRegistered depuis juin 2024).
-        Log::info("[PUSH PENDING] FCM v1 migration required", [
-            'notification_id' => $notification->id,
-            'user_id' => $notification->user_id,
-            'device_token_preview' => substr($deviceToken, 0, 12) . '…',
-            'title' => $notification->title,
-            'body' => $notification->body,
-            'target_type' => $notification->target_type,
-            'target_id' => $notification->target_id,
-        ]);
+        try {
+            $response = Http::acceptJson()
+                ->timeout(10)
+                ->post('https://exp.host/--/api/v2/push/send', $payload);
+
+            if ($response->failed()) {
+                Log::warning('[PUSH] Expo Push API failed', [
+                    'notification_id' => $notification->id,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                throw new \RuntimeException('Expo Push API error: ' . $response->status());
+            }
+
+            // L'API Expo renvoie un statut par message. Si le token est
+            // invalide (DeviceNotRegistered, InvalidCredentials) on purge
+            // le token côté user pour ne plus tenter à l'avenir.
+            $data = $response->json('data');
+            if (is_array($data) && ($data['status'] ?? null) === 'error') {
+                $errorCode = $data['details']['error'] ?? null;
+                if (in_array($errorCode, ['DeviceNotRegistered', 'InvalidCredentials'], true)) {
+                    $notification->user->forceFill(['expo_push_token' => null])->save();
+                    Log::info('[PUSH] Token invalide purgé', [
+                        'user_id' => $notification->user_id,
+                        'error' => $errorCode,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Push notification #{$notification->id} échouée", [
+                'error' => $e->getMessage(),
+            ]);
+            throw $e; // laisse la queue retry selon $tries/$backoff
+        }
     }
 }

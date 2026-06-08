@@ -21,6 +21,7 @@ class User extends Authenticatable
         'password',
         'status',
         'must_change_password',
+        'expo_push_token',
     ];
 
     protected $hidden = [

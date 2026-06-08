@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\V1\AuthController;
+use App\Http\Controllers\V1\MobileAuthController;
 use App\Http\Controllers\V1\UsersController;
 use App\Http\Controllers\V1\ClientController;
 use App\Http\Controllers\V1\ClientPortalController;
@@ -52,10 +53,20 @@ Route::get('/ping', fn () => [
 // Cf. audit 2026-05-19 (HIGH).
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
+// === App mobile (Sanctum Personal Access Tokens — pas de cookies) ===
+// Login public + rate-limited identique à /login pour bloquer le brute-force.
+Route::post('/mobile/login', [MobileAuthController::class, 'login'])->middleware('throttle:login');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateMe']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // App mobile — endpoints additionnels (logout token courant + enregistrement push token).
+    // /me et /auth/me (web) sont déjà accessibles via Bearer token de toute façon
+    // (Sanctum unifie le guard sur ce groupe), donc l'app mobile s'en sert aussi.
+    Route::post('/mobile/logout', [MobileAuthController::class, 'logout']);
+    Route::post('/mobile/push-token', [MobileAuthController::class, 'pushToken']);
 
     // Référentiels
     Route::get('/referentials/skills', [ReferentialsController::class, 'skills']);
