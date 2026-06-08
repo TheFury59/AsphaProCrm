@@ -402,10 +402,54 @@ export default function BadgeageScreen() {
               returnKeyType="go"
               onSubmitEditing={() => void onSubmitManual()}
             />
-            <Text style={styles.manualHint}>
-              {eventTypeLabel(eventType)}
-              {interventionId ? ` · RDV #${interventionId}` : ""}
-            </Text>
+            {/* Toggle Arrivée / Départ — meme logique que sur le viseur. */}
+            <View style={styles.eventToggleLight}>
+              <Pressable
+                onPress={() => setEventType("arrival")}
+                style={[
+                  styles.eventToggleBtnLight,
+                  eventType === "arrival" && styles.eventToggleBtnActive,
+                ]}
+              >
+                <Ionicons
+                  name="log-in-outline"
+                  size={16}
+                  color={eventType === "arrival" ? colors.textInverse : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.eventToggleTextLight,
+                    eventType === "arrival" && styles.eventToggleTextLightActive,
+                  ]}
+                >
+                  Arrivée
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setEventType("departure")}
+                style={[
+                  styles.eventToggleBtnLight,
+                  eventType === "departure" && styles.eventToggleBtnActive,
+                ]}
+              >
+                <Ionicons
+                  name="log-out-outline"
+                  size={16}
+                  color={eventType === "departure" ? colors.textInverse : colors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.eventToggleTextLight,
+                    eventType === "departure" && styles.eventToggleTextLightActive,
+                  ]}
+                >
+                  Départ
+                </Text>
+              </Pressable>
+            </View>
+            {interventionId ? (
+              <Text style={styles.manualHint}>RDV #{interventionId}</Text>
+            ) : null}
           </View>
 
           <View style={styles.permissionActions}>
@@ -510,13 +554,61 @@ export default function BadgeageScreen() {
         </Pressable>
         <View style={styles.overlayTitleWrap}>
           <Text style={styles.overlayTitle}>Scanner le QR de badgeage</Text>
-          <Text style={styles.overlaySubtitle}>
-            {eventTypeLabel(eventType)}
-            {interventionId != null ? ` · RDV #${interventionId}` : ""}
-          </Text>
+          {interventionId != null ? (
+            <Text style={styles.overlaySubtitle}>RDV #{interventionId}</Text>
+          ) : null}
         </View>
         {/* Spacer pour equilibrer la croix a gauche */}
         <View style={{ width: 26 + spacing.md * 2 }} />
+      </View>
+
+      {/* Toggle Arrivée / Départ — l'intervenant peut basculer le mode
+          avant de scanner, indépendamment de ce qui vient du RDV. */}
+      <View style={styles.eventToggleWrap} pointerEvents="box-none">
+        <View style={styles.eventToggle}>
+          <Pressable
+            onPress={() => setEventType("arrival")}
+            style={[
+              styles.eventToggleBtn,
+              eventType === "arrival" && styles.eventToggleBtnActive,
+            ]}
+          >
+            <Ionicons
+              name="log-in-outline"
+              size={16}
+              color={eventType === "arrival" ? colors.textInverse : "rgba(255,255,255,0.85)"}
+            />
+            <Text
+              style={[
+                styles.eventToggleText,
+                eventType === "arrival" && styles.eventToggleTextActive,
+              ]}
+            >
+              Arrivée
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setEventType("departure")}
+            style={[
+              styles.eventToggleBtn,
+              eventType === "departure" && styles.eventToggleBtnActive,
+            ]}
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={16}
+              color={eventType === "departure" ? colors.textInverse : "rgba(255,255,255,0.85)"}
+            />
+            <Text
+              style={[
+                styles.eventToggleText,
+                eventType === "departure" && styles.eventToggleTextActive,
+              ]}
+            >
+              Départ
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Cadre viseur central */}
@@ -671,6 +763,70 @@ const styles = StyleSheet.create({
     fontSize: typography.base,
     fontWeight: "600",
     marginLeft: spacing.xs,
+  },
+
+  // === Toggle Arrivée / Départ ===
+  eventToggleWrap: {
+    position: "absolute",
+    top: 110,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  eventToggle: {
+    flexDirection: "row",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    borderRadius: radius.full,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  eventToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    gap: 6,
+  },
+  eventToggleBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  eventToggleText: {
+    color: "rgba(255, 255, 255, 0.85)",
+    fontSize: typography.base,
+    fontWeight: "600",
+  },
+  eventToggleTextActive: {
+    color: colors.textInverse,
+  },
+
+  // === Toggle compact (mode saisie manuelle, fond clair) ===
+  eventToggleLight: {
+    flexDirection: "row",
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: "center",
+    marginTop: spacing.md,
+  },
+  eventToggleBtnLight: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    gap: 6,
+  },
+  eventToggleTextLight: {
+    color: colors.textMuted,
+    fontSize: typography.base,
+    fontWeight: "600",
+  },
+  eventToggleTextLightActive: {
+    color: colors.textInverse,
   },
 
   // === Header overlay (au-dessus de la camera) ===
