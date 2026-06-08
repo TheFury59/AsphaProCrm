@@ -34,7 +34,71 @@ class TelemanagementController extends Controller
     public function listQrCodes(Request $request)
     {
         abort_unless($request->user()?->can('telemanagement.badge'), 403);
-        return ['data' => QrCode::with('address')->get()];
+
+        // 2026-06-08 — réponse enrichie : address + client + company.
+        // Adresses polymorphes (`owner_type`/`owner_id`) → on charge l'`owner`
+        // morphTo en limitant aux clients. Le client est ensuite serialisé via
+        // un transformer maison pour aplatir la company.
+        $request->validate([
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'status' => ['nullable', 'in:valid,obsolete,invalid,to_validate'],
+        ]);
+
+        $query = QrCode::query()
+            ->with([
+                'address:id,owner_type,owner_id,address,postal_code,city',
+                'address.owner' => function ($morph) {
+                    // L'owner est polymorphique : on charge la company seulement
+                    // sur les Clients (les autres morphs n'ont pas de company).
+                    $morph->morphWith([
+                        \App\Models\Client::class => [
+                            'company:client_id,company_name',
+                        ],
+                    ]);
+                },
+            ])
+            ->orderByDesc('id');
+
+        if ($clientId = $request->integer('client_id')) {
+            // Joint addresses pour filtrer sur le client owner (morph map = 'client').
+            $query->whereHas('address', function ($q) use ($clientId) {
+                $q->where('owner_type', 'client')->where('owner_id', $clientId);
+            });
+        }
+
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        $rows = $query->get()->map(function (QrCode $qr) {
+            $addr = $qr->address;
+            $client = null;
+            if ($addr && $addr->owner_type === 'client' && $addr->owner instanceof \App\Models\Client) {
+                $owner = $addr->owner;
+                $client = [
+                    'id' => $owner->id,
+                    'code' => $owner->code,
+                    'company_name' => $owner->company?->company_name,
+                ];
+            }
+
+            return [
+                'id' => $qr->id,
+                'code' => $qr->code,
+                'status' => $qr->status,
+                'type' => $qr->type,
+                'expires_at' => $qr->expires_at,
+                'address' => $addr ? [
+                    'id' => $addr->id,
+                    'address' => $addr->address,
+                    'postal_code' => $addr->postal_code,
+                    'city' => $addr->city,
+                    'client' => $client,
+                ] : null,
+            ];
+        });
+
+        return ['data' => $rows];
     }
 
     public function generateQrCode(Request $request)
@@ -222,7 +286,10 @@ class TelemanagementController extends Controller
 
         $data = $request->validate([
             'employee_id' => ['required', 'exists:employees,id'],
-            'intervention_id' => ['required', 'exists:interventions,id'],
+            // 2026-06-08 — passé en nullable : l'admin peut saisir un pointage
+            // sans rattacher à une intervention (cas oubli + intervention non
+            // créée encore, ou pointage à clarifier).
+            'intervention_id' => ['sometimes', 'nullable', 'exists:interventions,id'],
             'checkin_time' => ['nullable', 'date'],
             'checkout_time' => ['nullable', 'date'],
             'comment' => ['nullable', 'string'],
@@ -230,7 +297,7 @@ class TelemanagementController extends Controller
 
         $checkin = Checkin::create([
             'employee_id' => $data['employee_id'],
-            'intervention_id' => $data['intervention_id'],
+            'intervention_id' => $data['intervention_id'] ?? null,
             'checkin_time' => $data['checkin_time'] ?? null,
             'checkout_time' => $data['checkout_time'] ?? null,
             'flag_no_gps' => false, // audit 2026-05-19 — saisie manuelle = pas de GPS attendu
@@ -242,7 +309,7 @@ class TelemanagementController extends Controller
             'is_unrecognized' => false,
             'called_at' => now(),
             'employee_id' => $data['employee_id'],
-            'intervention_id' => $data['intervention_id'],
+            'intervention_id' => $data['intervention_id'] ?? null,
             'comment' => $data['comment'] ?? 'Saisie manuelle',
         ]);
 
@@ -259,6 +326,9 @@ class TelemanagementController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'employee_id' => ['nullable', 'integer'],
+            // 2026-06-08 — filtres ajoutés pour la refonte UI Journal.
+            'event_type' => ['nullable', 'in:arrival,departure,unrecognized'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
         ]);
 
         $q = TelemanagementLog::query()
@@ -268,8 +338,10 @@ class TelemanagementController extends Controller
         if ($f = $request->query('from')) $q->where('called_at', '>=', $f);
         if ($t = $request->query('to')) $q->where('called_at', '<=', $t);
         if ($e = $request->integer('employee_id')) $q->where('employee_id', $e);
+        if ($et = $request->query('event_type')) $q->where('event_type', $et);
 
-        return ['data' => $q->paginate(50)];
+        $perPage = $request->integer('per_page') ?: 50;
+        return ['data' => $q->paginate($perPage)];
     }
 
     public function listCheckins(Request $request, Intervention $intervention)

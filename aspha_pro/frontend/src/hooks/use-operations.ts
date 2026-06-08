@@ -5,13 +5,29 @@ import { api } from "@/lib/api";
 // Télégestion
 // =========================================================================
 
+/**
+ * QR code enrichi par le backend depuis 2026-06-08 :
+ * `address` aplatit l'adresse + le client owner (via morphTo).
+ */
 export type QrCode = {
   id: number;
   code: string;
-  address_id: number | null;
   status: "valid" | "obsolete" | "invalid" | "to_validate";
   type: "qrcode" | "nfc";
   expires_at: string | null; // audit 2026-05-19
+  address?: {
+    id: number;
+    address: string | null;
+    postal_code: string | null;
+    city: string | null;
+    client: {
+      id: number;
+      code: string | null;
+      company_name: string | null;
+    } | null;
+  } | null;
+  /** Compat lecture historique (avant l'enrichissement du backend). */
+  address_id?: number | null;
   generated_at?: string;
   rotated_at?: string | null;
   [k: string]: any;
@@ -39,11 +55,21 @@ export type CheckinLog = {
   [k: string]: any;
 };
 
-export function useQrCodes(params: Record<string, any> = {}) {
+/**
+ * 2026-06-08 — accepte `client_id` et `status` côté backend.
+ */
+export function useQrCodes(
+  params: { client_id?: number | null; status?: string } & Record<string, any> = {},
+) {
+  // On nettoie les clés null/undefined pour ne pas polluer l'URL.
+  const clean: Record<string, any> = {};
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== "") clean[k] = v;
+  });
   return useQuery({
-    queryKey: ["telemanagement", "qr-codes", params],
+    queryKey: ["telemanagement", "qr-codes", clean],
     queryFn: async () => {
-      const { data } = await api.get<{ data: QrCode[] }>("/telemanagement/qr-codes", { params });
+      const { data } = await api.get<{ data: QrCode[] }>("/telemanagement/qr-codes", { params: clean });
       return data.data;
     },
   });
@@ -98,7 +124,8 @@ export function useManualEntry() {
   return useMutation({
     mutationFn: async (payload: {
       employee_id: number;
-      intervention_id: number;
+      // 2026-06-08 — l'intervention devient optionnelle côté backend.
+      intervention_id?: number | null;
       checkin_time?: string | null;
       checkout_time?: string | null;
       comment?: string;
