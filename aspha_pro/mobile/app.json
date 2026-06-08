@@ -22,6 +22,12 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-notifications",
+        {
+          "color": "#dc2626"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Aspha Pro utilise la caméra pour scanner les QR codes de badgeage sur les sites d'intervention."

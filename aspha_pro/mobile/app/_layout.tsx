@@ -21,6 +21,10 @@ import Toast from "react-native-toast-message";
 import { bindAuthBridge, useAuthStore } from "@/stores/auth";
 import { colors } from "@/lib/theme";
 import { toastConfig } from "@/components/ui/Toast";
+import {
+  registerForPushNotifications,
+  setupNotificationTapListener,
+} from "@/lib/notifications";
 import type { UserRole } from "@/types/api";
 
 // NB : on n'utilise pas `expo-splash-screen` programmatiquement pour
@@ -59,6 +63,20 @@ function AuthGate() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // Push notifications : on enregistre le token Expo dès qu'un user est
+  // authentifié, et on écoute le tap sur les notifs (deep link). Le bridge
+  // axios ayant déjà l'access token (cf. bindAuthBridge), le POST sur
+  // /mobile/push-token est authentifié.
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    if (status !== "authenticated" || !userId) return;
+    void registerForPushNotifications();
+    const sub = setupNotificationTapListener();
+    return () => {
+      sub.remove();
+    };
+  }, [status, userId]);
 
   // (Splash : géré par Expo via app.json, voir commentaire en haut de fichier.)
 
