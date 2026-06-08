@@ -1,0 +1,14 @@
+# EAS Build : on ne livre que l'app mobile/ au build.
+#
+# Sans cette exclusion, EAS shallow-clone tout le monorepo et tente de
+# recréer le symlink Laravel `aspha_pro/backend/public/storage` → erreur
+# EPERM sur Windows (création de symlink requiert dev mode / admin).
+#
+# De toute façon, le mobile n'a aucun besoin du backend ni du frontend
+# pour builder — l'API est consommée à runtime via `extra.apiUrl`.
+
+aspha_pro/backend/
+aspha_pro/frontend/
+tasks/
+.brain/
+*.md
