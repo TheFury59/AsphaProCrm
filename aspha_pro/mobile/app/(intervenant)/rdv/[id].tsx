@@ -264,6 +264,18 @@ export default function RdvDetailScreen() {
           </View>
         </View>
 
+        {/* ============== MON BADGEAGE ============== */}
+        <Section title="Mon badgeage">
+          <BadgeStatusRow
+            kind="arrival"
+            time={event.checkin?.checkin_time ?? null}
+          />
+          <BadgeStatusRow
+            kind="departure"
+            time={event.checkin?.checkout_time ?? null}
+          />
+        </Section>
+
         {/* ============== CLIENT ============== */}
         <Section title="Client">
           <Text style={styles.clientName}>{name}</Text>
@@ -379,6 +391,43 @@ function Section({ title, children }: SectionProps) {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.sectionBody}>{children}</View>
+    </View>
+  );
+}
+
+type BadgeStatusRowProps = {
+  kind: "arrival" | "departure";
+  time: string | null;
+};
+
+function BadgeStatusRow({ kind, time }: BadgeStatusRowProps) {
+  const isArrival = kind === "arrival";
+  const done = !!time;
+  const label = isArrival ? "Arrivée" : "Départ";
+  const parsed = time ? parseLocalNaive(time) : null;
+  const displayTime = parsed ? formatTime(parsed) : null;
+  return (
+    <View style={styles.badgeRow}>
+      <View
+        style={[
+          styles.badgeIconWrap,
+          done ? styles.badgeIconWrapDone : styles.badgeIconWrapPending,
+        ]}
+      >
+        <Ionicons
+          name={done ? "checkmark" : isArrival ? "log-in-outline" : "log-out-outline"}
+          size={18}
+          color={done ? "#ffffff" : colors.textMuted}
+        />
+      </View>
+      <View style={styles.badgeTextWrap}>
+        <Text style={styles.badgeLabel}>{label}</Text>
+        <Text style={[styles.badgeValue, done && styles.badgeValueDone]}>
+          {done && displayTime
+            ? `Badgé à ${displayTime}`
+            : `Pas encore badgé${isArrival ? "" : ""}`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -525,6 +574,49 @@ const styles = StyleSheet.create({
     fontSize: typography.base,
     color: colors.text,
   },
+
+  // === Bloc « Mon badgeage » ===
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+  },
+  badgeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeIconWrapDone: {
+    backgroundColor: "#22c55e",
+  },
+  badgeIconWrapPending: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  badgeTextWrap: {
+    flex: 1,
+  },
+  badgeLabel: {
+    fontSize: typography.sm,
+    color: colors.textMuted,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  badgeValue: {
+    fontSize: typography.base,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  badgeValueDone: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+
   addressLine: {
     fontSize: typography.base,
     color: colors.text,
