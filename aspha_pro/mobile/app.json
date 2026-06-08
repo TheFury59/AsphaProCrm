@@ -7,7 +7,9 @@
     "scheme": "aspha",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fr.asphapro.mobile"
@@ -16,11 +18,12 @@
       "package": "fr.asphapro.mobile",
       "versionCode": 1,
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -52,7 +55,18 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://asphapro-erp.fr/api/v1"
+      "apiUrl": "https://asphapro-erp.fr/api/v1",
+      "router": {},
+      "eas": {
+        "projectId": "ddb446c7-e22f-46a8-9804-fb8abca9ab4f"
+      }
+    },
+    "owner": "himelys-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ddb446c7-e22f-46a8-9804-fb8abca9ab4f"
     }
   }
 }
