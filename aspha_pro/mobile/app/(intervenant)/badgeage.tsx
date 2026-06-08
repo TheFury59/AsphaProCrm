@@ -1,12 +1,658 @@
-import { Placeholder } from "@/components/ui/Placeholder";
+// Ecran de badgeage — sprint P0-3.
+//
+// Flow :
+//   1. On lit les params route (`intervention_id` + `event_type` optionnel, defaut `arrival`).
+//   2. On demande la permission camera (bloquant) + GPS (best-effort).
+//   3. CameraView plein ecran + overlay viseur QR.
+//   4. Au 1er scan QR : on debounce immediatement onBarcodeScanned, on tente
+//      de recuperer le GPS (timeout 5s, fallback sans GPS), vibration legere,
+//      puis POST /telemanagement/badge via useBadgeage().
+//   5. Succes -> ecran confirmation plein ecran avec coche + retour planning
+//      / badger le depart (si arrivee).
+//   6. Erreur -> toast + bouton « Reessayer » qui reactive le scan.
+//
+// Le backend derive `employee_id` du user authentifie (cf. modif TelemanagementController).
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  AppState,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import {
+  CameraView,
+  useCameraPermissions,
+  type BarcodeScanningResult,
+} from "expo-camera";
+import * as Location from "expo-location";
+import * as Haptics from "expo-haptics";
+
+import { Button } from "@/components/ui/Button";
+import { showToast } from "@/components/ui/Toast";
+import { apiErrorMessage } from "@/lib/api";
+import { formatTime } from "@/lib/date";
+import { colors, radius, spacing, typography } from "@/lib/theme";
+import {
+  useBadgeage,
+  type BadgeEventType,
+  type BadgeResponseData,
+} from "@/hooks/use-badgeage";
+
+// ============================================================
+// Helpers
+// ============================================================
+
+function parseEventType(raw: string | string[] | undefined): BadgeEventType {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v === "departure" ? "departure" : "arrival";
+}
+
+function parseInterventionId(raw: string | string[] | undefined): number | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return null;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function eventTypeLabel(t: BadgeEventType): string {
+  return t === "arrival" ? "Arrivée" : "Départ";
+}
+
+// Recupere la position courante avec un timeout dur cote JS.
+// expo-location n'expose pas de timeout natif fiable sur toutes les plates-formes,
+// donc on race avec un setTimeout. Si timeout -> on retourne null silencieusement
+// (le badge sera enregistre sans coords, flag_no_gps=true cote backend).
+async function getCurrentPositionWithTimeout(
+  timeoutMs: number,
+): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const result = await Promise.race<
+      Awaited<ReturnType<typeof Location.getCurrentPositionAsync>> | "timeout"
+    >([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), timeoutMs)),
+    ]);
+    if (result === "timeout") return null;
+    return {
+      latitude: result.coords.latitude,
+      longitude: result.coords.longitude,
+    };
+  } catch (err) {
+    console.error("[badgeage] geolocation error", err);
+    return null;
+  }
+}
+
+// ============================================================
+// Ecran
+// ============================================================
+
+type Phase = "scanning" | "submitting" | "success" | "error";
 
 export default function BadgeageScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    intervention_id?: string;
+    event_type?: string;
+  }>();
+
+  const interventionId = parseInterventionId(params.intervention_id);
+  const initialEventType = parseEventType(params.event_type);
+
+  // Permissions
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
+
+  // Etat de scan
+  const [phase, setPhase] = useState<Phase>("scanning");
+  const [eventType, setEventType] = useState<BadgeEventType>(initialEventType);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [result, setResult] = useState<BadgeResponseData | null>(null);
+
+  // Debounce du scanner : ref synchrone pour bloquer le 2eme tick d'un meme scan
+  // (cf. lessons.md 2026-05-19 — useState async laisse passer le double-fire
+  // dans le meme render). On RESET ce ref a chaque focus pour permettre un
+  // nouveau scan apres retour sur l'ecran.
+  const scanLockRef = useRef(false);
+
+  const mutation = useBadgeage();
+
+  // ============================================================
+  // Permissions au mount
+  // ============================================================
+
+  useEffect(() => {
+    // Camera : si non determine, on demande direct. Le user voit la prompt
+    // native iOS / Android.
+    if (cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) {
+      void requestCameraPermission();
+    }
+  }, [cameraPermission, requestCameraPermission]);
+
+  useEffect(() => {
+    // GPS : best-effort. Si refuse, on continue sans (badge degrade).
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!cancelled) setLocationGranted(status === "granted");
+      } catch (err) {
+        console.error("[badgeage] location permission error", err);
+        if (!cancelled) setLocationGranted(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ============================================================
+  // Reset etat a chaque focus (permet un nouveau scan)
+  // ============================================================
+
+  useFocusEffect(
+    useCallback(() => {
+      // Au retour sur l'ecran (apres navigation back depuis un autre screen),
+      // on remet l'ecran en mode scan + on re-applique l'event_type initial.
+      setPhase("scanning");
+      setEventType(parseEventType(params.event_type));
+      setErrorMessage("");
+      setResult(null);
+      scanLockRef.current = false;
+      return () => {
+        // cleanup : on lock pour eviter qu'un scan partiel arrive apres
+        // un blur (defensive — la CameraView est demonte de toute facon).
+        scanLockRef.current = true;
+      };
+      // params.event_type est stable au montage ; on ne re-run pas a chaque
+      // navigation au sein de l'ecran.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
+
+  // Securite : si l'app passe en background pendant le scan, on garde l'etat
+  // mais on lock le scanner. Au retour focus, le useFocusEffect au-dessus
+  // re-deverrouille.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") scanLockRef.current = true;
+    });
+    return () => sub.remove();
+  }, []);
+
+  // ============================================================
+  // Handlers
+  // ============================================================
+
+  const onBarcodeScanned = useCallback(
+    async (event: BarcodeScanningResult) => {
+      if (scanLockRef.current) return;
+      if (phase !== "scanning") return;
+
+      // Lock IMMEDIAT (avant tout await) pour empecher le double-fire.
+      scanLockRef.current = true;
+      setPhase("submitting");
+
+      const qrCode = event.data?.trim();
+      if (!qrCode) {
+        showToast("QR code illisible, réessaie", "error");
+        setPhase("scanning");
+        scanLockRef.current = false;
+        return;
+      }
+
+      // Haptic medium : confirme au user que le scan a ete detecte.
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } catch {
+        // ignore — Haptics n'est pas critique
+      }
+
+      // GPS best-effort (timeout 5s). Si pas de permission ou timeout, on
+      // continue sans coords.
+      let coords: { latitude: number; longitude: number } | null = null;
+      if (locationGranted === true) {
+        coords = await getCurrentPositionWithTimeout(5_000);
+      }
+
+      try {
+        const response = await mutation.mutateAsync({
+          qr_code: qrCode,
+          event_type: eventType,
+          intervention_id: interventionId,
+          latitude: coords?.latitude ?? null,
+          longitude: coords?.longitude ?? null,
+        });
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch {
+          // ignore
+        }
+        setResult(response);
+        setPhase("success");
+      } catch (err) {
+        console.error("[badgeage] POST /telemanagement/badge failed", err);
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } catch {
+          // ignore
+        }
+        const msg = apiErrorMessage(err, "Impossible d'enregistrer le badgeage");
+        setErrorMessage(msg);
+        showToast(msg, "error");
+        setPhase("error");
+      }
+    },
+    [eventType, interventionId, locationGranted, mutation, phase],
+  );
+
+  const onRetry = useCallback(() => {
+    setErrorMessage("");
+    setResult(null);
+    setPhase("scanning");
+    scanLockRef.current = false;
+  }, []);
+
+  const onClose = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(intervenant)/planning" as never);
+    }
+  }, [router]);
+
+  const onOpenSettings = useCallback(() => {
+    void Linking.openSettings().catch((err) => {
+      console.error("[badgeage] openSettings", err);
+      showToast("Impossible d'ouvrir les réglages", "error");
+    });
+  }, []);
+
+  const onSwitchToDeparture = useCallback(() => {
+    setEventType("departure");
+    setResult(null);
+    setErrorMessage("");
+    setPhase("scanning");
+    scanLockRef.current = false;
+  }, []);
+
+  // ============================================================
+  // Render
+  // ============================================================
+
+  // 1. Permission camera en attente de reponse
+  if (!cameraPermission) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 2. Permission camera refusee
+  if (!cameraPermission.granted) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.permissionScreen}>
+          <Ionicons name="camera-outline" size={64} color={colors.textMuted} />
+          <Text style={styles.permissionTitle}>Caméra requise</Text>
+          <Text style={styles.permissionBody}>
+            Pour scanner un QR code de badgeage, autorise l'accès à la caméra dans les réglages
+            du téléphone.
+          </Text>
+          <View style={styles.permissionActions}>
+            {cameraPermission.canAskAgain ? (
+              <Button
+                label="Autoriser la caméra"
+                onPress={() => void requestCameraPermission()}
+              />
+            ) : (
+              <Button label="Ouvrir les réglages" onPress={onOpenSettings} />
+            )}
+            <View style={{ height: spacing.sm }} />
+            <Button label="Retour" onPress={onClose} variant="ghost" />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 3. Ecran de succes
+  if (phase === "success" && result) {
+    const checkinTime =
+      eventType === "arrival" ? result.checkin.checkin_time : result.checkin.checkout_time;
+    const displayTime = checkinTime ? formatTime(new Date(checkinTime)) : "—";
+    const noGps = result.checkin.flag_no_gps;
+
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.successScreen}>
+          <View style={styles.successIconCircle}>
+            <Ionicons name="checkmark" size={64} color={colors.textInverse} />
+          </View>
+          <Text style={styles.successTitle}>
+            {eventTypeLabel(eventType)} enregistrée
+          </Text>
+          <Text style={styles.successSubtitle}>
+            à {displayTime}
+            {noGps ? " · sans GPS" : ""}
+          </Text>
+
+          <View style={styles.successActions}>
+            {eventType === "arrival" ? (
+              <>
+                <Button label="Badger le départ" onPress={onSwitchToDeparture} />
+                <View style={{ height: spacing.sm }} />
+                <Button label="Retour au planning" onPress={onClose} variant="outline" />
+              </>
+            ) : (
+              <Button label="Retour au planning" onPress={onClose} />
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 4. Ecran d'erreur (apres echec POST)
+  if (phase === "error") {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.permissionScreen}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.danger} />
+          <Text style={styles.permissionTitle}>Badgeage refusé</Text>
+          <Text style={styles.permissionBody}>{errorMessage || "Erreur inconnue."}</Text>
+          <View style={styles.permissionActions}>
+            <Button label="Réessayer" onPress={onRetry} />
+            <View style={{ height: spacing.sm }} />
+            <Button label="Retour" onPress={onClose} variant="ghost" />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 5. Scan en cours (par defaut)
+  const scanLocked = phase !== "scanning";
+
   return (
-    <Placeholder
-      icon="qr-code-outline"
-      title="Badgeage QR + GPS"
-      subtitle="Pointage d'arrivee et de depart via QR code site avec verification GPS."
-      sprint="sprint P0-2"
-    />
+    <SafeAreaView
+      style={styles.safe}
+      edges={["top", "bottom", "left", "right"]}
+    >
+      {/* CameraView plein ecran. onBarcodeScanned mis a undefined quand on a
+          deja scanne pour bloquer le scanner natif (en plus du scanLockRef). */}
+      <CameraView
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+        onBarcodeScanned={scanLocked ? undefined : onBarcodeScanned}
+      />
+
+      {/* Overlay header */}
+      <View style={styles.overlayHeader} pointerEvents="box-none">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onClose}
+          style={({ pressed }) => [styles.overlayClose, pressed && styles.overlayClosePressed]}
+          hitSlop={12}
+        >
+          <Ionicons name="close" size={26} color={colors.textInverse} />
+        </Pressable>
+        <View style={styles.overlayTitleWrap}>
+          <Text style={styles.overlayTitle}>Scanner le QR de badgeage</Text>
+          <Text style={styles.overlaySubtitle}>
+            {eventTypeLabel(eventType)}
+            {interventionId != null ? ` · RDV #${interventionId}` : ""}
+          </Text>
+        </View>
+        {/* Spacer pour equilibrer la croix a gauche */}
+        <View style={{ width: 26 + spacing.md * 2 }} />
+      </View>
+
+      {/* Cadre viseur central */}
+      <View style={styles.viewfinderWrap} pointerEvents="none">
+        <View style={styles.viewfinder}>
+          <View style={[styles.corner, styles.cornerTL]} />
+          <View style={[styles.corner, styles.cornerTR]} />
+          <View style={[styles.corner, styles.cornerBL]} />
+          <View style={[styles.corner, styles.cornerBR]} />
+        </View>
+      </View>
+
+      {/* Footer info / statut */}
+      <View style={styles.overlayFooter} pointerEvents="none">
+        {phase === "submitting" ? (
+          <View style={styles.footerCenter}>
+            <ActivityIndicator color={colors.textInverse} />
+            <Text style={styles.footerHint}>Envoi du badge…</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.footerHint}>
+              Approche le QR code du cadre
+            </Text>
+            {locationGranted === false ? (
+              <Text style={styles.footerWarn}>
+                GPS désactivé · le badge sera enregistré sans position
+              </Text>
+            ) : null}
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
+
+// ============================================================
+// Styles
+// ============================================================
+
+const VIEWFINDER_SIZE = 260;
+const CORNER_LEN = 28;
+const CORNER_WIDTH = 4;
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+  },
+
+  // === Permission / erreur (fond clair) ===
+  permissionScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  permissionTitle: {
+    marginTop: spacing.lg,
+    fontSize: typography.xl,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+  },
+  permissionBody: {
+    marginTop: spacing.sm,
+    fontSize: typography.base,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 22,
+    paddingHorizontal: spacing.lg,
+  },
+  permissionActions: {
+    marginTop: spacing.xl,
+    alignSelf: "stretch",
+    paddingHorizontal: spacing.xl,
+  },
+
+  // === Header overlay (au-dessus de la camera) ===
+  overlayHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: Platform.OS === "android" ? spacing.lg : spacing.sm,
+    paddingBottom: spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  overlayClose: {
+    width: 26 + spacing.md * 2,
+    height: 44,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  overlayClosePressed: {
+    opacity: 0.6,
+  },
+  overlayTitleWrap: {
+    flex: 1,
+    alignItems: "center",
+  },
+  overlayTitle: {
+    color: colors.textInverse,
+    fontSize: typography.base,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  overlaySubtitle: {
+    color: "rgba(255, 255, 255, 0.85)",
+    fontSize: typography.sm,
+    marginTop: 2,
+    textAlign: "center",
+  },
+
+  // === Viseur central ===
+  viewfinderWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewfinder: {
+    width: VIEWFINDER_SIZE,
+    height: VIEWFINDER_SIZE,
+    borderRadius: radius.lg,
+    backgroundColor: "transparent",
+  },
+  corner: {
+    position: "absolute",
+    width: CORNER_LEN,
+    height: CORNER_LEN,
+    borderColor: colors.primary,
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderTopWidth: CORNER_WIDTH,
+    borderLeftWidth: CORNER_WIDTH,
+    borderTopLeftRadius: radius.md,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderTopWidth: CORNER_WIDTH,
+    borderRightWidth: CORNER_WIDTH,
+    borderTopRightRadius: radius.md,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: CORNER_WIDTH,
+    borderLeftWidth: CORNER_WIDTH,
+    borderBottomLeftRadius: radius.md,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: CORNER_WIDTH,
+    borderRightWidth: CORNER_WIDTH,
+    borderBottomRightRadius: radius.md,
+  },
+
+  // === Footer overlay ===
+  overlayFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+    paddingTop: spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    alignItems: "center",
+  },
+  footerCenter: {
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  footerHint: {
+    color: colors.textInverse,
+    fontSize: typography.base,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  footerWarn: {
+    color: "#fde68a",
+    fontSize: typography.sm,
+    marginTop: spacing.xs,
+    textAlign: "center",
+  },
+
+  // === Ecran de succes ===
+  successScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  successIconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.success,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  successTitle: {
+    marginTop: spacing.xl,
+    fontSize: typography.xxl,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+  },
+  successSubtitle: {
+    marginTop: spacing.sm,
+    fontSize: typography.lg,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  successActions: {
+    marginTop: spacing.xxl,
+    alignSelf: "stretch",
+  },
+});

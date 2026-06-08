@@ -200,9 +200,18 @@ export default function RdvDetailScreen() {
 
   const onPressBadgeage = useCallback(() => {
     if (!event) return;
+    // Si le RDV est deja « realisee » avec un checkin (arrivee badgee), on
+    // pousse le mode « depart » par defaut sur l'ecran de scan.
+    const defaultEventType: "arrival" | "departure" =
+      event.status === "realisee" && event.checkin?.checkin_time && !event.checkin?.checkout_time
+        ? "departure"
+        : "arrival";
     router.push({
       pathname: "/(intervenant)/badgeage",
-      params: { intervention_id: String(event.intervention_id) },
+      params: {
+        intervention_id: String(event.intervention_id),
+        event_type: defaultEventType,
+      },
     } as never);
   }, [event, router]);
 
@@ -339,7 +348,13 @@ export default function RdvDetailScreen() {
         {/* ============== CTA BADGEAGE ============== */}
         <View style={styles.ctaWrap}>
           <Button
-            label="Lancer le badgeage"
+            label={
+              event.status === "realisee" &&
+              event.checkin?.checkin_time &&
+              !event.checkin?.checkout_time
+                ? "Marquer le départ"
+                : "Lancer le badgeage"
+            }
             onPress={onPressBadgeage}
             size="lg"
             leftIcon={<Ionicons name="qr-code-outline" size={20} color={colors.textInverse} />}

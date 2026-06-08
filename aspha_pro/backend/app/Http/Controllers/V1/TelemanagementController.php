@@ -78,7 +78,11 @@ class TelemanagementController extends Controller
 
         $data = $request->validate([
             'qr_code' => ['required', 'string'],
-            'employee_id' => ['required', 'exists:employees,id'],
+            // employee_id est OPTIONNEL : dans le flow mobile, le user
+            // authentifié EST l'intervenant qui scanne → on dérive son
+            // employee_id côté serveur. Conservé pour le flow web admin
+            // (saisie pour un autre intervenant) qui doit le passer explicitement.
+            'employee_id' => ['sometimes', 'nullable', 'exists:employees,id'],
             'intervention_id' => ['nullable', 'exists:interventions,id'],
             'latitude' => ['nullable', 'numeric'],
             'longitude' => ['nullable', 'numeric'],
@@ -87,6 +91,14 @@ class TelemanagementController extends Controller
             'create_intervention_if_missing' => ['nullable', 'boolean'],
             'client_id' => ['nullable', 'exists:clients,id'],  // requis si create_intervention_if_missing
         ]);
+
+        // Si l'appelant ne fournit pas employee_id, on le dérive du user
+        // authentifié (cas mobile : l'intervenant qui scanne EST le user).
+        if (empty($data['employee_id'])) {
+            $employee = $request->user()?->employee;
+            abort_unless($employee, 422, "Ce compte n'est pas rattaché à un intervenant");
+            $data['employee_id'] = $employee->id;
+        }
 
         $qr = QrCode::where('code', $data['qr_code'])
             ->where('status', 'valid')
