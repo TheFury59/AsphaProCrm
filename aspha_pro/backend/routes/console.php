@@ -40,6 +40,12 @@ Schedule::command('app:notify-overdue-checkins')
     ->everyTenMinutes()
     ->withoutOverlapping();
 
+// Rappels de badgeage à l'intervenant (4/RDV : arrivée due/late, départ due/late).
+// Précision ±1 min : on tourne chaque minute, anti-spam interne par code.
+Schedule::command('app:notify-checkin-reminders')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 // Alerte de renouvellement des documents (expiry_date proche/dépassée).
 // Tourne chaque jour ; un anti-spam interne (7 jours) évite le rappel
 // quotidien pour un même document.

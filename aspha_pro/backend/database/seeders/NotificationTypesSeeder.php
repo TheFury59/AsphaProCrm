@@ -45,6 +45,13 @@ class NotificationTypesSeeder extends Seeder
             // début (cf. NotifyOverdueCheckins). Canaux in-app + email.
             ['code' => 'checkin_late', 'label' => 'RDV non pointé', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
             ['code' => 'checkin_missed', 'label' => 'Badgeage manqué', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
+            // Rappels intervenant (cf. NotifyCheckinReminders) — chaîne pour chaque RDV :
+            // arrival_due = à l'heure du début, arrival_late = +5 min,
+            // departure_due = -5 min avant la fin, departure_late = à l'heure de fin.
+            ['code' => 'checkin_arrival_due', 'label' => 'Pense à badger ton arrivée', 'module' => 'telemanagement', 'default_channels' => 'push'],
+            ['code' => 'checkin_arrival_late', 'label' => 'Arrivée non badgée', 'module' => 'telemanagement', 'default_channels' => 'push'],
+            ['code' => 'checkin_departure_due', 'label' => 'Pense à badger ton départ', 'module' => 'telemanagement', 'default_channels' => 'push'],
+            ['code' => 'checkin_departure_late', 'label' => 'Départ non badgé', 'module' => 'telemanagement', 'default_channels' => 'push'],
             // Récap des heures travaillées (hebdo le lundi, mensuel le 1er) envoyé
             // à chaque intervenant (cf. NotifyWorkedHours). Canaux in-app + email.
             ['code' => 'worked_hours_summary', 'label' => 'Récap heures travaillées', 'module' => 'telemanagement', 'default_channels' => 'push,email'],
