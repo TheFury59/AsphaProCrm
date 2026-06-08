@@ -16,26 +16,14 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "fr.asphapro.mobile",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Aspha Pro utilise la caméra pour scanner les QR codes de badgeage sur les sites d'intervention.",
-        "NSLocationWhenInUseUsageDescription": "Aspha Pro utilise votre position pour vérifier votre présence sur le site d'intervention lors du badgeage.",
-        "NSFaceIDUsageDescription": "Aspha Pro utilise Face ID pour sécuriser l'accès à vos données professionnelles."
-      }
+      "bundleIdentifier": "fr.asphapro.mobile"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#10b981"
       },
-      "package": "fr.asphapro.mobile",
-      "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
-      ]
+      "package": "fr.asphapro.mobile"
     },
     "web": {
       "bundler": "metro",
@@ -43,26 +31,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Autoriser Aspha Pro à utiliser la caméra pour scanner les QR codes."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Autoriser Aspha Pro à utiliser votre position pour le badgeage géolocalisé."
-        }
-      ],
-      "expo-notifications",
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "Autoriser Aspha Pro à utiliser Face ID."
-        }
-      ]
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
