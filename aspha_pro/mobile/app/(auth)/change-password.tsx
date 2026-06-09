@@ -48,10 +48,13 @@ export default function ChangePasswordScreen() {
 
     setSubmitting(true);
     try {
-      await api.post("/auth/me", {
+      // Endpoint correct : PATCH /me (cf. AuthController::updateMe). L'ancien
+      // POST /auth/me n'existe pas → 404. Le backend valide current_password +
+      // hash le nouveau + retombe must_change_password à false → le root
+      // layout détecte la transition et redirige automatiquement.
+      await api.patch("/me", {
         current_password: current,
         password: next,
-        password_confirmation: confirm,
       });
       await refetchMe();
       showToast("Mot de passe mis a jour.", "success");
