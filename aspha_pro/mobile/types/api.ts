@@ -120,3 +120,109 @@ export type CreateTicketRequest = {
   body?: string | null;
   priority?: TicketPriority;
 };
+
+// === CLIENT — DEVIS / FACTURES / PROFIL ===
+// Statuts d'un devis cote backend : draft (non visible client), sent (en attente
+// de validation), accepted (valide par le client), refused (refuse par le client).
+// Le mobile ne voit jamais les `draft` (filtres backend).
+export type QuoteStatus = "sent" | "accepted" | "refused" | "draft";
+
+export type QuoteItem = {
+  id: number;
+  quote_id: number;
+  label: string;
+  quantity: string | number;
+  unit_price: string | number;
+  total: string | number;
+  duration_minutes?: number | null;
+  order?: number | null;
+};
+
+export type Quote = {
+  id: number;
+  reference: string | null;
+  client_id: number;
+  status: QuoteStatus;
+  total: string | number;
+  quote_date: string | null;
+  validity_date: string | null;
+  comment: string | null;
+  items?: QuoteItem[];
+};
+
+// Statut paiement facture cote backend. On reste sur le superset complet pour
+// matcher tout ce qui peut sortir : draft / sent / paid / partial / overdue / cancelled.
+export type InvoicePaymentStatus =
+  | "paid"
+  | "partial"
+  | "unpaid"
+  | "overdue"
+  | "pending";
+
+export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "overdue" | "cancelled" | string;
+
+export type Invoice = {
+  id: number;
+  reference: string | null;
+  client_id: number;
+  status: InvoiceStatus;
+  payment_status: string | null;
+  type: string | null;
+  invoice_date: string | null;
+  due_date: string | null;
+  total: string | number;
+};
+
+// Logo URL est exposé via l'accessor `logo_url` (cf. ClientCompany model).
+export type ClientCompanyShape = {
+  id: number;
+  client_id: number;
+  company_name: string;
+  legal_form: string | null;
+  siret: string | null;
+  vat_number: string | null;
+  manager_civility: string | null;
+  manager_first_name: string | null;
+  manager_last_name: string | null;
+  manager_role: string | null;
+  phone_landline: string | null;
+  phone_mobile: string | null;
+  primary_email: string | null;
+  photo: string | null;
+  logo_url: string | null;
+};
+
+export type ClientAddress = {
+  id: number;
+  type: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export type ClientContact = {
+  id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+};
+
+export type ClientProfile = {
+  id: number;
+  code: string;
+  status: string;
+  company?: ClientCompanyShape | null;
+  addresses?: ClientAddress[];
+  contacts?: ClientContact[];
+};
+
+export type CreateClientTicketRequest = {
+  type: TicketType;
+  subject: string;
+  body?: string | null;
+  priority?: TicketPriority;
+};

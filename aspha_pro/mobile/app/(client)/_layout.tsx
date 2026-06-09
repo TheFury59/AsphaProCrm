@@ -1,5 +1,16 @@
+// Tabs layout cote client : Accueil / Devis / Factures / Demandes / Profil.
+//
+// La tab `demandes` est un dossier avec ses sous-routes (index, new, [id]) ; on
+// utilise getFocusedRouteNameFromRoute pour masquer la tab bar sur les ecrans
+// new et [id] (sinon le clavier du composer mange le composer en chevauchant
+// avec la tab bar — bug deja rencontre cote intervenant cf. LRN).
+//
+// La tab `devis/[id]` est masquee de la tab bar (href: null) — accessible par
+// push depuis la liste devis.
+
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 import { colors } from "@/lib/theme";
 
@@ -29,9 +40,17 @@ export default function ClientLayout() {
       />
       <Tabs.Screen
         name="devis"
-        options={{
-          title: "Devis",
-          tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
+        options={({ route }) => {
+          const focused = getFocusedRouteNameFromRoute(route) ?? "index";
+          const hideTabBar = focused === "[id]";
+          return {
+            title: "Devis",
+            headerShown: false,
+            tabBarStyle: hideTabBar ? { display: "none" as const } : undefined,
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+              <Ionicons name="document-text-outline" size={size} color={color} />
+            ),
+          };
         }}
       />
       <Tabs.Screen
@@ -43,9 +62,17 @@ export default function ClientLayout() {
       />
       <Tabs.Screen
         name="demandes"
-        options={{
-          title: "Demandes",
-          tabBarIcon: ({ color, size }) => <Ionicons name="help-circle-outline" size={size} color={color} />,
+        options={({ route }) => {
+          const focused = getFocusedRouteNameFromRoute(route) ?? "index";
+          const hideTabBar = focused === "[id]" || focused === "new";
+          return {
+            title: "Demandes",
+            headerShown: false,
+            tabBarStyle: hideTabBar ? { display: "none" as const } : undefined,
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+              <Ionicons name="chatbubbles-outline" size={size} color={color} />
+            ),
+          };
         }}
       />
       <Tabs.Screen

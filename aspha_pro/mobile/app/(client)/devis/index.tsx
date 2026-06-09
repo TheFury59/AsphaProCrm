@@ -1,14 +1,13 @@
-// Ecran : liste des factures du client.
+// Ecran : liste des devis du client.
 //
-// Pure consultation (V1). Tap → Alert proposant le download PDF.
-// L'endpoint PDF facture cote client n'est pas encore expose ; en attendant on
-// affiche une info "Bientot disponible". Quand le backend ajoutera
-// /extranet/client/invoices/{id}/pdf on remplacera l'Alert par downloadAndSharePdf.
+// - Pull to refresh
+// - Tap sur une carte -> /(client)/devis/[id] (detail + actions Valider/Refuser)
+// - Statuts visuels par couleur de pastille gauche
+// - Empty state simple
 
 import React, { useCallback } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -18,43 +17,31 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 import {
-  useClientInvoices,
-  invoicePaymentLabel,
-  invoicePaymentColor,
-} from "@/hooks/use-client-invoices";
-import { formatMoney } from "@/hooks/use-client-quotes";
+  useClientQuotes,
+  quoteStatusLabel,
+  quoteStatusColor,
+  formatMoney,
+} from "@/hooks/use-client-quotes";
 import { colors, radius, spacing, typography } from "@/lib/theme";
-import type { Invoice } from "@/types/api";
+import type { Quote } from "@/types/api";
 
-export default function FacturesScreen() {
-  const { data, isLoading, isRefetching, refetch, error } = useClientInvoices();
+export default function DevisListScreen() {
+  const router = useRouter();
+  const { data, isLoading, isRefetching, refetch, error } = useClientQuotes();
 
   const onRefresh = useCallback(() => {
     void refetch();
   }, [refetch]);
 
-  const onPressInvoice = useCallback((inv: Invoice) => {
-    Alert.alert(
-      inv.reference ?? `Facture #${inv.id}`,
-      `Statut : ${invoicePaymentLabel(inv)}\nMontant : ${formatMoney(inv.total)}`,
-      [
-        { text: "Fermer", style: "cancel" },
-        {
-          text: "Télécharger PDF",
-          onPress: () => {
-            // Endpoint pas encore expose cote backend client (cf. clientQuotePdf
-            // pour le pattern a reproduire). On bouchon poliment pour V1.
-            Alert.alert(
-              "Bientôt disponible",
-              "Le téléchargement du PDF de facture sera disponible prochainement. Contactez votre commercial Aspha pour obtenir une copie en attendant.",
-            );
-          },
-        },
-      ],
-    );
-  }, []);
+  const onPressQuote = useCallback(
+    (q: Quote) => {
+      router.push(`/(client)/devis/${q.id}` as never);
+    },
+    [router],
+  );
 
   if (isLoading) {
     return (
@@ -71,7 +58,7 @@ export default function FacturesScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <View style={styles.center}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
-          <Text style={styles.errorTitle}>Impossible de charger les factures</Text>
+          <Text style={styles.errorTitle}>Impossible de charger les devis</Text>
           <Text style={styles.errorBody}>{error.message}</Text>
           <Pressable onPress={onRefresh} style={styles.retryBtn}>
             <Text style={styles.retryBtnText}>Réessayer</Text>
@@ -81,33 +68,27 @@ export default function FacturesScreen() {
     );
   }
 
-  const invoices = data ?? [];
+  const quotes = data ?? [];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <FlatList
-        data={invoices}
-        keyExtractor={(i) => String(i.id)}
-        contentContainerStyle={invoices.length === 0 ? styles.emptyWrap : styles.listContent}
-        renderItem={({ item }) => (
-          <InvoiceCard invoice={item} onPress={() => onPressInvoice(item)} />
-        )}
+        data={quotes}
+        keyExtractor={(q) => String(q.id)}
+        contentContainerStyle={quotes.length === 0 ? styles.emptyWrap : styles.listContent}
+        renderItem={({ item }) => <QuoteCard quote={item} onPress={() => onPressQuote(item)} />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={<EmptyState />}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       />
     </SafeAreaView>
   );
 }
 
-function InvoiceCard({ invoice, onPress }: { invoice: Invoice; onPress: () => void }) {
-  const color = invoicePaymentColor(invoice);
+function QuoteCard({ quote, onPress }: { quote: Quote; onPress: () => void }) {
+  const color = quoteStatusColor(quote.status);
   return (
     <Pressable
       onPress={onPress}
@@ -117,19 +98,21 @@ function InvoiceCard({ invoice, onPress }: { invoice: Invoice; onPress: () => vo
       <View style={styles.cardBody}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardRef} numberOfLines={1}>
-            {invoice.reference ?? `Facture #${invoice.id}`}
+            {quote.reference ?? `Devis #${quote.id}`}
           </Text>
           <View style={[styles.statusBadge, { backgroundColor: color }]}>
-            <Text style={styles.statusBadgeText}>{invoicePaymentLabel(invoice)}</Text>
+            <Text style={styles.statusBadgeText}>{quoteStatusLabel(quote.status)}</Text>
           </View>
         </View>
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardAmount}>{formatMoney(invoice.total)}</Text>
-          <Text style={styles.cardDate}>{formatDate(invoice.invoice_date)}</Text>
-        </View>
-        {invoice.due_date ? (
-          <Text style={styles.cardDue}>Échéance : {formatDate(invoice.due_date)}</Text>
+        {quote.comment ? (
+          <Text style={styles.cardComment} numberOfLines={1}>
+            {quote.comment}
+          </Text>
         ) : null}
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardAmount}>{formatMoney(quote.total)}</Text>
+          <Text style={styles.cardDate}>{formatDate(quote.quote_date)}</Text>
+        </View>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
@@ -139,19 +122,19 @@ function InvoiceCard({ invoice, onPress }: { invoice: Invoice; onPress: () => vo
 function EmptyState() {
   return (
     <View style={styles.emptyState}>
-      <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
-      <Text style={styles.emptyTitle}>Aucune facture</Text>
+      <Ionicons name="document-text-outline" size={48} color={colors.textMuted} />
+      <Text style={styles.emptyTitle}>Aucun devis</Text>
       <Text style={styles.emptyBody}>
-        Vos factures apparaîtront ici dès qu'elles seront émises.
+        Quand un commercial Aspha vous enverra un devis, il apparaîtra ici.
       </Text>
     </View>
   );
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("fr-FR");
 }
 
@@ -184,6 +167,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   retryBtnText: { color: "#ffffff", fontWeight: "700" },
+
   listContent: { padding: spacing.lg },
   emptyWrap: { flexGrow: 1, justifyContent: "center" },
   emptyState: {
@@ -202,6 +186,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.sm,
   },
+
   separator: { height: spacing.sm },
   card: {
     flexDirection: "row",
@@ -214,7 +199,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   cardPressed: { opacity: 0.65 },
-  statusDot: { width: 8, height: 64, borderRadius: 4 },
+  statusDot: { width: 8, height: 56, borderRadius: 4 },
   cardBody: { flex: 1, gap: spacing.xs },
   cardHeader: {
     flexDirection: "row",
@@ -240,6 +225,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
+  cardComment: {
+    fontSize: typography.sm,
+    color: colors.textMuted,
+  },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -251,6 +240,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
   },
-  cardDate: { fontSize: typography.xs, color: colors.textSubtle },
-  cardDue: { fontSize: typography.xs, color: colors.textMuted },
+  cardDate: {
+    fontSize: typography.xs,
+    color: colors.textSubtle,
+  },
 });
