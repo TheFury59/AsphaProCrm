@@ -34,7 +34,7 @@ class EmployeeController extends Controller
             ])
             ->allowedSorts(['name', 'classification', 'created_at'])
             ->defaultSort('name')
-            ->with(['user:id,name,email,status', 'entity:id,name', 'ownerUser:id,name', 'currentContract', 'addresses'])
+            ->with(['user:id,name,email,status,avatar_path,updated_at', 'entity:id,name', 'ownerUser:id,name', 'currentContract', 'addresses'])
             ->withCount(['contracts', 'absences', 'trainings', 'interventions', 'salaryDeductions']);
 
         return EmployeeResource::collection($query->paginate($perPage));
@@ -45,7 +45,10 @@ class EmployeeController extends Controller
         abort_unless($request->user()?->can('employees.view'), 403);
 
         $employee->load([
-            'user:id,name,email,status,last_login_at',
+            // avatar_path nécessaire pour le fallback Employee::avatar_url
+            // qui retourne en priorité l'avatar perso du user lié (unification
+            // mobile + web côté /me/avatar, cf. 2026-06-09).
+            'user:id,name,email,status,last_login_at,avatar_path,updated_at',
             'entity', 'ownerUser:id,name',
             'currentContract', 'skills', 'addresses',
         ])->loadCount(['contracts', 'absences', 'trainings', 'interventions', 'salaryDeductions']);

@@ -31,7 +31,9 @@ class ExtranetController extends Controller
     {
         $user = $request->user();
         $employee = Employee::with([
-            'user:id,email',  // pour fallback email de connexion si pas d'email perso
+            // avatar_path inclus pour le accessor Employee::avatar_url qui
+            // fallback sur user.avatar_url (unification mobile + web).
+            'user:id,email,avatar_path,updated_at',  // fallback email + avatar perso
             'currentContract', 'entity', 'skills', 'addresses',
         ])
             ->where('user_id', $user->id)
