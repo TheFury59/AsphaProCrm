@@ -35,6 +35,15 @@ Schedule::command('app:notify-worked-hours month')
     ->monthlyOn(1, '07:00')
     ->withoutOverlapping();
 
+// Auto-close des interventions dépassées (status planifiee → realisee).
+// Sans ce job, un RDV terminé restait en « planifié » éternellement et
+// l'affichage planning ne pouvait pas le distinguer d'un RDV en cours.
+// Période courte (5 min) pour que l'utilisateur voie la transition vite
+// après la fin de son RDV.
+Schedule::command('app:auto-close-overdue-interventions')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 // Alerte RDV non pointé 30 min après le début — vérification toutes les 10 min.
 Schedule::command('app:notify-overdue-checkins')
     ->everyTenMinutes()
