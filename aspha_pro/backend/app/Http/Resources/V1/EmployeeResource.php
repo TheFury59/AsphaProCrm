@@ -24,12 +24,20 @@ class EmployeeResource extends JsonResource
             'diploma' => $this->diploma,
             'job_reference_free' => $this->job_reference_free,
             'created_at' => $this->created_at?->toIso8601String(),
+            // Avatar — accessor qui fallback sur user.avatar_url (source
+            // unifiée perso, modifiée par mobile + page /profil web) puis
+            // legacy employees.avatar_path. Sans cette ligne, le Resource
+            // strip silencieusement avatar_url avant l'envoi au client →
+            // toutes les fiches/listes intervenants affichaient les
+            // initiales malgré une photo posée en BDD.
+            'avatar_url' => $this->avatar_url,
 
             'user' => $this->whenLoaded('user', fn () => $this->user ? [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
                 'email' => $this->user->email,
                 'status' => $this->user->status,
+                'avatar_url' => $this->user->avatar_url,
                 'last_login_at' => optional($this->user->last_login_at)->toIso8601String(),
             ] : null),
 
