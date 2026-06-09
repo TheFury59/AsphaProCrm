@@ -309,6 +309,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('notifications/history', [NotificationController::class, 'history']);
     Route::get('notifications/types', [NotificationController::class, 'types']);
     Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::get('notifications/unread-count-by-module', [NotificationController::class, 'unreadCountByModule']);
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead']);
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
     Route::get('notifications/preferences', [NotificationController::class, 'listPreferences']);

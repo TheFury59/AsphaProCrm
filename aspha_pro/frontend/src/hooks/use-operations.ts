@@ -503,6 +503,29 @@ export function useUnreadCount() {
   });
 }
 
+/**
+ * Compteur de notifs non lues groupées par module — utilisé par la sidebar
+ * pour afficher un badge à droite de chaque onglet métier.
+ *
+ * Modules backend possibles :
+ *   planning, portal, messaging, sales, telemanagement, stock, documents,
+ *   missions, rh, matching
+ *
+ * Renvoie un objet `{ [module]: count }`. Modules sans notif absents du map.
+ */
+export function useUnreadCountByModule() {
+  return useQuery({
+    queryKey: ["notifications", "unread-count-by-module"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: Record<string, number> }>(
+        "/notifications/unread-count-by-module",
+      );
+      return data.data ?? {};
+    },
+    refetchInterval: 30_000,
+  });
+}
+
 export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({

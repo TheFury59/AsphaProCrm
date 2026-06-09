@@ -80,6 +80,33 @@ class NotificationController extends Controller
             ->count()];
     }
 
+    /**
+     * GET /api/v1/notifications/unread-count-by-module
+     *
+     * Renvoie le nombre de notifications NON LUES groupées par module
+     * (`planning`, `portal`, `messaging`, `sales`, `telemanagement`,
+     * `stock`, `documents`, `missions`, `rh`, `matching`).
+     *
+     * Utilisé par la sidebar côté frontend pour afficher des badges
+     * de comptage à côté de chaque onglet (cf. AppLayout).
+     *
+     * Réponse :
+     *   { "data": { "portal": 3, "messaging": 1, "sales": 2, ... } }
+     */
+    public function unreadCountByModule(Request $request)
+    {
+        $rows = Notification::query()
+            ->join('notification_types', 'notifications.notification_type_id', '=', 'notification_types.id')
+            ->where('notifications.user_id', $request->user()->id)
+            ->where('notifications.is_read', false)
+            ->selectRaw('notification_types.module as module, COUNT(*) as count')
+            ->groupBy('notification_types.module')
+            ->pluck('count', 'module')
+            ->map(fn ($v) => (int) $v);
+
+        return ['data' => $rows];
+    }
+
     public function markRead(Request $request, Notification $notification)
     {
         abort_unless($notification->user_id === $request->user()->id, 403);

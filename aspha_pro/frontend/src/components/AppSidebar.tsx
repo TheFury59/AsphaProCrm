@@ -22,6 +22,7 @@ import {
   Bell,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
+import { useUnreadCountByModule } from "@/hooks/use-operations";
 import {
   Sidebar,
   SidebarContent,
@@ -35,7 +36,27 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-const NAV_GROUPS = [
+/**
+ * Mapping `module backend → tab sidebar`.
+ * Les modules backend sont définis dans le NotificationType (champ `module`) :
+ *   planning / portal / messaging / sales / telemanagement / stock /
+ *   documents / missions / rh / matching
+ *
+ * Une tab peut couvrir plusieurs modules (ex. Intervenants couvre `rh` et
+ * `documents`). Une notif `sales` apparaît sur Devis ET Factures — le user
+ * clique celui qui l'intéresse.
+ */
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  /** Modules dont les compteurs s'agrègent pour cette tab. */
+  modules?: string[];
+  /** Si true, affiche le TOTAL toutes notifs confondues (pour /notifications). */
+  totalBadge?: boolean;
+};
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Pilotage",
     items: [
@@ -46,35 +67,35 @@ const NAV_GROUPS = [
     label: "Métier",
     items: [
       { to: "/clients", label: "Clients", icon: Users },
-      { to: "/intervenants", label: "Intervenants", icon: UserCog },
-      { to: "/missions", label: "Missions", icon: Briefcase },
+      { to: "/intervenants", label: "Intervenants", icon: UserCog, modules: ["rh", "documents"] },
+      { to: "/missions", label: "Missions", icon: Briefcase, modules: ["missions"] },
       { to: "/prestations", label: "Prestations", icon: Package },
-      { to: "/planning", label: "Planning", icon: Calendar },
+      { to: "/planning", label: "Planning", icon: Calendar, modules: ["planning", "matching"] },
       { to: "/carte", label: "Carte", icon: Map },
     ],
   },
   {
     label: "Opérations",
     items: [
-      { to: "/telegestion", label: "Télégestion", icon: QrCode },
-      { to: "/stock", label: "Stock", icon: Boxes },
-      { to: "/tickets", label: "Tickets clients", icon: Ticket },
-      { to: "/messagerie", label: "Messagerie", icon: MessageSquare },
+      { to: "/telegestion", label: "Télégestion", icon: QrCode, modules: ["telemanagement"] },
+      { to: "/stock", label: "Stock", icon: Boxes, modules: ["stock"] },
+      { to: "/tickets", label: "Tickets clients", icon: Ticket, modules: ["portal"] },
+      { to: "/messagerie", label: "Messagerie", icon: MessageSquare, modules: ["messaging"] },
       { to: "/flotte", label: "Flotte véhicule", icon: Car },
     ],
   },
   {
     label: "Ventes",
     items: [
-      { to: "/devis", label: "Devis", icon: FileText },
-      { to: "/factures", label: "Factures", icon: Receipt },
+      { to: "/devis", label: "Devis", icon: FileText, modules: ["sales"] },
+      { to: "/factures", label: "Factures", icon: Receipt, modules: ["sales"] },
       { to: "/reglements", label: "Règlements", icon: Wallet },
     ],
   },
   {
     label: "Administration",
     items: [
-      { to: "/notifications", label: "Notifications", icon: Bell },
+      { to: "/notifications", label: "Notifications", icon: Bell, totalBadge: true },
       { to: "/parametres", label: "Paramètres", icon: Settings },
       // /admin/users sera ajouté dynamiquement ci-dessous si super_admin
       { to: "/aide", label: "Aide", icon: HelpCircle },
@@ -85,6 +106,7 @@ const NAV_GROUPS = [
 export function AppSidebar() {
   const { pathname } = useLocation();
   const isSuperAdmin = useAuthStore((s) => s.user?.role === "super_admin");
+  const { data: countsByModule } = useUnreadCountByModule();
 
   // On clone les groupes pour ajouter l'entrée "Utilisateurs" dans
   // Administration uniquement si l'utilisateur est super_admin.
@@ -99,6 +121,9 @@ export function AppSidebar() {
     items.splice(at, 0, { to: "/admin/users", label: "Utilisateurs", icon: ShieldCheck });
     return { ...g, items };
   });
+
+  // Total toutes notifs confondues (pour l'onglet /notifications).
+  const totalCount = Object.values(countsByModule ?? {}).reduce((a, b) => a + b, 0);
 
   return (
     <Sidebar>
@@ -123,12 +148,18 @@ export function AppSidebar() {
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
+                  // Calcul du badge : somme des compteurs des modules associés,
+                  // OU total global si totalBadge=true.
+                  const count = item.totalBadge
+                    ? totalCount
+                    : (item.modules ?? []).reduce((acc, mod) => acc + (countsByModule?.[mod] ?? 0), 0);
                   return (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton asChild isActive={isActive}>
                         <Link to={item.to}>
                           <Icon />
-                          <span>{item.label}</span>
+                          <span className="flex-1">{item.label}</span>
+                          {count > 0 ? <SidebarBadge count={count} /> : null}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -150,5 +181,21 @@ export function AppSidebar() {
         </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+/**
+ * Petit badge rouge avec compteur affiché à droite d'un item de sidebar.
+ * Limite à 99+ pour éviter les badges trop larges.
+ */
+function SidebarBadge({ count }: { count: number }) {
+  const display = count > 99 ? "99+" : String(count);
+  return (
+    <span
+      className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white shadow-sm"
+      aria-label={`${count} notification${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`}
+    >
+      {display}
+    </span>
   );
 }
