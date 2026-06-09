@@ -28,6 +28,14 @@ class MediaUploadController extends Controller
     /**
      * POST /api/v1/employees/{employee}/avatar
      * Champ multipart : `avatar` (fichier image).
+     *
+     * Unification de l'avatar : on écrit sur `users.avatar_path` (la photo
+     * PERSONNELLE de l'utilisateur lié à l'intervenant). Comme ça la photo est
+     * partagée partout : fiche admin, app mobile intervenant, frontend web
+     * /profil — UNE seule photo, UN seul fichier, pas de désynchronisation.
+     *
+     * Pour les intervenants sans user lié (cas rare, intervenant pas
+     * encore activé), on tombe en fallback sur `employees.avatar_path`.
      */
     public function uploadEmployeeAvatar(Request $request, Employee $employee)
     {
@@ -37,9 +45,15 @@ class MediaUploadController extends Controller
             'avatar' => ['required', 'file', 'image', 'mimes:'.implode(',', self::ALLOWED_MIMES), 'max:'.self::MAX_SIZE_KB],
         ]);
 
-        // Supprime l'ancien avatar pour éviter d'accumuler des fichiers orphelins
+        // Supprime les anciens avatars pour éviter d'accumuler des fichiers
+        // orphelins. On nettoie les DEUX emplacements (legacy employees +
+        // user) pour rester propre.
         if ($employee->avatar_path && Storage::disk('public')->exists($employee->avatar_path)) {
             Storage::disk('public')->delete($employee->avatar_path);
+        }
+        $user = $employee->user;
+        if ($user?->avatar_path && Storage::disk('public')->exists($user->avatar_path)) {
+            Storage::disk('public')->delete($user->avatar_path);
         }
 
         $file = $request->file('avatar');
@@ -47,13 +61,26 @@ class MediaUploadController extends Controller
         $filename = "{$employee->id}_".Str::random(16).".{$ext}";
         $path = $file->storeAs('avatars', $filename, 'public');
 
-        $employee->update(['avatar_path' => $path]);
+        // Priorité : on écrit sur le User (unifié). Sinon, fallback Employee.
+        if ($user) {
+            $user->forceFill(['avatar_path' => $path])->save();
+            // On clear l'ancien chemin employee pour éviter qu'il prenne la
+            // précédence dans le accessor (l'avatar perso doit gagner).
+            if ($employee->avatar_path) {
+                $employee->update(['avatar_path' => null]);
+            }
+        } else {
+            $employee->update(['avatar_path' => $path]);
+        }
 
-        return ['data' => $employee->fresh()];
+        return ['data' => $employee->fresh(['user'])];
     }
 
     /**
      * DELETE /api/v1/employees/{employee}/avatar
+     *
+     * Supprime les deux chemins (perso users + legacy employees) pour rester
+     * propre — symétrique avec l'upload unifié ci-dessus.
      */
     public function deleteEmployeeAvatar(Request $request, Employee $employee)
     {
@@ -63,6 +90,14 @@ class MediaUploadController extends Controller
             Storage::disk('public')->delete($employee->avatar_path);
         }
         $employee->update(['avatar_path' => null]);
+
+        $user = $employee->user;
+        if ($user?->avatar_path) {
+            if (Storage::disk('public')->exists($user->avatar_path)) {
+                Storage::disk('public')->delete($user->avatar_path);
+            }
+            $user->forceFill(['avatar_path' => null])->save();
+        }
 
         return response()->noContent();
     }

@@ -50,11 +50,16 @@ class Employee extends Model
      */
     public function getAvatarUrlAttribute(): ?string
     {
+        // 1. Photo perso (table users) — source unifiée à privilégier. Modifiée
+        //    aussi bien par l'admin (fiche intervenant) que par l'intervenant
+        //    lui-même (app mobile / page /profil web). Cf. unification 2026-06-09.
+        if ($this->user && $this->user->avatar_path) {
+            return $this->user->avatar_url; // accessor User::avatar_url
+        }
+        // 2. Fallback : photo legacy stockée sur employees.avatar_path (pour
+        //    les comptes pré-unification ou les intervenants sans user lié).
         if (! $this->avatar_path) return null;
         $bust = $this->updated_at?->timestamp ?? 0;
-        // En dev local : URL basée sur l'host de la requête courante pour que
-        // le mobile (192.168.0.x) ET le web (localhost) voient des URLs
-        // accessibles. Cf. User::avatar_url pour détails.
         $base = config('app.env') === 'local' && request()
             ? request()->getSchemeAndHttpHost().'/storage/'.$this->avatar_path
             : \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
