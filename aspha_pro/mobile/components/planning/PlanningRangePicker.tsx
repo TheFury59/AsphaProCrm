@@ -10,7 +10,7 @@
 //  - week  : [lundi@00:00,         dimanche@23:59]
 //  - month : [1er@00:00,           dernier@23:59]
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Modal,
   Platform,
@@ -33,6 +33,11 @@ import {
   startOfMonth,
   startOfToday,
 } from "@/lib/date";
+
+// Limite max de consultation des RDV passés (UX guidée — au-delà, l'app
+// n'est plus utile pour un intervenant terrain qui consulte son historique
+// récent).
+const MAX_DAYS_IN_PAST = 30;
 import { colors, radius, spacing, typography } from "@/lib/theme";
 
 export type PlanningViewMode = "day" | "week" | "month";
@@ -81,6 +86,42 @@ export function PlanningRangePicker({
     setLocalDate(startOfToday());
   };
 
+  // Date minimale autorisée (1 mois dans le passé).
+  const minDate = useMemo(() => {
+    const d = startOfToday();
+    d.setDate(d.getDate() - MAX_DAYS_IN_PAST);
+    return d;
+  }, []);
+
+  // Presets de raccourci pour accéder vite à l'historique récent ou aux
+  // périodes proches sans devoir tapoter les flèches.
+  const applyPreset = (mode: PlanningViewMode, ref: Date) => {
+    setLocalMode(mode);
+    setLocalDate(ref);
+  };
+  const PRESETS = [
+    {
+      label: "Cette semaine",
+      onPress: () => applyPreset("week", startOfToday()),
+    },
+    {
+      label: "Semaine dernière",
+      onPress: () => applyPreset("week", addDays(startOfWeek(startOfToday()), -7)),
+    },
+    {
+      label: "Ce mois-ci",
+      onPress: () => applyPreset("month", startOfMonth(startOfToday())),
+    },
+    {
+      label: "Mois dernier",
+      onPress: () => {
+        const lastMonth = startOfMonth(startOfToday());
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        applyPreset("month", lastMonth);
+      },
+    },
+  ];
+
   const stepBack = () => {
     const next = new Date(localDate);
     switch (localMode) {
@@ -93,6 +134,10 @@ export function PlanningRangePicker({
       case "month":
         next.setMonth(next.getMonth() - 1);
         break;
+    }
+    // Bloque la navigation au-delà de MAX_DAYS_IN_PAST jours dans le passé.
+    if (next < minDate) {
+      return;
     }
     setLocalDate(next);
   };
@@ -172,6 +217,22 @@ export function PlanningRangePicker({
             ))}
           </View>
 
+          {/* Presets rapides — accès direct à l'historique récent */}
+          <View style={styles.presetsRow}>
+            {PRESETS.map((p) => (
+              <Pressable
+                key={p.label}
+                onPress={p.onPress}
+                style={({ pressed }) => [
+                  styles.presetBtn,
+                  pressed && styles.presetBtnPressed,
+                ]}
+              >
+                <Text style={styles.presetBtnText}>{p.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
           {/* Affichage periode actuelle + navigation */}
           <View style={styles.navRow}>
             <Pressable onPress={stepBack} style={styles.navBtn} hitSlop={6}>
@@ -203,6 +264,7 @@ export function PlanningRangePicker({
                 mode="date"
                 display={Platform.OS === "ios" ? "spinner" : "default"}
                 locale="fr-FR"
+                minimumDate={minDate}
                 onChange={onPickerChange}
               />
               {Platform.OS === "ios" ? (
@@ -313,6 +375,28 @@ const styles = StyleSheet.create({
   segBtnTextActive: {
     color: colors.primary,
     fontWeight: "700",
+  },
+  presetsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  presetBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  presetBtnPressed: {
+    opacity: 0.65,
+    backgroundColor: colors.surfaceMuted,
+  },
+  presetBtnText: {
+    fontSize: typography.xs,
+    color: colors.text,
+    fontWeight: "600",
   },
   navRow: {
     flexDirection: "row",
