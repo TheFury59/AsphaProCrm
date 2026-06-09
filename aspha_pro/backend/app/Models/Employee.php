@@ -51,8 +51,13 @@ class Employee extends Model
     public function getAvatarUrlAttribute(): ?string
     {
         if (! $this->avatar_path) return null;
-        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
         $bust = $this->updated_at?->timestamp ?? 0;
+        // En dev local : URL basée sur l'host de la requête courante pour que
+        // le mobile (192.168.0.x) ET le web (localhost) voient des URLs
+        // accessibles. Cf. User::avatar_url pour détails.
+        $base = config('app.env') === 'local' && request()
+            ? request()->getSchemeAndHttpHost().'/storage/'.$this->avatar_path
+            : \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
         return "{$base}?v={$bust}";
     }
 

@@ -41,8 +41,13 @@ class ClientCompany extends Model
     public function getLogoUrlAttribute(): ?string
     {
         if (! $this->photo) return null;
-        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo);
         $bust = $this->updated_at?->timestamp ?? 0;
+        // En dev local : URL basée sur l'host de la requête courante pour
+        // matcher l'appelant (mobile via IP, web via localhost). Cf.
+        // User::avatar_url pour détails.
+        $base = config('app.env') === 'local' && request()
+            ? request()->getSchemeAndHttpHost().'/storage/'.$this->photo
+            : \Illuminate\Support\Facades\Storage::disk('public')->url($this->photo);
         return "{$base}?v={$bust}";
     }
 

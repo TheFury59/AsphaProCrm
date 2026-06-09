@@ -50,14 +50,29 @@ class User extends Authenticatable
      * Le chemin relatif est stocké dans `avatar_path` (ex. `avatars/u12_a1b2.jpg`).
      * Le `?v=` cache-bust force le refresh quand on remplace une photo.
      * Returns null si aucun avatar défini.
+     *
+     * En dev (APP_ENV=local), on construit l'URL depuis le host de la
+     * requête HTTP courante (`request()->getSchemeAndHttpHost()`). Comme ça
+     * un upload depuis le mobile (qui tape sur http://192.168.0.246:8000)
+     * renvoie une URL accessible depuis le téléphone, et un upload depuis
+     * le frontend web (sur http://localhost:8000) renvoie une URL accessible
+     * depuis le navigateur. Sans ce fallback, Laravel utilise APP_URL fixe
+     * qui ne marche que pour UN seul client à la fois.
+     *
+     * En prod (APP_ENV=production), on utilise `Storage::disk('public')->url()`
+     * qui respecte FILESYSTEM_URL / APP_URL configuré pour le domaine final.
      */
     public function getAvatarUrlAttribute(): ?string
     {
         if (! $this->avatar_path) {
             return null;
         }
-        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
         $bust = $this->updated_at?->timestamp ?? 0;
+
+        $base = config('app.env') === 'local' && request()
+            ? request()->getSchemeAndHttpHost().'/storage/'.$this->avatar_path
+            : \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
+
         return "{$base}?v={$bust}";
     }
 
