@@ -104,3 +104,53 @@ export function startOfToday(): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+// Debut de la journee de `d` (00:00:00.000).
+export function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+// Fin de la journee de `d` (23:59:59.999).
+export function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+// Debut de la semaine (lundi 00:00) — convention francaise.
+export function startOfWeek(d: Date): Date {
+  const x = startOfDay(d);
+  const weekday = x.getDay(); // 0 dim, 1 lun, ... 6 sam
+  const offset = weekday === 0 ? -6 : 1 - weekday; // ramene au lundi
+  x.setDate(x.getDate() + offset);
+  return x;
+}
+
+// Fin de semaine (dimanche 23:59).
+export function endOfWeek(d: Date): Date {
+  return endOfDay(addDays(startOfWeek(d), 6));
+}
+
+// Debut du mois (1er a 00:00).
+export function startOfMonth(d: Date): Date {
+  const x = startOfDay(d);
+  x.setDate(1);
+  return x;
+}
+
+// Fin du mois (dernier jour a 23:59).
+export function endOfMonth(d: Date): Date {
+  const x = startOfDay(d);
+  x.setMonth(x.getMonth() + 1);
+  x.setDate(0); // veille du 1er du mois suivant = dernier du mois courant
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+// « Juin 2026 » — pour le header en mode mois.
+export function formatMonthYear(d: Date): string {
+  const month = MONTHS_LONG[d.getMonth()] ?? "";
+  return `${month.charAt(0).toUpperCase()}${month.slice(1)} ${d.getFullYear()}`;
+}

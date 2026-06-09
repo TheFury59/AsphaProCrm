@@ -8,7 +8,7 @@
 //
 // Cache react-query partage avec rdv/[id].tsx via buildPlanningQueryKey.
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -30,16 +30,26 @@ import {
 } from "@/hooks/use-intervenant-planning";
 import {
   addDays,
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
   formatDateShort,
-  formatRange,
   formatTime,
   parseLocalNaive,
+  startOfDay,
+  startOfMonth,
   startOfToday,
+  startOfWeek,
   toDateKey,
 } from "@/lib/date";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/Toast";
+import {
+  PlanningRangePicker,
+  periodLabel,
+  type PlanningViewMode,
+} from "@/components/planning/PlanningRangePicker";
 
 type Section = {
   key: string; // YYYY-MM-DD
@@ -134,12 +144,23 @@ export default function PlanningScreen() {
   const router = useRouter();
   const sectionListRef = useRef<SectionList<IntervenantEvent, Section>>(null);
 
-  // Plage par defaut : aujourd'hui -> +7 jours.
+  // Filtre periode : par defaut, semaine en cours (lundi -> dimanche).
+  // L'intervenant peut changer la vue (jour/semaine/mois) et la date de
+  // reference via la bottom-sheet `PlanningRangePicker`.
+  const [viewMode, setViewMode] = useState<PlanningViewMode>("week");
+  const [referenceDate, setReferenceDate] = useState<Date>(() => startOfToday());
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const range = useMemo(() => {
-    const from = startOfToday();
-    const to = addDays(from, 7);
-    return { from, to };
-  }, []);
+    switch (viewMode) {
+      case "day":
+        return { from: startOfDay(referenceDate), to: endOfDay(referenceDate) };
+      case "week":
+        return { from: startOfWeek(referenceDate), to: endOfWeek(referenceDate) };
+      case "month":
+        return { from: startOfMonth(referenceDate), to: endOfMonth(referenceDate) };
+    }
+  }, [viewMode, referenceDate]);
 
   const query = useIntervenantPlanning(range.from, range.to);
   const events = query.data ?? [];
@@ -159,6 +180,14 @@ export default function PlanningScreen() {
   );
 
   const onPressToday = useCallback(() => {
+    const today = startOfToday();
+    // Si la periode visible ne contient pas aujourd'hui, on reset la
+    // reference (la query re-fetch sur la nouvelle plage).
+    if (today < range.from || today > range.to) {
+      setReferenceDate(today);
+      return;
+    }
+    // Sinon on scroll vers la section du jour, ou message si vide.
     if (sections.length === 0) return;
     if (todaySectionIndex < 0) {
       showToast("Aucun RDV aujourd'hui", "info");
@@ -170,7 +199,7 @@ export default function PlanningScreen() {
       animated: true,
       viewOffset: 0,
     });
-  }, [sections, todaySectionIndex]);
+  }, [sections, todaySectionIndex, range.from, range.to]);
 
   const onRefresh = useCallback(() => {
     void query.refetch();
@@ -205,13 +234,18 @@ export default function PlanningScreen() {
       <View style={styles.header}>
         <View style={styles.headerTextBlock}>
           <Text style={styles.title}>Mon planning</Text>
-          <Text style={styles.subtitle}>Semaine {formatRange(range.from, range.to)}</Text>
+          <Text style={styles.subtitle}>{periodLabel(viewMode, referenceDate)}</Text>
         </View>
         <View style={styles.headerActions}>
           <HeaderIconButton
             icon="today-outline"
             label="Aujourd'hui"
             onPress={onPressToday}
+          />
+          <HeaderIconButton
+            icon="calendar-outline"
+            label="Filtrer la periode"
+            onPress={() => setPickerOpen(true)}
           />
           <HeaderIconButton
             icon="refresh-outline"
@@ -221,6 +255,17 @@ export default function PlanningScreen() {
           />
         </View>
       </View>
+
+      <PlanningRangePicker
+        visible={pickerOpen}
+        viewMode={viewMode}
+        referenceDate={referenceDate}
+        onClose={() => setPickerOpen(false)}
+        onChange={(newMode, newDate) => {
+          setViewMode(newMode);
+          setReferenceDate(newDate);
+        }}
+      />
 
       {query.isLoading ? (
         <PlanningSkeleton />

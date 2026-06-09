@@ -67,7 +67,8 @@
           "photosPermission": "Aspha Pro a besoin d'accéder à vos photos pour mettre à jour votre photo de profil.",
           "cameraPermission": "Aspha Pro a besoin d'accéder à la caméra pour prendre une photo de profil."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
