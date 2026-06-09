@@ -51,7 +51,7 @@ export type TicketMessage = {
   sender_id: number | null;
   body: string;
   created_at: string;
-  sender?: { id: number; name: string } | null;
+  sender?: { id: number; name: string; avatar_url?: string | null } | null;
 };
 
 type ListResponse<T> = { data: { data: T[]; total: number; current_page: number; last_page: number; per_page: number } };

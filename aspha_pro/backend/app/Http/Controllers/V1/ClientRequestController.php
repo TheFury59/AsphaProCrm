@@ -43,7 +43,7 @@ class ClientRequestController extends Controller
             ->with([
                 'client:id,code',
                 'client.company:id,client_id,company_name,photo,updated_at',
-                'assignedTo:id,name',
+                'assignedTo:id,name,avatar_path,updated_at',
             ]);
 
         return ['data' => $query->paginate($perPage)];
@@ -55,8 +55,8 @@ class ClientRequestController extends Controller
         $clientRequest->load([
             'client:id,code',
             'client.company:id,client_id,company_name,photo,updated_at',
-            'assignedTo:id,name,email',
-            'createdByUser:id,name',
+            'assignedTo:id,name,email,avatar_path,updated_at',
+            'createdByUser:id,name,avatar_path,updated_at',
             'assignedEmployees:id,name,user_id,avatar_path,updated_at',
             'faultEmployee:id,name,avatar_path,updated_at',
         ]);
@@ -81,7 +81,7 @@ class ClientRequestController extends Controller
         // La notification est émise par ClientRequestObserver::created
         // → pas de duplication ici (cf. AppServiceProvider).
         $ticket = ClientRequest::create($data);
-        $ticket->load(['client.company:id,client_id,company_name,photo,updated_at', 'assignedTo:id,name']);
+        $ticket->load(['client.company:id,client_id,company_name,photo,updated_at', 'assignedTo:id,name,avatar_path,updated_at']);
         return response()->json(['data' => $ticket], 201);
     }
 
@@ -116,7 +116,7 @@ class ClientRequestController extends Controller
         $clientRequest->update($data);
         $clientRequest->load([
             'client.company:id,client_id,company_name,photo,updated_at',
-            'assignedTo:id,name',
+            'assignedTo:id,name,avatar_path,updated_at',
             'faultEmployee:id,name,avatar_path,updated_at',
         ]);
         return ['data' => $clientRequest];
@@ -142,7 +142,7 @@ class ClientRequestController extends Controller
         abort_unless($request->user()?->can('clients.view'), 403);
 
         $messages = $clientRequest->messages()
-            ->with('sender:id,name')
+            ->with('sender:id,name,avatar_path,updated_at')
             ->orderBy('created_at')
             ->get();
 
@@ -168,7 +168,7 @@ class ClientRequestController extends Controller
             'body' => $data['body'],
         ]);
 
-        $message->load('sender:id,name');
+        $message->load('sender:id,name,avatar_path,updated_at');
 
         return response()->json(['data' => $message], 201);
     }
@@ -255,7 +255,7 @@ class ClientRequestController extends Controller
             ->with([
                 'client:id,code',
                 'client.company:id,client_id,company_name,photo,updated_at',
-                'assignedTo:id,name',
+                'assignedTo:id,name,avatar_path,updated_at',
             ])
             ->orderByDesc('created_at')
             ->get();

@@ -343,7 +343,7 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
     <TableRow className={isCurrentUser ? "bg-primary/5" : ""}>
       <TableCell>
         <div className="flex items-center gap-2.5">
-          <EntityAvatar name={user.name} variant="employee" size="sm" />
+          <EntityAvatar src={user.avatar_url} name={user.name} variant="employee" size="sm" />
           <div>
             <div className="text-sm font-medium">{user.name}</div>
             {isCurrentUser && (

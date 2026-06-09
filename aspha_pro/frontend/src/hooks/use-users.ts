@@ -44,6 +44,9 @@ export type AdminUser = {
   email: string;
   status: "active" | "inactive";
   role: "super_admin" | "admin" | "intervenant" | "client" | null;
+  // URL absolue de la photo de profil (accessor User::avatar_url côté Laravel,
+  // construit avec `?v=updated_at` pour le cache-bust). null si pas d'avatar.
+  avatar_url: string | null;
   last_login_at: string | null;
   created_at: string | null;
 };

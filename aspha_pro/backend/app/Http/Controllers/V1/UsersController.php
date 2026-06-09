@@ -60,6 +60,10 @@ class UsersController extends Controller
                 'email' => $u->email,
                 'status' => $u->status ?? 'active',
                 'role' => $u->getRoleNames()->first() ?? null,
+                // Photo de profil — accessor User::avatar_url construit l'URL
+                // absolue + cache-bust (?v=updated_at) à la volée. Sans ça
+                // la liste admin affichait juste les initiales colorées.
+                'avatar_url' => $u->avatar_url,
                 'last_login_at' => optional($u->last_login_at)->toIso8601String(),
                 'created_at' => optional($u->created_at)->toIso8601String(),
             ];

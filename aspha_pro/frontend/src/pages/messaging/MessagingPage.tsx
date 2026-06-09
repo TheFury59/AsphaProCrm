@@ -513,7 +513,7 @@ function ManageThreadDialog({
               const isMe = currentUser?.id === uid;
               return (
                 <div key={uid} className="px-3 py-2 flex items-center gap-3">
-                  <EntityAvatar name={u.name ?? "?"} variant="employee" size="sm" />
+                  <EntityAvatar src={u.avatar_url} name={u.name ?? "?"} variant="employee" size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
                       {u.name ?? "Utilisateur"}

@@ -73,12 +73,14 @@ class MessagingController extends Controller
         $this->ensureParticipant($request, $thread);
 
         $thread->load([
-            'messageThreadParticipants.user:id,name,email',
-            'createdBy:id,name',
+            // avatar_path + updated_at indispensables pour l'accessor User::avatar_url
+            // (sinon le panneau "Gérer la conversation" n'affichait que les initiales).
+            'messageThreadParticipants.user:id,name,email,avatar_path,updated_at',
+            'createdBy:id,name,avatar_path,updated_at',
         ]);
 
         $messages = $thread->messages()
-            ->with('sender:id,name')
+            ->with('sender:id,name,avatar_path,updated_at')
             ->orderByDesc('sent_at')
             ->paginate(50);
 
@@ -172,7 +174,10 @@ class MessagingController extends Controller
             $added++;
         }
 
-        $thread->load('messageThreadParticipants.user:id,name,email', 'createdBy:id,name');
+        $thread->load(
+            'messageThreadParticipants.user:id,name,email,avatar_path,updated_at',
+            'createdBy:id,name,avatar_path,updated_at',
+        );
 
         return ['data' => ['thread' => $thread, 'added' => $added]];
     }
@@ -246,7 +251,7 @@ class MessagingController extends Controller
         // des préférences + canaux push/email). Plus de Notification::create()
         // en direct ici (cf. audit notifications 2026-05-20).
 
-        return response()->json(['data' => $message->load('sender:id,name')], 201);
+        return response()->json(['data' => $message->load('sender:id,name,avatar_path,updated_at')], 201);
     }
 
     /**
@@ -303,20 +308,23 @@ class MessagingController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Avatars : une seule requête pour toutes les fiches employé liées.
-        $avatars = Employee::query()
+        // Avatar : depuis l'unification 2026-06-09 la photo est portée par
+        // `users.avatar_path` (User::avatar_url construit l'URL absolue +
+        // cache-bust). On garde le fallback Employee::avatar_path pour les
+        // intervenants historiques qui n'ont pas encore migré leur photo.
+        $employeeAvatars = Employee::query()
             ->whereIn('user_id', $users->pluck('id'))
             ->get(['id', 'user_id', 'avatar_path'])
             ->keyBy('user_id');
 
         return [
-            'data' => $users->map(function (User $u) use ($avatars) {
+            'data' => $users->map(function (User $u) use ($employeeAvatars) {
                 return [
                     'id' => $u->id,
                     'name' => $u->name,
                     'email' => $u->email,
                     'role' => $u->getRoleNames()->first(),
-                    'avatar_url' => $avatars->get($u->id)?->avatar_url,
+                    'avatar_url' => $u->avatar_url ?? $employeeAvatars->get($u->id)?->avatar_url,
                 ];
             })->values(),
         ];

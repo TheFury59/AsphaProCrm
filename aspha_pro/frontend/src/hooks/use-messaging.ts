@@ -18,7 +18,7 @@ export type Message = {
   sender_id: number | null;
   body: string;
   sent_at: string;
-  sender?: { id: number; name: string };
+  sender?: { id: number; name: string; avatar_url?: string | null };
 };
 
 export type MessageableUser = {

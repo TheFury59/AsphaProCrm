@@ -291,7 +291,7 @@ class ExtranetController extends Controller
         $ticket = $this->resolveClientTicket($request, $ticket);
 
         return ['data' => $ticket->messages()
-            ->with('sender:id,name')
+            ->with('sender:id,name,avatar_path,updated_at')
             ->orderBy('created_at')
             ->get()];
     }
@@ -313,7 +313,7 @@ class ExtranetController extends Controller
             'sender_id' => $request->user()->id,
             'body' => $data['body'],
         ]);
-        $message->load('sender:id,name');
+        $message->load('sender:id,name,avatar_path,updated_at');
 
         return response()->json(['data' => $message], 201);
     }
@@ -373,7 +373,7 @@ class ExtranetController extends Controller
         $ticket = $this->resolveIntervenantTicket($request, $ticket);
 
         return ['data' => $ticket->messages()
-            ->with('sender:id,name')
+            ->with('sender:id,name,avatar_path,updated_at')
             ->orderBy('created_at')
             ->get()];
     }
@@ -394,7 +394,7 @@ class ExtranetController extends Controller
             'sender_id' => $request->user()->id,
             'body' => $data['body'],
         ]);
-        $message->load('sender:id,name');
+        $message->load('sender:id,name,avatar_path,updated_at');
 
         return response()->json(['data' => $message], 201);
     }
