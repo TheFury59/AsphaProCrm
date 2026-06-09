@@ -326,6 +326,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Fil de discussion d'un ticket — ownership strict (créateur ou affecté).
         Route::get('tickets/{ticket}/messages', 'intervenantTicketMessages');
         Route::post('tickets/{ticket}/messages', 'postIntervenantTicketMessage');
+        // Avatar self-service (l'intervenant change sa propre photo de profil)
+        Route::post('avatar', 'uploadIntervenantAvatar');
+        Route::delete('avatar', 'deleteIntervenantAvatar');
     });
     Route::prefix('extranet/client')->controller(ExtranetController::class)->group(function () {
         Route::get('profile', 'clientProfile');
@@ -344,6 +347,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // appartient au client lié au portal_user_id de l'utilisateur).
         Route::get('tickets/{ticket}/messages', 'clientTicketMessages');
         Route::post('tickets/{ticket}/messages', 'postClientTicketMessage');
+        // Logo self-service (le client change le logo de son entreprise)
+        Route::post('logo', 'uploadClientLogo');
+        Route::delete('logo', 'deleteClientLogo');
     });
 
     // === Tableau de bord (KPI agrégés, admins uniquement) ===

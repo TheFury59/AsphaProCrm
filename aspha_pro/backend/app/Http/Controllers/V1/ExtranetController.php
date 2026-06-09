@@ -10,6 +10,8 @@ use App\Services\InterventionExpander;
 use App\Services\QuotePdfGenerator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Endpoints dédiés aux extranets — vues restreintes pour intervenant et client.
@@ -458,5 +460,113 @@ class ExtranetController extends Controller
             ->get(['id', 'code']);
 
         return ['data' => $clients];
+    }
+
+    // ========== UPLOADS SELF-SERVICE (extranet) ==========
+
+    /**
+     * POST /api/v1/extranet/intervenant/avatar
+     *
+     * Endpoint self-service : l'intervenant connecté peut uploader son propre
+     * avatar (dérivé de Employee::where('user_id', $user->id)). Pas besoin de
+     * la permission admin `employees.edit` — on borne au scope du user courant.
+     *
+     * Mécanique identique à MediaUploadController::uploadEmployeeAvatar :
+     *   - delete de l'ancien fichier avant save → pas d'accumulation
+     *   - nom fichier randomisé (anti path-traversal)
+     *   - validation MIME + 2 Mo max
+     */
+    public function uploadIntervenantAvatar(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        $request->validate([
+            'avatar' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        if ($employee->avatar_path && Storage::disk('public')->exists($employee->avatar_path)) {
+            Storage::disk('public')->delete($employee->avatar_path);
+        }
+
+        $file = $request->file('avatar');
+        $ext = $file->getClientOriginalExtension() ?: $file->guessExtension();
+        $filename = "{$employee->id}_".Str::random(16).".{$ext}";
+        $path = $file->storeAs('avatars', $filename, 'public');
+
+        $employee->update(['avatar_path' => $path]);
+
+        return ['data' => $employee->fresh()];
+    }
+
+    /**
+     * DELETE /api/v1/extranet/intervenant/avatar
+     */
+    public function deleteIntervenantAvatar(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        if ($employee->avatar_path && Storage::disk('public')->exists($employee->avatar_path)) {
+            Storage::disk('public')->delete($employee->avatar_path);
+        }
+        $employee->update(['avatar_path' => null]);
+
+        return response()->noContent();
+    }
+
+    /**
+     * POST /api/v1/extranet/client/logo
+     *
+     * Endpoint self-service : le client connecté peut uploader le logo de son
+     * entreprise (dérivé de Client::where('portal_user_id', $user->id)).
+     */
+    public function uploadClientLogo(Request $request)
+    {
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
+        abort_unless($client, 404, 'Profil client introuvable');
+
+        $request->validate([
+            'logo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        $company = $client->company;
+        if (! $company) {
+            return response()->json(['message' => 'Votre entreprise n\'a pas encore de fiche.'], 422);
+        }
+
+        if ($company->photo && Storage::disk('public')->exists($company->photo)) {
+            Storage::disk('public')->delete($company->photo);
+        }
+
+        $file = $request->file('logo');
+        $ext = $file->getClientOriginalExtension() ?: $file->guessExtension();
+        $filename = "client_{$client->id}_".Str::random(16).".{$ext}";
+        $path = $file->storeAs('logos', $filename, 'public');
+
+        $company->update(['photo' => $path]);
+
+        return ['data' => $company->fresh()];
+    }
+
+    /**
+     * DELETE /api/v1/extranet/client/logo
+     */
+    public function deleteClientLogo(Request $request)
+    {
+        $client = Client::where('portal_user_id', $request->user()->id)->first();
+        abort_unless($client, 404, 'Profil client introuvable');
+
+        $company = $client->company;
+        if (! $company) {
+            return response()->noContent();
+        }
+
+        if ($company->photo && Storage::disk('public')->exists($company->photo)) {
+            Storage::disk('public')->delete($company->photo);
+        }
+        $company->update(['photo' => null]);
+
+        return response()->noContent();
     }
 }

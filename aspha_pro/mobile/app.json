@@ -7,6 +7,12 @@
     "scheme": "aspha",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/logo-aspha.png",
+    "splash": {
+      "image": "./assets/logo-aspha.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -17,6 +23,10 @@
     "android": {
       "package": "fr.asphapro.mobile",
       "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo-aspha.png",
+        "backgroundColor": "#ffffff"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -48,6 +58,13 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Aspha Pro utilise votre position pour valider votre présence sur le site d'intervention."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Aspha Pro a besoin d'accéder à vos photos pour mettre à jour votre photo de profil.",
+          "cameraPermission": "Aspha Pro a besoin d'accéder à la caméra pour prendre une photo de profil."
         }
       ]
     ],

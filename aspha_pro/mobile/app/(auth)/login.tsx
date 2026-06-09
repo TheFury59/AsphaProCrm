@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Device from "expo-device";
 
@@ -50,10 +50,11 @@ export default function LoginScreen() {
   return (
     <Screen scroll keyboardAware background={colors.background}>
       <View style={styles.header}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoLetter}>A</Text>
-        </View>
-        <Text style={styles.title}>Aspha Pro</Text>
+        <Image
+          source={require("../../assets/logo-aspha.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.subtitle}>ERP entreprises de services</Text>
       </View>
 
@@ -117,24 +118,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
     gap: spacing.md,
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+  logo: {
+    width: 180,
+    height: 120,
     marginBottom: spacing.sm,
-  },
-  logoLetter: {
-    fontSize: 40,
-    fontWeight: "700",
-    color: colors.textInverse,
-  },
-  title: {
-    fontSize: typography.xxxl,
-    fontWeight: "700",
-    color: colors.text,
   },
   subtitle: {
     fontSize: typography.md,
