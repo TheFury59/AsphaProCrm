@@ -19,7 +19,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -71,6 +71,28 @@ export default function SignalementDetailScreen() {
   const [draft, setDraft] = useState("");
   const listRef = useRef<FlatList<TicketMessage>>(null);
 
+  // Gestion clavier custom : on bypasse KeyboardAvoidingView qui a des cas
+  // foireux sur Android Expo Go (le composer reste sous le clavier, ou
+  // disparait du viewport après fermeture). À la place : on écoute Keyboard
+  // et on applique un paddingBottom dynamique sur le conteneur. Ça réduit
+  // l'espace flexbox utilisable → le composer (last child) se positionne
+  // pile au-dessus du clavier. Cross-platform fiable sans dépendance native.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   // Auto-scroll vers le bas a chaque nouveau message recu.
   useEffect(() => {
     if (!messages || messages.length === 0) return;
@@ -106,15 +128,7 @@ export default function SignalementDetailScreen() {
         }}
       />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        // iOS : `padding` repousse le contenu au-dessus du clavier
-        // Android : `height` redimensionne (combiné à `softwareKeyboardLayoutMode: resize`
-        //           dans app.json) — sans ça le clavier mange le composer.
-        // L'offset iOS compense la hauteur du header de la Stack (~44 + safe area).
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-      >
+      <View style={[styles.flex, { paddingBottom: keyboardHeight }]}>
         {/* === Header info ticket === */}
         {ticket ? <TicketHeader ticket={ticket} /> : null}
 
@@ -131,6 +145,7 @@ export default function SignalementDetailScreen() {
         ) : (
           <FlatList
             ref={listRef}
+            style={styles.flex}
             data={messages ?? []}
             keyExtractor={(m) => String(m.id)}
             renderItem={({ item }) => <MessageBubble msg={item} mineUserId={me?.id ?? null} />}
@@ -169,7 +184,7 @@ export default function SignalementDetailScreen() {
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
