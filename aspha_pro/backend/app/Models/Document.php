@@ -19,8 +19,15 @@ class Document extends Model
         'file_path',
         'label',
         'document_type',
+        // Catégorie libre (ex. 'uploaded_by_employee' pour les uploads self-
+        // service depuis l'app mobile). Pure étiquette informative côté UI.
+        'category',
         // Public destinataire : 'client' / 'intervenant' / 'encadrement'.
         'audience',
+        // Utilisateur qui a uploadé le document. Sert au contrôle d'ownership
+        // côté extranet (un intervenant ne peut effacer que SES propres
+        // uploads, pas les documents déposés par l'admin RH).
+        'uploaded_by_user_id',
         'is_client_visible',
         // Date de fin de validité / renouvellement (saisie manuelle).
         'expiry_date',

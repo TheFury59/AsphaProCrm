@@ -38,6 +38,23 @@ export default function IntervenantLayout() {
         }}
       />
       <Tabs.Screen
+        name="documents"
+        options={({ route }) => {
+          // Sous-écrans `[id]` ou `upload` → on cache la tab bar (modales
+          // fonctionnelles, libère la place du clavier).
+          const focused = getFocusedRouteNameFromRoute(route) ?? "index";
+          const hideTabBar = focused === "upload" || focused === "[id]";
+          return {
+            title: "Documents",
+            headerShown: false,
+            tabBarStyle: hideTabBar ? { display: "none" as const } : undefined,
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+              <Ionicons name="folder-outline" size={size} color={color} />
+            ),
+          };
+        }}
+      />
+      <Tabs.Screen
         name="signalements"
         options={({ route }) => {
           // Cache le tab bar sur les sous-écrans `new` et `[id]` (qui sont des
@@ -59,13 +76,19 @@ export default function IntervenantLayout() {
       />
       <Tabs.Screen
         name="messagerie"
-        options={{
-          // Tab masquée en V1 : toute la communication passe par les fils de
-          // signalements. On la garde dans le code pour V2 (DM directe avec
-          // les admins / collègues, hors tickets).
-          href: null,
-          title: "Messages",
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={color} />,
+        options={({ route }) => {
+          // Réactivée 2026-06-09 : DM directes admins + collègues. Sous-écrans
+          // `[id]` / `new` masquent la tab bar (idem pattern signalements).
+          const focused = getFocusedRouteNameFromRoute(route) ?? "index";
+          const hideTabBar = focused === "[id]" || focused === "new";
+          return {
+            title: "Messages",
+            headerShown: false,
+            tabBarStyle: hideTabBar ? { display: "none" as const } : undefined,
+            tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+              <Ionicons name="chatbubbles-outline" size={size} color={color} />
+            ),
+          };
         }}
       />
       <Tabs.Screen

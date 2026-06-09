@@ -226,3 +226,100 @@ export type CreateClientTicketRequest = {
   body?: string | null;
   priority?: TicketPriority;
 };
+
+// === INTERVENANT — DOCUMENTS (extranet self-service) ===
+// Shape renvoyée par GET /extranet/intervenant/documents.
+// Le backend distingue `can_delete` = true pour les uploads self-service
+// (l'intervenant peut les effacer) ; false pour les docs RH déposés par
+// l'admin (intouchables côté extranet).
+export type IntervenantDocument = {
+  id: number;
+  owner_type: "employee";
+  owner_id: number;
+  label: string;
+  document_type: string | null;
+  category: string | null;
+  audience: string | null;
+  uploaded_by_user_id: number | null;
+  expiry_date: string | null;
+  download_url: string;
+  size_kb: number | null;
+  mime_type: string | null;
+  created_at: string | null;
+  can_delete: boolean;
+};
+
+// === MESSAGERIE (interne — intervenant <-> admins/collègues) ===
+// Endpoints `/messaging/*` partagés avec le web ; côté mobile on consomme
+// le sous-ensemble nécessaire au flow simple (V1) :
+//   liste threads → détail thread → envoi message → mark read.
+//
+// Pas de gestion de groupes / participants côté mobile V1 : un thread se
+// crée en 1-1 via /messaging/threads et reste tel quel. Les participants
+// supplémentaires se gèrent côté web.
+
+export type MessageThreadType = "direct" | "group" | "telemanagement";
+
+export type MessageSender = {
+  id: number;
+  name: string;
+  avatar_url?: string | null;
+};
+
+export type ThreadMessage = {
+  id: number;
+  thread_id: number;
+  sender_id: number;
+  body: string;
+  sent_at: string | null;
+  created_at?: string;
+  sender?: MessageSender | null;
+};
+
+// Shape renvoyée par GET /messaging/threads (liste mappée serveur).
+export type MessageThread = {
+  id: number;
+  subject: string | null;
+  type: MessageThreadType;
+  created_at: string;
+  last_message: ThreadMessage | null;
+  messages_count: number;
+  unread_count: number;
+  created_by: { id: number; name: string } | null;
+};
+
+// Shape participants renvoyée dans le détail d'un thread.
+export type ThreadParticipant = {
+  id: number;
+  thread_id: number;
+  user_id: number;
+  last_read_at: string | null;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    avatar_url?: string | null;
+  } | null;
+};
+
+// Shape du détail thread renvoyée par GET /messaging/threads/{id}.
+// Le thread embarque ses participants (relation `messageThreadParticipants`)
+// et le paginate des messages. On extrait la `data` plate côté hook.
+export type MessageThreadDetail = {
+  id: number;
+  subject: string | null;
+  type: MessageThreadType;
+  created_by: number | null;
+  created_at: string;
+  message_thread_participants?: ThreadParticipant[];
+  messageThreadParticipants?: ThreadParticipant[]; // fallback camelCase rare
+};
+
+// Un user invitable dans un nouveau thread (GET /messaging/users).
+export type MessageableUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string | null;
+  avatar_url: string | null;
+};

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Quote;
 use App\Services\InterventionExpander;
@@ -576,5 +577,223 @@ class ExtranetController extends Controller
         $company->update(['photo' => null]);
 
         return response()->noContent();
+    }
+
+    // ========== INTERVENANT — DOCUMENTS SELF-SERVICE ==========
+    //
+    // Endpoints dédiés app mobile : l'intervenant voit SES documents RH (déposés
+    // par l'admin) ET peut uploader ses propres justificatifs / certificats.
+    //
+    // Pourquoi des endpoints séparés du `DocumentController` ?
+    //   `DocumentController::index/store` exige `documents.view` / `documents.edit`
+    //   permissions admin que les intervenants n'ont PAS. Le contrôleur admin
+    //   gère 5 owner_types polymorphes (client/employee/contract/invoice/quote)
+    //   avec une logique d'audience riche, on n'a pas besoin de tout ça côté
+    //   extranet — on borne strictement à `owner_type=employee` ET au scope
+    //   du user courant.
+    //
+    // Sécurité : on résout `$employee = Employee::where('user_id', $request->user()->id)`
+    // et on filtre EXCLUSIVEMENT sur `owner_type=employee` + `owner_id=$employee->id`.
+    // Pas de spoofing possible — l'intervenant ne peut pas viser un autre employee.
+
+    private const INTERVENANT_DOC_MIMES = 'pdf,jpg,jpeg,png,webp,doc,docx';
+    private const INTERVENANT_DOC_MAX_KB = 10240; // 10 Mo
+
+    /**
+     * GET /api/v1/extranet/intervenant/documents
+     *
+     * Liste TOUS les documents de l'intervenant connecté (uploads RH +
+     * uploads self-service). Pas de filtre `audience` ici : l'intervenant
+     * doit voir ses fiches de paie / contrats déposés par l'admin (audience
+     * généralement `intervenant`) ainsi que ses propres uploads (audience
+     * `intervenant` aussi). On ne lui cache pas ses propres documents.
+     */
+    public function intervenantDocuments(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        $docs = Document::where('owner_type', 'employee')
+            ->where('owner_id', $employee->id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        return ['data' => $docs->map(fn ($d) => $this->serializeIntervenantDocument($d, $request->user()->id))];
+    }
+
+    /**
+     * POST /api/v1/extranet/intervenant/documents
+     *
+     * L'intervenant upload un document pour son propre dossier. `owner_type`
+     * et `owner_id` sont FORCÉS côté serveur (jamais lus du payload) —
+     * impossible d'attacher un document à un autre employé.
+     *
+     * Stockage : disk 'local' (privé) sous `documents/employee/{id}/` —
+     * identique au `DocumentController` admin, pour que les downloads se
+     * comportent pareil.
+     */
+    public function uploadIntervenantDocument(Request $request)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:64'],
+            'file' => ['required', 'file', 'max:' . self::INTERVENANT_DOC_MAX_KB, 'mimes:' . self::INTERVENANT_DOC_MIMES],
+        ]);
+
+        // Filename randomisé pour éviter collisions + ne pas exposer le nom
+        // original côté path (cf. DocumentController). Le `label` reste l'info
+        // affichée à l'utilisateur.
+        $ext = $request->file('file')->getClientOriginalExtension();
+        $filename = Str::random(40) . '.' . preg_replace('/[^a-zA-Z0-9]/', '', $ext);
+
+        $path = $request->file('file')->storeAs(
+            "documents/employee/{$employee->id}",
+            $filename,
+            'local',
+        );
+
+        $doc = Document::create([
+            'owner_type' => 'employee',
+            'owner_id' => $employee->id,
+            'file_path' => $path,
+            'label' => $data['label'],
+            'document_type' => 'other',
+            'category' => $data['category'] ?? 'uploaded_by_employee',
+            'audience' => 'intervenant',
+            // Visible côté admin (l'admin doit pouvoir consulter ce que
+            // l'intervenant dépose). is_client_visible=true permet aussi à
+            // l'intervenant de re-télécharger via le filtre d'audience.
+            'is_client_visible' => true,
+            'uploaded_by_user_id' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'data' => $this->serializeIntervenantDocument($doc, $request->user()->id),
+        ], 201);
+    }
+
+    /**
+     * GET /api/v1/extranet/intervenant/documents/{document}/download
+     *
+     * Téléchargement d'un document de l'intervenant. Garde stricte : le
+     * document DOIT être attaché au profil employee du user courant.
+     *
+     * Stratégie de lecture disque identique au DocumentController admin :
+     * d'abord `local` (nouveau standard), fallback `public` (legacy).
+     */
+    public function downloadIntervenantDocument(Request $request, Document $document)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        abort_unless(
+            $document->owner_type === 'employee' && (int) $document->owner_id === (int) $employee->id,
+            403,
+            'Ce document ne vous appartient pas.',
+        );
+
+        $disk = Storage::disk('local')->exists($document->file_path) ? 'local'
+            : (Storage::disk('public')->exists($document->file_path) ? 'public' : null);
+        if (! $disk) {
+            abort(404, 'Fichier introuvable.');
+        }
+
+        // Sanitize le label pour le Content-Disposition (pas de CRLF ni de
+        // chars qui cassent le header).
+        $safeLabel = preg_replace('/[^\w\s.\-]/u', '_', $document->label);
+        if (! str_contains($safeLabel, '.')) {
+            $ext = pathinfo($document->file_path, PATHINFO_EXTENSION);
+            $safeLabel .= '.' . $ext;
+        }
+
+        return Storage::disk($disk)->download($document->file_path, $safeLabel);
+    }
+
+    /**
+     * DELETE /api/v1/extranet/intervenant/documents/{document}
+     *
+     * L'intervenant ne peut effacer QUE ses propres uploads (les documents
+     * déposés par l'admin RH restent intacts, sinon il pourrait dissimuler
+     * sa fiche de paie ou son contrat).
+     *
+     * Double garde :
+     *  1. Le document doit pointer le profil employee du user courant.
+     *  2. `uploaded_by_user_id` doit être l'user courant.
+     *
+     * Soft delete (cf. Document::SoftDeletes) — le fichier disque reste pour
+     * une éventuelle restauration, purgé plus tard par un job de GC.
+     */
+    public function deleteIntervenantDocument(Request $request, Document $document)
+    {
+        $employee = Employee::where('user_id', $request->user()->id)->first();
+        abort_unless($employee, 404, 'Profil intervenant introuvable');
+
+        abort_unless(
+            $document->owner_type === 'employee' && (int) $document->owner_id === (int) $employee->id,
+            403,
+            'Ce document ne vous appartient pas.',
+        );
+
+        abort_unless(
+            (int) $document->uploaded_by_user_id === (int) $request->user()->id,
+            403,
+            "Tu ne peux supprimer que les documents que tu as toi-même déposés.",
+        );
+
+        $document->delete();
+
+        return response()->noContent();
+    }
+
+    /**
+     * Sérialisation publique d'un document côté extranet intervenant.
+     * On expose `can_delete` pour que l'UI mobile cache le bouton sur les
+     * documents non supprimables (déposés par l'admin RH).
+     */
+    private function serializeIntervenantDocument(Document $d, int $currentUserId): array
+    {
+        return [
+            'id' => $d->id,
+            'owner_type' => $d->owner_type,
+            'owner_id' => $d->owner_id,
+            'label' => $d->label,
+            'document_type' => $d->document_type,
+            'category' => $d->category,
+            'audience' => $d->audience,
+            'uploaded_by_user_id' => $d->uploaded_by_user_id,
+            // Cast date:Y-m-d → string 'YYYY-MM-DD' ou null.
+            'expiry_date' => $d->expiry_date?->format('Y-m-d'),
+            'download_url' => "/api/v1/extranet/intervenant/documents/{$d->id}/download",
+            'size_kb' => $d->file_path && Storage::disk('local')->exists($d->file_path)
+                ? (int) round(Storage::disk('local')->size($d->file_path) / 1024)
+                : null,
+            'mime_type' => $d->file_path
+                ? $this->guessMimeFromPath($d->file_path)
+                : null,
+            'created_at' => $d->created_at?->toIso8601String(),
+            'can_delete' => (int) $d->uploaded_by_user_id === $currentUserId,
+        ];
+    }
+
+    /**
+     * Devine le mime_type depuis l'extension du fichier. On ne sniffe pas le
+     * contenu pour rester rapide — l'extension est suffisamment fiable pour
+     * piloter l'icône UI (PDF vs image vs Word).
+     */
+    private function guessMimeFromPath(string $path): ?string
+    {
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        return match ($ext) {
+            'pdf' => 'application/pdf',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            default => null,
+        };
     }
 }

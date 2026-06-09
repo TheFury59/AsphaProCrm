@@ -332,6 +332,13 @@ Route::middleware('auth:sanctum')->group(function () {
         // Avatar self-service (l'intervenant change sa propre photo de profil)
         Route::post('avatar', 'uploadIntervenantAvatar');
         Route::delete('avatar', 'deleteIntervenantAvatar');
+        // Documents self-service mobile (sprint 2026-06-09).
+        // L'intervenant voit SES documents RH ET peut uploader ses propres
+        // justificatifs / certificats. Ownership strict côté contrôleur.
+        Route::get('documents', 'intervenantDocuments');
+        Route::post('documents', 'uploadIntervenantDocument');
+        Route::get('documents/{document}/download', 'downloadIntervenantDocument');
+        Route::delete('documents/{document}', 'deleteIntervenantDocument');
     });
     Route::prefix('extranet/client')->controller(ExtranetController::class)->group(function () {
         Route::get('profile', 'clientProfile');
