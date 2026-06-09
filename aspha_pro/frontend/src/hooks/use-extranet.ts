@@ -118,6 +118,9 @@ export function useClientTicketMessages(ticketId: number | null) {
     enabled: !!ticketId,
     queryFn: async () =>
       (await api.get(`/extranet/client/tickets/${ticketId}/messages`)).data.data,
+    refetchInterval: 5_000,
+    staleTime: 2_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -171,6 +174,9 @@ export function useIntervenantTicketMessages(ticketId: number | null) {
     enabled: !!ticketId,
     queryFn: async () =>
       (await api.get(`/extranet/intervenant/tickets/${ticketId}/messages`)).data.data,
+    refetchInterval: 5_000,
+    staleTime: 2_000,
+    refetchOnWindowFocus: true,
   });
 }
 

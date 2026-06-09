@@ -59,9 +59,13 @@ export function useTicketMessages(
       );
       return data.data;
     },
-    staleTime: 10_000,
-    refetchInterval: 15_000, // poll « live » quand l'ecran est ouvert
-    refetchOnWindowFocus: false,
+    staleTime: 2_000,
+    // Poll aggressive (5 s) tant que l'ecran est ouvert pour effet « live »
+    // proche du chat instantane sans WebSocket. La query est unmount des que
+    // l'user quitte l'ecran detail (FlatList demonte) → pas de cout reseau
+    // en arriere-plan.
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 }
 

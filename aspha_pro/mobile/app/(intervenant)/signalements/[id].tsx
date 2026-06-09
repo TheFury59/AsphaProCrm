@@ -108,8 +108,12 @@ export default function SignalementDetailScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 84 : 0}
+        // iOS : `padding` repousse le contenu au-dessus du clavier
+        // Android : `height` redimensionne (combiné à `softwareKeyboardLayoutMode: resize`
+        //           dans app.json) — sans ça le clavier mange le composer.
+        // L'offset iOS compense la hauteur du header de la Stack (~44 + safe area).
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
       >
         {/* === Header info ticket === */}
         {ticket ? <TicketHeader ticket={ticket} /> : null}

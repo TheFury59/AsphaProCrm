@@ -154,6 +154,14 @@ export function useTicketMessages(ticketId: number | null) {
     enabled: !!ticketId,
     queryFn: async () =>
       (await api.get<SingleResponse<TicketMessage[]>>(`/client-requests/${ticketId}/messages`)).data.data,
+    // Polling 5 s pour effet « live » sans WebSocket — sans ca, l'admin doit
+    // refresh la page pour voir un nouveau message envoye depuis le mobile.
+    // staleTime 2 s pour absorber les re-render frequents sans burst de
+    // requetes. refetchOnWindowFocus pour reload immediat quand l'admin
+    // revient sur l'onglet.
+    refetchInterval: 5_000,
+    staleTime: 2_000,
+    refetchOnWindowFocus: true,
   });
 }
 

@@ -23,6 +23,7 @@
     "android": {
       "package": "fr.asphapro.mobile",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo-aspha.png",
         "backgroundColor": "#ffffff"

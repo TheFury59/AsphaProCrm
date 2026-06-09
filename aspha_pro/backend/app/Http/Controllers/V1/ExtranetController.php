@@ -436,7 +436,13 @@ class ExtranetController extends Controller
             'created_by_user_id' => $request->user()->id,
         ]);
 
-        return response()->json(['data' => $ticket], 201);
+        // Auto-affecte l'intervenant créateur au ticket — sinon il n'apparaît
+        // que comme `created_by_user_id` et perd l'accès participants (notifs,
+        // listings côté admin, etc.). C'est l'attendu côté UX : « je signale
+        // un problème → je suis dans la boucle ».
+        $ticket->assignedEmployees()->attach($employee->id);
+
+        return response()->json(['data' => $ticket->fresh(['assignedEmployees:id'])], 201);
     }
 
     /**
