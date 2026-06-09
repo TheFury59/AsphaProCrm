@@ -103,6 +103,7 @@ export function buildPlanningQueryKey(from: Date, to: Date): readonly [
 export function useIntervenantPlanning(
   from?: Date,
   to?: Date,
+  options?: { enabled?: boolean },
 ): UseQueryResult<IntervenantEvent[], Error> {
   const range: IntervenantPlanningRange = from && to ? { from, to } : defaultRange();
   const fromKey = toDateKey(range.from);
@@ -119,5 +120,6 @@ export function useIntervenantPlanning(
     },
     staleTime: 30_000,
     refetchOnReconnect: true,
+    enabled: options?.enabled ?? true,
   });
 }

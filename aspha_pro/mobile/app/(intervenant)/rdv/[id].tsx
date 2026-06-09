@@ -7,6 +7,7 @@
 // les champs necessaires).
 
 import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Linking,
   Platform,
@@ -26,7 +27,6 @@ import {
   type IntervenantEvent,
 } from "@/hooks/use-intervenant-planning";
 import {
-  addDays,
   formatDateLong,
   formatTime,
   parseLocalNaive,
@@ -122,19 +122,54 @@ export default function RdvDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const id = params.id ?? "";
+  const qc = useQueryClient();
 
-  // Meme plage que le planning ecran => meme cache-key => lecture instantanee.
-  const range = useMemo(() => {
-    const from = startOfToday();
-    const to = addDays(from, 7);
+  // 1) Recherche dans TOUS les caches `intervenant-planning` déjà actifs en
+  //    mémoire. Cela couvre le cas où l'utilisateur arrive depuis l'écran
+  //    planning avec une plage filtrée custom (mois dernier, semaine passée…).
+  const eventFromCaches = useMemo<IntervenantEvent | null>(() => {
+    if (id.length === 0) return null;
+    const caches = qc.getQueriesData<IntervenantEvent[]>({
+      queryKey: ["intervenant-planning"],
+    });
+    for (const [, data] of caches) {
+      if (!data) continue;
+      const found = data.find((e) => eventIdToString(e.id) === id);
+      if (found) return found;
+    }
+    return null;
+  // Note: on ne met PAS les caches dans les deps — useMemo se ré-évalue
+  // naturellement quand le composant re-render (suite à invalidation).
+  // Volontairement non-exhaustif pour eviter de spam getQueriesData.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qc, id]);
+
+  // 2) Fallback : si on n'a rien trouvé dans les caches existants
+  //    (deep-link direct, cold start, page refresh), on lance un fetch large
+  //    [-30 jours, +30 jours] qui couvre tous les RDV accessibles depuis le
+  //    picker (cf. MAX_DAYS_IN_PAST = 30 dans PlanningRangePicker).
+  const fallbackRange = useMemo(() => {
+    const today = startOfToday();
+    const from = new Date(today);
+    from.setDate(from.getDate() - 30);
+    const to = new Date(today);
+    to.setDate(to.getDate() + 30);
     return { from, to };
   }, []);
-  const query = useIntervenantPlanning(range.from, range.to);
+  const fallbackQuery = useIntervenantPlanning(
+    fallbackRange.from,
+    fallbackRange.to,
+    { enabled: eventFromCaches === null && id.length > 0 },
+  );
 
   const event = useMemo<IntervenantEvent | null>(() => {
-    if (!query.data || id.length === 0) return null;
-    return query.data.find((e) => eventIdToString(e.id) === id) ?? null;
-  }, [query.data, id]);
+    if (eventFromCaches) return eventFromCaches;
+    if (!fallbackQuery.data) return null;
+    return fallbackQuery.data.find((e) => eventIdToString(e.id) === id) ?? null;
+  }, [eventFromCaches, fallbackQuery.data, id]);
+
+  // Loading effectif = on n'a pas encore d'event et le fallback est en cours.
+  const isLoading = !event && fallbackQuery.isLoading;
 
   const onBackNotFound = useCallback(() => {
     showToast("Impossible de retrouver ce RDV", "error");
@@ -216,7 +251,7 @@ export default function RdvDetailScreen() {
   }, [event, router]);
 
   // Loading : le cache est en cours d'hydration depuis le planning ; on attend.
-  if (query.isLoading) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.centered}>

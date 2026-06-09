@@ -23,12 +23,16 @@ class User extends Authenticatable
         'status',
         'must_change_password',
         'expo_push_token',
+        'avatar_path',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    /** Auto-appendé sur toString JSON pour exposer l'URL absolue de l'avatar. */
+    protected $appends = ['avatar_url'];
 
     protected function casts(): array
     {
@@ -38,6 +42,23 @@ class User extends Authenticatable
             'password' => 'hashed',
             'must_change_password' => 'boolean',
         ];
+    }
+
+    /**
+     * URL absolue de l'avatar User (PERSONNEL, pas RH).
+     *
+     * Le chemin relatif est stocké dans `avatar_path` (ex. `avatars/u12_a1b2.jpg`).
+     * Le `?v=` cache-bust force le refresh quand on remplace une photo.
+     * Returns null si aucun avatar défini.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (! $this->avatar_path) {
+            return null;
+        }
+        $base = \Illuminate\Support\Facades\Storage::disk('public')->url($this->avatar_path);
+        $bust = $this->updated_at?->timestamp ?? 0;
+        return "{$base}?v={$bust}";
     }
 
     /**

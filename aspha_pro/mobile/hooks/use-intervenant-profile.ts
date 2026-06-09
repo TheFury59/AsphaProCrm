@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse } from "@/types/api";
 
 export type IntervenantProfile = {
@@ -57,16 +58,26 @@ export function useUploadIntervenantAvatar(): UseMutationResult<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formData.append("avatar", { uri, name, type: mimeType } as any);
 
-      const { data } = await api.post<ApiResponse<IntervenantProfile>>(
-        "/extranet/intervenant/avatar",
+      // Upload sur /me/avatar (users.avatar_path) — partagé avec frontend web.
+      // L'ancien /extranet/intervenant/avatar (employees.avatar_path) reste
+      // disponible pour rétrocompat mais n'est plus utilisé.
+      await api.post(
+        "/me/avatar",
         formData,
         { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      // Refetch le profil pour récupérer la nouvelle avatar_url côté employee
+      // (l'accessor User::avatar_url est exposé via /me, on l'invalide aussi).
+      const { data } = await api.get<ApiResponse<IntervenantProfile>>(
+        "/extranet/intervenant/profile",
       );
       return data.data;
     },
     onSuccess: () => {
-      // Invalide le profil pour pull la nouvelle avatar_url.
       void qc.invalidateQueries({ queryKey: ["intervenant-profile"] });
+      // Refetch /me dans le store auth pour rafraichir user.avatar_url
+      // (utilisé partout pour afficher l'avatar du user connecté).
+      void useAuthStore.getState().refetchMe();
     },
   });
 }
@@ -75,10 +86,11 @@ export function useDeleteIntervenantAvatar(): UseMutationResult<void, Error, voi
   const qc = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: async () => {
-      await api.delete("/extranet/intervenant/avatar");
+      await api.delete("/me/avatar");
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["intervenant-profile"] });
+      void useAuthStore.getState().refetchMe();
     },
   });
 }

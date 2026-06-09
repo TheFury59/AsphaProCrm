@@ -122,6 +122,56 @@ class AuthController extends Controller
             'role' => $user->getRoleNames()->first(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
             'last_login_at' => optional($user->last_login_at)->toIso8601String(),
+            'avatar_url' => $user->avatar_url,
         ];
+    }
+
+    /**
+     * POST /api/v1/me/avatar
+     *
+     * Avatar personnel du user connecté (n'importe quel rôle).
+     * Multipart `avatar` (image jpg/jpeg/png/webp, max 2 Mo).
+     *
+     * Mécanique identique aux autres uploads :
+     *  - delete de l'ancien fichier avant write → pas d'accumulation
+     *  - filename randomisé (anti path-traversal)
+     *  - stocké dans `storage/app/public/avatars/`
+     *  - le mobile et le web partagent ce CHEMIN (même fichier)
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $request->validate([
+            'avatar' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        if ($user->avatar_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar_path)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        $file = $request->file('avatar');
+        $ext = $file->getClientOriginalExtension() ?: $file->guessExtension();
+        $filename = "u{$user->id}_".\Illuminate\Support\Str::random(16).".{$ext}";
+        $path = $file->storeAs('avatars', $filename, 'public');
+
+        $user->forceFill(['avatar_path' => $path])->save();
+
+        return response()->json(['data' => $this->serializeUser($user->fresh())]);
+    }
+
+    /**
+     * DELETE /api/v1/me/avatar
+     */
+    public function deleteAvatar(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->avatar_path && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->avatar_path)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar_path);
+        }
+        $user->forceFill(['avatar_path' => null])->save();
+
+        return response()->json(['data' => $this->serializeUser($user->fresh())]);
     }
 }

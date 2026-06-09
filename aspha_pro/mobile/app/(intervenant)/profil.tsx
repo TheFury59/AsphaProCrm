@@ -147,7 +147,10 @@ export default function ProfilIntervenantScreen() {
     }
   };
 
-  const avatarUrl = profile.data?.avatar_url ?? null;
+  // Source de vérité : `user.avatar_url` (perso, modifiable mobile + web).
+  // Fallback : `profile.data.avatar_url` (photo RH uploadée par admin sur la
+  // fiche intervenant — gardée pour les comptes pré-migration).
+  const avatarUrl = user?.avatar_url ?? profile.data?.avatar_url ?? null;
   const initials = getInitials(profile.data, user?.name ?? user?.email ?? "?");
   const isBusy = uploading || upload.isPending || remove.isPending;
 

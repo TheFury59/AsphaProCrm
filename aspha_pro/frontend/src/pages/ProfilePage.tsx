@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { User, Mail, KeyRound, ShieldCheck, Save, Lock } from "lucide-react";
+import { useRef, useState } from "react";
+import { Camera, KeyRound, Lock, Mail, Save, ShieldCheck, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { useAuthStore } from "@/stores/auth";
 import { useUpdateMe } from "@/hooks/use-users";
+import { api } from "@/lib/api";
 
 /**
  * Page "Mon profil" — accessible depuis le dropdown topbar pour TOUS les
@@ -32,7 +33,10 @@ const ROLE_LABELS: Record<string, { label: string; bg: string }> = {
 
 export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
+  const fetchMe = useAuthStore((s) => s.fetchMe);
   const updateMe = useUpdateMe();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Form d'identité (nom + email)
   const [name, setName] = useState(user?.name ?? "");
@@ -61,6 +65,57 @@ export function ProfilePage() {
       const data = err?.response?.data;
       const firstErr = data?.errors ? Object.values(data.errors).flat()[0] : null;
       toast.error((firstErr as string) ?? data?.message ?? "Mise à jour impossible");
+    }
+  };
+
+  const onPickAvatar = () => {
+    fileInputRef.current?.click();
+  };
+
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset pour pouvoir re-uploader le même fichier
+    if (!file) return;
+
+    // Validation client : 2 Mo max + type image.
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("La photo dépasse 2 Mo. Choisis une image plus légère.");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Format non supporté. Utilise JPG, PNG ou WebP.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+      await api.post("/me/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      await fetchMe(); // refresh user.avatar_url dans le store
+      toast.success("Photo de profil mise à jour");
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const firstErr = data?.errors ? Object.values(data.errors).flat()[0] : null;
+      toast.error((firstErr as string) ?? data?.message ?? "Upload impossible");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const onRemoveAvatar = async () => {
+    if (!confirm("Supprimer ta photo de profil ?")) return;
+    setUploadingAvatar(true);
+    try {
+      await api.delete("/me/avatar");
+      await fetchMe();
+      toast.success("Photo supprimée");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Suppression impossible");
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -101,14 +156,43 @@ export function ProfilePage() {
         description="Modifie ton identité, ton email et ton mot de passe."
       />
 
-      {/* Header avec avatar + rôle */}
+      {/* Header avec avatar + rôle + upload */}
       <Card className="mb-4">
         <CardContent className="pt-6 flex items-center gap-4">
-          <EntityAvatar name={user.name} variant="employee" size="lg" />
+          {/* Avatar avec badge caméra cliquable */}
+          <div className="relative shrink-0">
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.name}
+                className="h-16 w-16 rounded-full object-cover ring-2 ring-border"
+              />
+            ) : (
+              <EntityAvatar name={user.name} variant="employee" size="lg" />
+            )}
+            <button
+              type="button"
+              onClick={onPickAvatar}
+              disabled={uploadingAvatar}
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow ring-2 ring-background transition-opacity hover:opacity-90 disabled:opacity-50"
+              aria-label="Changer la photo de profil"
+              title="Changer la photo de profil"
+            >
+              <Camera className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={onFileSelected}
+              className="hidden"
+            />
+          </div>
+
           <div className="flex-1 min-w-0">
             <div className="text-lg font-semibold">{user.name}</div>
             <div className="text-sm text-muted-foreground font-mono">{user.email}</div>
-            <div className="mt-1.5 flex items-center gap-2">
+            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               <Badge className={roleMeta.bg}>
                 <ShieldCheck className="h-3 w-3 mr-1" />
                 {roleMeta.label}
@@ -116,6 +200,36 @@ export function ProfilePage() {
               <span className="text-[10px] text-muted-foreground">
                 ID #{user.id}
               </span>
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={onPickAvatar}
+                disabled={uploadingAvatar}
+                className="text-primary hover:underline disabled:opacity-50"
+              >
+                {uploadingAvatar
+                  ? "Envoi en cours…"
+                  : user.avatar_url
+                    ? "Changer la photo"
+                    : "Ajouter une photo"}
+              </button>
+              {user.avatar_url ? (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <button
+                    type="button"
+                    onClick={onRemoveAvatar}
+                    disabled={uploadingAvatar}
+                    className="text-destructive hover:underline disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Supprimer
+                  </button>
+                </>
+              ) : null}
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">JPG, PNG, WebP · 2 Mo max</span>
             </div>
           </div>
         </CardContent>

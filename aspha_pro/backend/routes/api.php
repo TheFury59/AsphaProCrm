@@ -66,6 +66,8 @@ Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middl
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateMe']);
+    Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
+    Route::delete('/me/avatar', [AuthController::class, 'deleteAvatar']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // App mobile — endpoints additionnels (logout token courant + enregistrement push token).

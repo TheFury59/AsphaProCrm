@@ -33,6 +33,8 @@ export type AuthUser = {
   role: UserRole | null;
   permissions: string[];
   last_login_at: string | null;
+  /** URL absolue de l'avatar personnel (null si non uploadé). */
+  avatar_url: string | null;
 };
 
 // === MOBILE LOGIN ===
