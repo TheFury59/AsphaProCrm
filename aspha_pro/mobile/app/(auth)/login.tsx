@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import * as Device from "expo-device";
 
 import { Button } from "@/components/ui/Button";
@@ -13,6 +14,7 @@ const APP_VERSION = "v0.1.0";
 
 export default function LoginScreen() {
   const login = useAuthStore((s) => s.login);
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,6 +84,14 @@ export default function LoginScreen() {
           onSubmitEditing={() => void handleSubmit()}
         />
 
+        <Pressable
+          onPress={() => router.push("/(auth)/forgot-password" as never)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.forgotLink, pressed && styles.forgotLinkPressed]}
+        >
+          <Text style={styles.forgotLinkText}>Mot de passe oublié ?</Text>
+        </Pressable>
+
         <View style={styles.spacer} />
 
         <Button label="Se connecter" onPress={handleSubmit} loading={submitting} />
@@ -135,6 +145,18 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: spacing.sm,
+  },
+  forgotLink: {
+    alignSelf: "flex-end",
+    marginTop: -spacing.sm,
+  },
+  forgotLinkPressed: {
+    opacity: 0.6,
+  },
+  forgotLinkText: {
+    color: colors.primary,
+    fontSize: typography.sm,
+    fontWeight: "600",
   },
   footer: {
     marginTop: spacing.xxxl,

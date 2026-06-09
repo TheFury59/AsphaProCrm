@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\V1\AuthController;
 use App\Http\Controllers\V1\MobileAuthController;
+use App\Http\Controllers\V1\PasswordResetController;
 use App\Http\Controllers\V1\UsersController;
 use App\Http\Controllers\V1\ClientController;
 use App\Http\Controllers\V1\ClientPortalController;
@@ -56,6 +57,11 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 // === App mobile (Sanctum Personal Access Tokens — pas de cookies) ===
 // Login public + rate-limited identique à /login pour bloquer le brute-force.
 Route::post('/mobile/login', [MobileAuthController::class, 'login'])->middleware('throttle:login');
+
+// === Mot de passe oublié (public, rate-limited) ===
+// Throttle agressif pour éviter le spam d'emails de reset / l'enum d'emails.
+Route::post('/forgot-password', [PasswordResetController::class, 'forgot'])->middleware('throttle:login');
+Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);

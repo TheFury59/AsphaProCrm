@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Building2, ShieldCheck, Sparkles, Zap, ArrowRight } from "lucide-react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Building2, ShieldCheck, Sparkles, Zap, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { apiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -128,18 +129,32 @@ export function LoginPage() {
                 <Label htmlFor="password" className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
                   Mot de passe
                 </Label>
-                <button type="button" className="text-xs text-primary hover:underline">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-primary hover:underline"
+                >
                   Oublié ?
+                </Link>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className="h-11 pr-10"
+                  {...register("password")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                className="h-11"
-                {...register("password")}
-              />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
 
