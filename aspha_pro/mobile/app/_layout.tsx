@@ -105,7 +105,20 @@ function AuthGate() {
     }
 
     // Pas de must_change_password : on route selon le role.
-    if (inAuthGroup) {
+    // 1. Si on est sur l'écran login/auth → vers le home du rôle
+    // 2. Si on est sur un group qui ne correspond PAS au rôle (cas où l'app
+    //    boot sur la dernière URL après quit/relaunch : un user intervenant
+    //    qui reload pendant qu'il était sur (client) verrait l'interface
+    //    client malgré son rôle) → vers le home du rôle
+    const currentGroup = segments[0];
+    const isClientRole = user.role === "client";
+    const isOnClientGroup = currentGroup === "(client)";
+    const isOnIntervenantGroup = currentGroup === "(intervenant)";
+    const roleMismatch =
+      (isClientRole && isOnIntervenantGroup) ||
+      (!isClientRole && isOnClientGroup);
+
+    if (inAuthGroup || roleMismatch) {
       const target = computeHomeRoute(user.role);
       // Cast volontaire : avec typedRoutes la signature est plus stricte que ce
       // que la logique runtime peut prouver ici. Les deux destinations existent.
