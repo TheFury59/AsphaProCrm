@@ -16,14 +16,30 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://asphapro-erp.fr/api/v1"
+      }
+    },
+    "preprod": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "preprod",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://preprod.asphapro-erp.fr/api/v1"
+      }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
       },
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://asphapro-erp.fr/api/v1"
+      }
     }
   },
   "submit": {

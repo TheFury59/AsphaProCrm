@@ -18,7 +18,12 @@
 
 set -euo pipefail
 
-APP_DIR="$HOME/aspha_pro"
+# APP_DIR peut être passé en argument 1 pour cibler une instance autre que la
+# prod (ex. preprod dans `$HOME/aspha_pro_preprod`). Sans arg → ~/aspha_pro.
+#   Usage :
+#     bash o2switch-deploy.sh                          # prod
+#     bash o2switch-deploy.sh ~/aspha_pro_preprod      # preprod
+APP_DIR="${1:-$HOME/aspha_pro}"
 
 # Le dépôt GitHub a une structure imbriquée : le code Laravel/React est dans
 # le sous-dossier `aspha_pro/` du clone (cf. racine du repo). On détecte
