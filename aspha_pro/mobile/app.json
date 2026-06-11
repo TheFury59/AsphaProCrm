@@ -7,7 +7,7 @@
     "scheme": "aspha",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "icon": "./assets/logo-aspha.png",
+    "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/logo-aspha.png",
       "resizeMode": "contain",
@@ -25,7 +25,7 @@
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo-aspha.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
