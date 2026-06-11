@@ -69,11 +69,15 @@ export function useBadgeage(): UseMutationResult<BadgeResponseData, Error, Badge
     },
     onSuccess: () => {
       // Le RDV vient potentiellement de passer en « realisee » → on force
-      // un refetch immediat (cf. lessons.md 2026-05-18 : refetchType active
-      // sinon les ecrans visibles restent stale).
+      // un refetch immediat de TOUS les caches planning (cf. lessons.md
+      // 2026-05-18 : refetchType active ne refresh que les caches affichés
+      // à ce moment-là, donc quand l'utilisateur revient sur le détail RDV
+      // après le badge, il lit un cache stale et voit « pas encore badgé »
+      // alors que la BDD a déjà le checkin). « all » force toutes les
+      // ranges actives + inactives à se rafraîchir.
       void queryClient.invalidateQueries({
         queryKey: ["intervenant-planning"],
-        refetchType: "active",
+        refetchType: "all",
       });
     },
   });
