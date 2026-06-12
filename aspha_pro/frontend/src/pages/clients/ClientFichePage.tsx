@@ -1,5 +1,8 @@
-import { useParams } from "react-router-dom";
-import { useClient, useUpdateClient } from "@/hooks/use-clients";
+import { useNavigate, useParams } from "react-router-dom";
+import { useClient, useUpdateClient, useDeleteClient } from "@/hooks/use-clients";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EditableField } from "@/components/EditableField";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +26,49 @@ import { QrCodesPanel } from "@/components/telegestion/QrCodesPanel";
 
 export function ClientFichePage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const clientId = id ? parseInt(id, 10) : null;
   const { data: c, isLoading } = useClient(clientId);
   const updateClient = useUpdateClient();
+  const deleteClient = useDeleteClient();
+
+  const handleDelete = async () => {
+    if (!clientId || !c) return;
+    const displayName = c.company?.company_name ?? c.display_name ?? `Client ${c.code}`;
+    const confirmation = prompt(
+      `⚠️ SUPPRESSION DÉFINITIVE\n\n` +
+        `Tu vas supprimer COMPLÈTEMENT la fiche du client "${displayName}" et ` +
+        `toutes ses données liées (contacts, adresses, missions, devis, factures, ` +
+        `tickets, demandes, documents, accès extranet…). IRRÉVERSIBLE.\n\n` +
+        `Pour confirmer, retape exactement le nom : ${displayName}`,
+    );
+    if (confirmation === null) return;
+    if (confirmation.trim() !== displayName) {
+      toast.error("Le nom ne correspond pas — suppression annulée.");
+      return;
+    }
+    try {
+      await deleteClient.mutateAsync({ id: clientId });
+      toast.success(`Client "${displayName}" supprimé.`);
+      navigate("/clients");
+    } catch (err: any) {
+      if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
+        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+          try {
+            await deleteClient.mutateAsync({ id: clientId, force: true });
+            toast.success(`Client "${displayName}" supprimé (forçage).`);
+            navigate("/clients");
+            return;
+          } catch (e2: any) {
+            toast.error(e2?.response?.data?.message ?? "Suppression impossible");
+            return;
+          }
+        }
+        return;
+      }
+      toast.error(err?.response?.data?.message ?? "Suppression impossible");
+    }
+  };
 
   const updateCompany = async (field: string, value: string | null) => {
     if (!clientId) return;
@@ -71,6 +114,17 @@ export function ClientFichePage() {
               <>
                 <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
                 {c.entity && <Badge variant="outline">{c.entity.name}</Badge>}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={deleteClient.isPending}
+                  onClick={handleDelete}
+                  className="text-rose-700 hover:text-rose-900 hover:bg-rose-50 gap-1.5"
+                  title="Supprimer définitivement ce client"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="text-xs">Supprimer</span>
+                </Button>
               </>
             }
           />

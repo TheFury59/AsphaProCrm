@@ -138,3 +138,27 @@ export function useUpdateUserStatus() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
   });
 }
+
+/**
+ * Suppression COMPLÈTE d'un user (hard-delete + cascade BDD).
+ *
+ * - super_admin uniquement (vérifié serveur).
+ * - On ne peut pas supprimer son propre compte (409).
+ * - On ne peut pas supprimer le dernier super_admin (409).
+ * - Si l'user est lié à un Employee avec interventions futures, refus avec
+ *   message clair. L'option `force=true` bypasse pour les super_admin.
+ */
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, force }: { userId: number; force?: boolean }) => {
+      const query = force ? "?force=1" : "";
+      await api.delete(`/admin/users/${userId}${query}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
+  });
+}

@@ -1,5 +1,7 @@
-import { useParams } from "react-router-dom";
-import { useEmployee, useUpdateEmployee } from "@/hooks/use-employees";
+import { useNavigate, useParams } from "react-router-dom";
+import { useEmployee, useUpdateEmployee, useDeleteEmployee } from "@/hooks/use-employees";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import { EditableField } from "@/components/EditableField";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -26,14 +28,53 @@ import { PortalAccessCard } from "@/pages/clients/PortalAccessCard";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const employeeId = id ? parseInt(id, 10) : null;
   const { data: e, isLoading } = useEmployee(employeeId);
   const updateEmp = useUpdateEmployee();
+  const deleteEmp = useDeleteEmployee();
   const [contractOpen, setContractOpen] = useState(false);
 
   const updateField = async (field: string, value: string | null) => {
     if (!employeeId) return;
     await updateEmp.mutateAsync({ id: employeeId, patch: { [field]: value } as any });
+  };
+
+  const handleDelete = async () => {
+    if (!employeeId || !e) return;
+    const confirmation = prompt(
+      `⚠️ SUPPRESSION DÉFINITIVE\n\n` +
+        `Tu vas supprimer COMPLÈTEMENT la fiche de "${e.full_name}" et toutes ` +
+        `ses données liées (contrats, compétences, formations, absences, ` +
+        `interventions passées, documents…). IRRÉVERSIBLE.\n\n` +
+        `Pour confirmer, retape exactement le nom : ${e.full_name}`,
+    );
+    if (confirmation === null) return;
+    if (confirmation.trim() !== e.full_name) {
+      toast.error("Le nom ne correspond pas — suppression annulée.");
+      return;
+    }
+    try {
+      await deleteEmp.mutateAsync({ id: employeeId });
+      toast.success(`Intervenant "${e.full_name}" supprimé.`);
+      navigate("/intervenants");
+    } catch (err: any) {
+      if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
+        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+          try {
+            await deleteEmp.mutateAsync({ id: employeeId, force: true });
+            toast.success(`Intervenant "${e.full_name}" supprimé (forçage).`);
+            navigate("/intervenants");
+            return;
+          } catch (e2: any) {
+            toast.error(e2?.response?.data?.message ?? "Suppression impossible");
+            return;
+          }
+        }
+        return;
+      }
+      toast.error(err?.response?.data?.message ?? "Suppression impossible");
+    }
   };
 
   if (isLoading || !e || !employeeId) {
@@ -58,6 +99,17 @@ export function EmployeeFichePage() {
               <>
                 {e.has_company_vehicle && <Badge>Véhicule service</Badge>}
                 {e.entity && <Badge variant="outline">{e.entity.name}</Badge>}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={deleteEmp.isPending}
+                  onClick={handleDelete}
+                  className="text-rose-700 hover:text-rose-900 hover:bg-rose-50 gap-1.5"
+                  title="Supprimer définitivement cet intervenant"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="text-xs">Supprimer</span>
+                </Button>
               </>
             }
           />

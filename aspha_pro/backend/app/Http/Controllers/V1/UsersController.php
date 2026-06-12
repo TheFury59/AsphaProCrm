@@ -212,6 +212,61 @@ class UsersController extends Controller
      * Renvoie la liste des rôles disponibles + leur description métier.
      * Utilisé par le frontend pour peupler le sélecteur.
      */
+    /**
+     * DELETE /api/v1/admin/users/{user}
+     *
+     * Suppression COMPLÈTE d'un user (hard-delete, pas soft-delete). Cascade
+     * en BDD via les FK ON DELETE CASCADE / SET NULL définies dans les
+     * migrations Laravel — l'Employee lié (intervenant), le portal_user_id
+     * sur Client (extranet client), les Personal Access Tokens, les
+     * notifications, les sessions... seront supprimés/déliés automatiquement.
+     *
+     * Garde-fous :
+     *   - super_admin uniquement
+     *   - on s'interdit de supprimer son propre compte (sinon plus aucun
+     *     super_admin disponible si c'était le dernier)
+     *   - on s'interdit de supprimer le DERNIER super_admin du système
+     *   - en cas de présence d'un Employee lié avec interventions futures,
+     *     on délègue la responsabilité à l'admin (via paramètre `?force=1`)
+     *
+     * Réservé super_admin (action critique, irréversible).
+     */
+    public function destroy(Request $request, User $user)
+    {
+        abort_unless($request->user()?->hasRole('super_admin'), 403, "Accès super_admin requis");
+
+        // Anti-suicide : un super_admin ne peut pas supprimer son propre compte.
+        if ((int) $user->id === (int) $request->user()->id) {
+            abort(409, "Tu ne peux pas supprimer ton propre compte. Demande à un autre super_admin de le faire.");
+        }
+
+        // Empêcher la suppression du DERNIER super_admin du système.
+        if ($user->hasRole('super_admin')) {
+            $remainingCount = User::role('super_admin')->where('id', '!=', $user->id)->count();
+            if ($remainingCount === 0) {
+                abort(409, "Impossible de supprimer le dernier super_admin du système. Crée un autre super_admin d'abord.");
+            }
+        }
+
+        // Si user lié à un Employee avec interventions futures, on alerte
+        // (sauf si ?force=1 explicite). Cascade BDD se chargera ensuite de
+        // tout nettoyer si on confirme.
+        $force = $request->boolean('force');
+        if (! $force && $user->employee) {
+            $futureCount = \App\Models\Intervention::where('employee_id', $user->employee->id)
+                ->where('start_datetime', '>=', now())
+                ->whereNotIn('status', ['annulee', 'realisee', 'terminated'])
+                ->count();
+            if ($futureCount > 0) {
+                abort(409, "Cet utilisateur est lié à un intervenant avec {$futureCount} intervention(s) future(s). Réassignez-les d'abord, ou forcez via ?force=1.");
+            }
+        }
+
+        $user->delete();
+
+        return response()->noContent();
+    }
+
     public function availableRolesList(Request $request)
     {
         abort_unless($request->user()?->hasRole('super_admin'), 403);

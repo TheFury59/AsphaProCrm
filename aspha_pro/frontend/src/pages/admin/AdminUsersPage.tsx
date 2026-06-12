@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   Users, Search, ShieldCheck, ShieldOff, ShieldAlert,
-  Crown, Loader2, Power, PowerOff, Plus, Copy, Check, AlertCircle,
+  Crown, Loader2, Power, PowerOff, Plus, Copy, Check, AlertCircle, Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { useAuthStore } from "@/stores/auth";
 import {
-  useAdminUsers, useAvailableRoles, useSetUserRole, useUpdateUserStatus,
+  useAdminUsers, useAvailableRoles, useDeleteUser, useSetUserRole, useUpdateUserStatus,
   useCreateUser,
   type AdminUser, type CreateUserResult,
 } from "@/hooks/use-users";
@@ -315,6 +315,7 @@ function CredentialsDialog({
 function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: boolean }) {
   const setRole = useSetUserRole();
   const updateStatus = useUpdateUserStatus();
+  const deleteUser = useDeleteUser();
   const meta = user.role ? ROLE_META[user.role] : null;
 
   const handleRoleChange = async (newRole: string) => {
@@ -336,6 +337,42 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
       toast.success(`Compte ${newStatus === "active" ? "activé" : "désactivé"}`);
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Modification impossible");
+    }
+  };
+
+  const handleDelete = async () => {
+    // Double confirmation : prompt + texte exact à taper.
+    const confirmation = prompt(
+      `⚠️ SUPPRESSION DÉFINITIVE\n\n` +
+        `Tu vas supprimer COMPLÈTEMENT le compte de "${user.name}" (${user.email}) ` +
+        `et toutes ses données liées (fiche intervenant/client, photo, sessions, ` +
+        `tokens, notifications…). Cette action est IRRÉVERSIBLE.\n\n` +
+        `Pour confirmer, retape exactement le nom : ${user.name}`,
+    );
+    if (confirmation === null) return; // cancel
+    if (confirmation.trim() !== user.name) {
+      toast.error("Le nom ne correspond pas — suppression annulée.");
+      return;
+    }
+    try {
+      await deleteUser.mutateAsync({ userId: user.id });
+      toast.success(`Compte "${user.name}" supprimé.`);
+    } catch (err: any) {
+      // Cas 409 : interventions futures → propose le force=1
+      if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
+        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+          try {
+            await deleteUser.mutateAsync({ userId: user.id, force: true });
+            toast.success(`Compte "${user.name}" supprimé (forçage).`);
+            return;
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message ?? "Suppression impossible");
+            return;
+          }
+        }
+        return;
+      }
+      toast.error(err?.response?.data?.message ?? "Suppression impossible");
     }
   };
 
@@ -384,23 +421,42 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
           : <em>Jamais</em>}
       </TableCell>
       <TableCell>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={isCurrentUser || updateStatus.isPending}
-          onClick={handleToggleStatus}
-          className={user.status === "active" ? "text-rose-600 hover:text-rose-700" : "text-emerald-600 hover:text-emerald-700"}
-          title={isCurrentUser ? "Tu ne peux pas désactiver ton propre compte" : ""}
-        >
-          {updateStatus.isPending
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : user.status === "active"
-              ? <PowerOff className="h-3.5 w-3.5" />
-              : <Power className="h-3.5 w-3.5" />}
-          <span className="ml-1 text-xs">
-            {user.status === "active" ? "Désactiver" : "Activer"}
-          </span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isCurrentUser || updateStatus.isPending}
+            onClick={handleToggleStatus}
+            className={user.status === "active" ? "text-rose-600 hover:text-rose-700" : "text-emerald-600 hover:text-emerald-700"}
+            title={isCurrentUser ? "Tu ne peux pas désactiver ton propre compte" : ""}
+          >
+            {updateStatus.isPending
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : user.status === "active"
+                ? <PowerOff className="h-3.5 w-3.5" />
+                : <Power className="h-3.5 w-3.5" />}
+            <span className="ml-1 text-xs">
+              {user.status === "active" ? "Désactiver" : "Activer"}
+            </span>
+          </Button>
+
+          {/* Bouton de suppression définitive — affiche seulement si pas son propre compte */}
+          {!isCurrentUser && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={deleteUser.isPending}
+              onClick={handleDelete}
+              className="text-rose-700 hover:text-rose-900 hover:bg-rose-50"
+              title="Supprimer définitivement ce compte"
+            >
+              {deleteUser.isPending
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Trash2 className="h-3.5 w-3.5" />}
+              <span className="ml-1 text-xs">Supprimer</span>
+            </Button>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

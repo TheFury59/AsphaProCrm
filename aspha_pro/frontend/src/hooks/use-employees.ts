@@ -66,10 +66,14 @@ export function useUpdateEmployee() {
 export function useDeleteEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/employees/${id}`);
+    mutationFn: async ({ id, force }: { id: number; force?: boolean }) => {
+      const query = force ? "?force=1" : "";
+      await api.delete(`/employees/${id}${query}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["employees"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
   });
 }
 

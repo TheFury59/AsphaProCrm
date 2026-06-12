@@ -380,6 +380,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('admin/users/roles', [UsersController::class, 'availableRolesList']);
     Route::post('admin/users/{user}/role', [UsersController::class, 'setRole']);
     Route::patch('admin/users/{user}', [UsersController::class, 'update']);
+    Route::delete('admin/users/{user}', [UsersController::class, 'destroy']);
 
     // === Référentiel docs requis intervenants ===
     Route::apiResource('required-document-types', RequiredDocumentTypesController::class)

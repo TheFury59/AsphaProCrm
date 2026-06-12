@@ -68,9 +68,13 @@ export function useUpdateClient() {
 export function useDeleteClient() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/clients/${id}`);
+    mutationFn: async ({ id, force }: { id: number; force?: boolean }) => {
+      const query = force ? "?force=1" : "";
+      await api.delete(`/clients/${id}${query}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
   });
 }
