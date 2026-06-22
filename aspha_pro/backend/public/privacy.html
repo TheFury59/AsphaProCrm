@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="index,follow" />
+  <title>Politique de confidentialité — Aspha Pro</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+      color: #1f2937;
+      line-height: 1.6;
+    }
+    h1 { font-size: 28px; margin-bottom: 4px; }
+    h2 { font-size: 20px; margin-top: 32px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+    h3 { font-size: 16px; margin-top: 20px; }
+    .muted { color: #6b7280; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; }
+    code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+    a { color: #2563eb; }
+    .lead { font-size: 16px; color: #374151; }
+  </style>
+</head>
+<body>
+  <h1>Politique de confidentialité — Aspha Pro</h1>
+  <p class="muted">Version du 22 juin 2026 — applicable à l'application mobile <strong>Aspha Pro</strong> (Android & iOS) et à l'espace web <a href="https://asphapro-erp.fr">asphapro-erp.fr</a>.</p>
+
+  <p class="lead">
+    Aspha Pro est un outil de gestion interne destiné aux salariés intervenants et aux clients professionnels de l'entreprise Aspha. Cette politique décrit quelles données nous traitons, dans quel but, et quels sont vos droits.
+  </p>
+
+  <h2>1. Responsable du traitement</h2>
+  <p>
+    <strong>Aspha</strong> — siège social : 7 rue Saint-Jacques, 59500 Douai, France.<br />
+    Contact : <a href="mailto:contact@asphapro-erp.fr">contact@asphapro-erp.fr</a>
+  </p>
+
+  <h2>2. Données collectées et finalités</h2>
+  <p>L'application Aspha Pro ne fonctionne qu'après authentification (compte fourni par l'employeur ou par Aspha pour les clients). Aucune donnée n'est collectée avant connexion.</p>
+  <table>
+    <thead>
+      <tr><th>Donnée</th><th>Finalité</th><th>Base légale</th><th>Durée de conservation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>E-mail, nom, prénom, rôle</td>
+        <td>Authentification et identification dans l'ERP</td>
+        <td>Exécution du contrat de travail / contrat client</td>
+        <td>Durée du contrat + 5 ans</td>
+      </tr>
+      <tr>
+        <td>Mot de passe (haché bcrypt, jamais en clair)</td>
+        <td>Authentification</td>
+        <td>Exécution du contrat</td>
+        <td>Durée du compte</td>
+      </tr>
+      <tr>
+        <td>Photo de profil (optionnelle)</td>
+        <td>Identification visuelle dans l'ERP</td>
+        <td>Consentement</td>
+        <td>Tant que l'utilisateur ne la supprime pas</td>
+      </tr>
+      <tr>
+        <td>Position GPS lors d'un badgeage</td>
+        <td>Preuve de présence sur le site d'intervention (intervenants uniquement)</td>
+        <td>Intérêt légitime de l'employeur (suivi de prestation)</td>
+        <td>2 ans</td>
+      </tr>
+      <tr>
+        <td>QR code scanné</td>
+        <td>Validation du badgeage sur site</td>
+        <td>Exécution du contrat</td>
+        <td>2 ans</td>
+      </tr>
+      <tr>
+        <td>Notifications push (token Expo)</td>
+        <td>Envoi d'alertes (nouveau RDV, retard de badgeage, document à valider…)</td>
+        <td>Intérêt légitime</td>
+        <td>Tant que l'application est installée</td>
+      </tr>
+      <tr>
+        <td>Données métier (planning, interventions, devis, factures, tickets)</td>
+        <td>Coeur de l'ERP : suivi des prestations entre Aspha, ses intervenants et ses clients</td>
+        <td>Exécution du contrat</td>
+        <td>10 ans (obligations comptables) puis archivage</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Permissions Android demandées par l'application</h2>
+  <table>
+    <thead><tr><th>Permission</th><th>Pourquoi nous la demandons</th><th>Optionnel ?</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>CAMERA</code></td>
+        <td>Scanner les QR codes de badgeage sur les sites d'intervention. Prendre une photo de profil.</td>
+        <td>Oui — l'utilisateur peut refuser, le badgeage se fait alors manuellement par l'admin.</td>
+      </tr>
+      <tr>
+        <td><code>ACCESS_FINE_LOCATION</code> / <code>ACCESS_COARSE_LOCATION</code></td>
+        <td>Joindre les coordonnées GPS au badgeage comme preuve de présence sur site.</td>
+        <td>Oui — le badgeage fonctionne sans, mais sans preuve géographique.</td>
+      </tr>
+      <tr>
+        <td><code>POST_NOTIFICATIONS</code></td>
+        <td>Recevoir les alertes opérationnelles (nouveau RDV, retard, document à valider…).</td>
+        <td>Oui — l'utilisateur peut désactiver dans les paramètres système.</td>
+      </tr>
+      <tr>
+        <td><code>RECORD_AUDIO</code></td>
+        <td>Permission requise par le module caméra utilisé. <strong>Aucun enregistrement audio n'est effectué ni stocké.</strong></td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>VIBRATE</code></td>
+        <td>Retour haptique lors d'un badgeage réussi.</td>
+        <td>Système</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Destinataires et sous-traitants</h2>
+  <p>Les données ne sont jamais vendues. Elles sont accessibles uniquement par :</p>
+  <ul>
+    <li>les collaborateurs d'Aspha habilités (gestionnaires, encadrants, équipe paie) ;</li>
+    <li>l'intervenant ou le client concerné, via son propre compte.</li>
+  </ul>
+  <p>Sous-traitants techniques utilisés :</p>
+  <ul>
+    <li><strong>o2switch</strong> (France) — hébergeur de l'ERP et de la base de données.</li>
+    <li><strong>Expo / Expo Application Services</strong> (États-Unis) — distribution de l'app mobile et envoi des notifications push. Encadré par les Clauses Contractuelles Types CE.</li>
+    <li><strong>Google LLC</strong> (États-Unis) — distribution via Google Play Store. Idem CCT.</li>
+    <li><strong>Apple Inc.</strong> (États-Unis) — distribution via l'App Store (le cas échéant). Idem CCT.</li>
+  </ul>
+
+  <h2>5. Transferts hors UE</h2>
+  <p>
+    Les sous-traitants Expo, Google et Apple peuvent traiter certaines données techniques (token push, identifiant de build, logs de plantage) aux États-Unis. Ces transferts sont encadrés par les Clauses Contractuelles Types adoptées par la Commission européenne, garantissant un niveau de protection équivalent.
+  </p>
+
+  <h2>6. Sécurité</h2>
+  <ul>
+    <li>Connexion chiffrée HTTPS / TLS 1.2+ entre l'application et le serveur.</li>
+    <li>Mots de passe stockés hachés (bcrypt) — jamais en clair.</li>
+    <li>Token d'authentification stocké côté téléphone dans le Keychain iOS / Keystore Android (zone sécurisée du système).</li>
+    <li>Accès à la base de données restreint par IP et par identifiants forts.</li>
+  </ul>
+
+  <h2>7. Vos droits</h2>
+  <p>Conformément au RGPD (UE 2016/679) et à la loi Informatique et Libertés, vous disposez des droits suivants :</p>
+  <ul>
+    <li>Droit d'accès, de rectification, d'effacement (« droit à l'oubli »).</li>
+    <li>Droit à la limitation du traitement.</li>
+    <li>Droit d'opposition pour motif légitime.</li>
+    <li>Droit à la portabilité de vos données.</li>
+    <li>Droit de retirer votre consentement à tout moment (pour les traitements basés sur le consentement).</li>
+    <li>Droit d'introduire une réclamation auprès de la CNIL — <a href="https://www.cnil.fr">www.cnil.fr</a>.</li>
+  </ul>
+  <p>
+    Pour exercer ces droits, écrivez à <a href="mailto:contact@asphapro-erp.fr">contact@asphapro-erp.fr</a>. Une réponse vous sera apportée sous 30 jours maximum.
+  </p>
+
+  <h2>8. Suppression du compte et des données</h2>
+  <p>
+    Vous pouvez à tout moment demander la suppression de votre compte en écrivant à <a href="mailto:contact@asphapro-erp.fr">contact@asphapro-erp.fr</a>. Vos données personnelles seront alors supprimées sous 30 jours, à l'exception des éléments que la loi nous oblige à conserver (factures, bulletins, contrats : 10 ans).
+  </p>
+
+  <h2>9. Cookies (espace web)</h2>
+  <p>
+    L'application mobile n'utilise pas de cookies. L'espace web <code>asphapro-erp.fr</code> utilise uniquement des cookies strictement nécessaires à l'authentification (cookie de session Laravel, cookie CSRF). Aucun cookie publicitaire ni de tracking n'est déposé.
+  </p>
+
+  <h2>10. Modifications</h2>
+  <p>
+    Cette politique peut être mise à jour. La date de la dernière révision figure en haut du document. En cas de changement substantiel, vous serez informé par notification dans l'application et/ou par e-mail.
+  </p>
+
+  <h2>11. Contact</h2>
+  <p>
+    Questions, demandes RGPD, signalement d'un incident :<br />
+    <a href="mailto:contact@asphapro-erp.fr">contact@asphapro-erp.fr</a>
+  </p>
+</body>
+</html>
