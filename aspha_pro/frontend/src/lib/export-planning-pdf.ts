@@ -7,41 +7,46 @@ import jsPDF from "jspdf";
  * Objectif : voir l'INTÉGRALITÉ du planning (toutes les heures, tous les
  * jours), pas seulement la zone visible à l'écran.
  *
- * Le piège FullCalendar :
- *  - En vue timegrid, FullCalendar place les 24h dans un conteneur
- *    `.fc-scroller` avec `overflow: auto`. À l'écran, seule la portion
- *    correspondant à la position du scroll est visible (ex : 6h-14h si
- *    le user a scrollé là).
- *  - html2canvas capture le DOM tel qu'il est rendu : il ne déplie PAS
- *    les zones cachées par un overflow. Résultat : le PDF ne montrait
- *    que la tranche horaire actuellement scrollée.
+ * Pièges FullCalendar v6 qu'on doit défaire avant la capture :
+ *  1. `.fc-view-harness` a une hauteur fixée inline en JS (style="height:..").
+ *     On override avec !important.
+ *  2. `.fc-view` est en `position: absolute; inset: 0` → si on retire la
+ *     hauteur du parent SANS passer la vue en `position: relative`, le
+ *     parent collapse à 0 (l'enfant absolute ne pousse plus la hauteur).
+ *  3. `.fc-scroller` a `overflow: auto` et masque le contenu hors viewport.
+ *     html2canvas ne capture QUE ce qui est dans le DOM rendu, donc on
+ *     doit déplier avec `overflow: visible; height: auto`.
+ *  4. `.fc-scroller-liquid-absolute` est aussi en position absolute, idem.
  *
- * Fix : on injecte un <style> temporaire qui force `.fc-scroller` à
- * `overflow:visible; height:auto` ET la view-harness en `position:static;
- * height:auto`. Toute la grille passe dans le flux normal et html2canvas
- * peut la capturer en entier. Style retiré après capture (finally) pour
- * ne pas casser l'UI.
- *
- * Découpe multi-pages :
- *  - Canvas master haute résolution (scale 1.5).
- *  - Chaque page A4 paysage contient une portion VERTICALE distincte
- *    du canvas, copiée dans un canvas temporaire via drawImage(offset).
+ * Sans ces overrides, le canvas produit fait 0px de haut → erreur
+ * `drawImage … width or height of 0`. C'est ce bug-là qu'on corrige.
  */
 export async function exportPlanningToPdf(
   element: HTMLElement,
   filename: string,
   title?: string,
 ): Promise<void> {
-  // Déplie tous les scrollers de FullCalendar pour que la grille
-  // complète (24h × 7 jours en timeGridWeek) entre dans le DOM rendu.
   const styleEl = document.createElement("style");
   styleEl.id = "pdf-export-fc-expand";
   styleEl.textContent = `
-    .fc { height: auto !important; }
-    .fc-view-harness,
-    .fc-view-harness-active {
+    .fc {
       height: auto !important;
-      position: static !important;
+      max-height: none !important;
+    }
+    .fc-view-harness {
+      height: auto !important;
+      max-height: none !important;
+      position: relative !important;
+    }
+    .fc-view,
+    .fc-view-harness > .fc-view {
+      position: relative !important;
+      inset: auto !important;
+      top: auto !important;
+      left: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      height: auto !important;
     }
     .fc-scroller {
       overflow: visible !important;
@@ -50,9 +55,16 @@ export async function exportPlanningToPdf(
     }
     .fc-scroller-liquid,
     .fc-scroller-liquid-absolute {
-      position: static !important;
+      position: relative !important;
+      inset: auto !important;
+      top: auto !important;
+      left: auto !important;
+      right: auto !important;
+      bottom: auto !important;
       height: auto !important;
     }
+    .fc-scrollgrid,
+    .fc-scrollgrid-section,
     .fc-scrollgrid-section-body,
     .fc-scrollgrid-section-liquid,
     .fc-scrollgrid-liquid {
@@ -70,15 +82,35 @@ export async function exportPlanningToPdf(
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
   try {
-    const target =
-      (element.querySelector(".fc-view-harness") as HTMLElement | null) ?? element;
+    // On capture le wrapper externe (et non `.fc-view-harness`) pour
+    // inclure ce qui pourrait avoir débordé. La hauteur réelle vient de
+    // scrollHeight, plus fiable que offsetHeight ici.
+    const target = element;
+    const captureWidth = target.scrollWidth || target.offsetWidth;
+    const captureHeight = target.scrollHeight || target.offsetHeight;
+
+    if (captureWidth === 0 || captureHeight === 0) {
+      throw new Error(
+        `Zone planning vide (${captureWidth}×${captureHeight}). Charge la vue avant l'export.`,
+      );
+    }
 
     const canvas = await html2canvas(target, {
       scale: 1.5,
       backgroundColor: "#ffffff",
       useCORS: true,
       logging: false,
+      width: captureWidth,
+      height: captureHeight,
+      windowWidth: captureWidth,
+      windowHeight: captureHeight,
     });
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      throw new Error(
+        "html2canvas a produit un canvas vide. Réessaie après avoir scrollé en haut du planning.",
+      );
+    }
 
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pageW = pdf.internal.pageSize.getWidth(); // 297 mm
@@ -105,10 +137,11 @@ export async function exportPlanningToPdf(
 
       const srcY = i * pageContentPx;
       const srcHeight = Math.min(pageContentPx, canvas.height - srcY);
+      if (srcHeight <= 0) continue;
 
       const sliceCanvas = document.createElement("canvas");
       sliceCanvas.width = canvas.width;
-      sliceCanvas.height = srcHeight;
+      sliceCanvas.height = Math.ceil(srcHeight);
       const ctx = sliceCanvas.getContext("2d");
       if (!ctx) continue;
       ctx.fillStyle = "#ffffff";
@@ -123,8 +156,6 @@ export async function exportPlanningToPdf(
 
     pdf.save(filename);
   } finally {
-    // Toujours retirer le style override, même si une exception est levée
-    // pendant la capture (sinon l'UI reste cassée).
     styleEl.remove();
   }
 }
