@@ -27,19 +27,32 @@ const PAYMENT_VARIANT: Record<string, "default" | "secondary" | "destructive" | 
  * Onglet "Devis & factures" de la fiche client.
  * Liste les devis + factures du client + bouton download Factur-X.
  */
+/**
+ * Dépaquette la réponse pagination Laravel (double-wrappée
+ * `{ data: { data: [...], current_page, ... } }`) en un simple Array<T>.
+ * Tolérant : accepte aussi un tableau brut (fallback) pour ne plus planter
+ * en page blanche si le backend change.
+ */
+function unwrapList<T = any>(body: any): T[] {
+  if (Array.isArray(body)) return body as T[];
+  if (Array.isArray(body?.data)) return body.data as T[];
+  if (Array.isArray(body?.data?.data)) return body.data.data as T[];
+  return [];
+}
+
 export function ClientSalesTab({ clientId }: { clientId: number }) {
   const { data: quotes, isLoading: qLoading } = useQuery({
     queryKey: ["client", clientId, "quotes"],
     queryFn: async () => {
       const { data } = await api.get(`/quotes?filter[client_id]=${clientId}&per_page=50`);
-      return data.data as any[];
+      return unwrapList<any>(data);
     },
   });
   const { data: invoices, isLoading: iLoading } = useQuery({
     queryKey: ["client", clientId, "invoices"],
     queryFn: async () => {
       const { data } = await api.get(`/invoices?filter[client_id]=${clientId}&per_page=50`);
-      return data.data as any[];
+      return unwrapList<any>(data);
     },
   });
 

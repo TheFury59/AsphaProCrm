@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -27,7 +27,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles, Map as MapIcon } from "lucide-react";
+import { Sparkles, Map as MapIcon, Download } from "lucide-react";
+import { exportPlanningToPdf } from "@/lib/export-planning-pdf";
 import { MatchingSuggestionsDialog } from "@/components/MatchingSuggestionsDialog";
 import { EventTooltip } from "./EventTooltip";
 import { LongAbsenceBanner } from "./LongAbsenceBanner";
@@ -148,6 +149,63 @@ export function PlanningPage() {
   // Mode création pré-rempli (ponctuel / récurrent / absence / indisponibilité)
   const [createMode, setCreateMode] = useState<"ponctuel" | "recurrent" | "absence" | "indispo">("ponctuel");
 
+  // Ref vers FullCalendar pour exporter le DOM en PDF
+  const calendarRef = useRef<FullCalendar | null>(null);
+  // Vue active (timeGridWeek / dayGridMonth / ...) — pour conditionner le
+  // bouton "Export PDF" (uniquement semaine + mois).
+  const [currentView, setCurrentView] = useState<string>("timeGridWeek");
+  const [isExporting, setIsExporting] = useState(false);
+
+  /**
+   * Génère un nom de fichier en fonction de la vue active.
+   *  - timeGridWeek  → "aspha-planning-semaine-YYYY-Www.pdf"
+   *  - dayGridMonth  → "aspha-planning-mois-YYYY-MM.pdf"
+   */
+  const buildPdfFilename = (viewName: string, anchor: Date): string => {
+    const y = anchor.getFullYear();
+    if (viewName === "dayGridMonth") {
+      const m = String(anchor.getMonth() + 1).padStart(2, "0");
+      return `aspha-planning-mois-${y}-${m}.pdf`;
+    }
+    // ISO week number (lundi = jour 1)
+    const d = new Date(Date.UTC(y, anchor.getMonth(), anchor.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    return `aspha-planning-semaine-${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}.pdf`;
+  };
+
+  const handleExportPdf = async () => {
+    const api = calendarRef.current?.getApi();
+    if (!api) {
+      toast.error("Calendrier non prêt — réessaye dans un instant");
+      return;
+    }
+    const viewName = api.view.type;
+    const anchor = api.getDate();
+    const filename = buildPdfFilename(viewName, anchor);
+    // Le wrapper DOM réel du calendar (classe .fc générée par FullCalendar).
+    const el = (document.querySelector(".fc") as HTMLElement | null);
+    if (!el) {
+      toast.error("Impossible de capturer le calendrier (DOM introuvable)");
+      return;
+    }
+    setIsExporting(true);
+    const t = toast.loading("Génération du PDF…");
+    try {
+      await exportPlanningToPdf(el, filename);
+      toast.success(`PDF généré : ${filename}`, { id: t });
+    } catch (err: any) {
+      console.error("Export PDF KO", err);
+      toast.error(`Échec export PDF : ${err?.message ?? "erreur inconnue"}`, { id: t });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const canExport = currentView === "timeGridWeek" || currentView === "dayGridMonth";
+
   const { data: employeesData } = useEmployees({ per_page: 100 });
   const { data: clientsData } = useClients({ per_page: 100 });
   const employees = employeesData?.data ?? [];
@@ -196,6 +254,10 @@ export function PlanningPage() {
 
   const handleDatesSet = (arg: DatesSetArg) => {
     setWindow({ from: fmt(arg.start), to: fmt(arg.end) });
+    // Synchronise la vue active (utilisé pour conditionner le bouton export PDF).
+    if (arg.view?.type && arg.view.type !== currentView) {
+      setCurrentView(arg.view.type);
+    }
   };
 
   const handleEventDrop = (arg: EventDropArg | EventResizeDoneArg) => {
@@ -480,13 +542,27 @@ export function PlanningPage() {
         title="Planning"
         description="Interventions ponctuelles et récurrentes — drag-and-drop pour déplacer, clic droit pour créer rapidement"
         actions={
-          <Button
-            onClick={() => { setSelectedDate(undefined); setCreateMode("ponctuel"); setCreateOpen(true); }}
-            className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
-          >
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            Nouvelle intervention
-          </Button>
+          <div className="flex items-center gap-2">
+            {canExport && hasFilter && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isExporting}
+                onClick={handleExportPdf}
+                title="Exporter la vue actuelle en PDF (A4 paysage)"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                {isExporting ? "Génération…" : "Télécharger PDF"}
+              </Button>
+            )}
+            <Button
+              onClick={() => { setSelectedDate(undefined); setCreateMode("ponctuel"); setCreateOpen(true); }}
+              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-95"
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Nouvelle intervention
+            </Button>
+          </div>
         }
       />
 
@@ -572,15 +648,16 @@ export function PlanningPage() {
           onPickClient={(id) => setClientFilter(id)}
         />
       ) : (
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+      <div className="flex flex-col gap-5">
       <div
         className={
-          "rounded-2xl bg-card shadow-soft p-4 lg:p-5 transition-opacity " +
+          "rounded-2xl bg-card shadow-soft p-4 lg:p-5 transition-opacity w-full " +
           (calendarLocked ? "opacity-70 pointer-events-none" : "")
         }
         onContextMenu={handleContextMenu}
       >
         <FullCalendar
+          ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView="timeGridWeek"
           locale={frLocale}
@@ -597,13 +674,22 @@ export function PlanningPage() {
           events={events}
           editable={!calendarLocked}
           selectable={!calendarLocked}
-          slotMinTime="06:00:00"
-          slotMaxTime="22:00:00"
+          // Affichage 24h fixe (demande métier)
+          slotMinTime="00:00:00"
+          slotMaxTime="24:00:00"
+          // Granularité RDV à 15 minutes (slot + snap drag-and-drop)
           slotDuration="00:15:00"
-          snapDuration="00:05:00"
+          snapDuration="00:15:00"
           allDaySlot={false}
           nowIndicator
-          height="75vh"
+          // Force l'affichage en bloc coloré sur TOUTES les vues (sinon
+          // dayGridMonth utilise un pastille "dot" qui ignore backgroundColor).
+          eventDisplay="block"
+          // Idem pour la vue mois précisément — garantit les barres pleines.
+          views={{
+            dayGridMonth: { eventDisplay: "block" },
+          }}
+          height={700}
           datesSet={handleDatesSet}
           eventDrop={handleEventDrop}
           eventResize={handleEventDrop}
@@ -704,18 +790,18 @@ export function PlanningPage() {
         />
       </div>
 
-      {/* Panneau latéral : suivi contrats + trajets */}
-      <div className="space-y-3">
+      {/* Panneau infos en BAS — trajets + contrat côte à côte (60/40). */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-3">
+        <TripSummaryPanel
+          from={window.from}
+          to={window.to}
+          employeeFilter={employeeFilter}
+        />
         <ContractSummaryPanel
           from={window.from}
           to={window.to}
           employeeFilter={employeeFilter}
           clientFilter={clientFilter}
-        />
-        <TripSummaryPanel
-          from={window.from}
-          to={window.to}
-          employeeFilter={employeeFilter}
         />
       </div>
       </div>

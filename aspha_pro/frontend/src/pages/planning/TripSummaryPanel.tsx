@@ -34,7 +34,7 @@ export function TripSummaryPanel({ from, to, employeeFilter }: {
       <CardHeader className="py-2 px-3 border-b">
         <CardTitle className="text-xs flex items-center gap-1.5">
           <Car className="h-3 w-3" />
-          Trajets ({data?.paid_threshold_minutes ?? 45} min payé max)
+          Trajets
         </CardTitle>
       </CardHeader>
       <ScrollArea className="h-[280px]">

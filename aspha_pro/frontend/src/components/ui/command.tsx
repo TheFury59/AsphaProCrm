@@ -57,7 +57,13 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/*
+          cmdk-1.x : CommandInput/CommandList/CommandItem partagent un store
+          fourni UNIQUEMENT par <Command> (CommandPrimitive.Root). Sans ce
+          wrapper, les enfants appellent `store.subscribe(...)` sur `undefined`
+          → page blanche au ⌘K.
+        */}
+        <Command>{children}</Command>
       </DialogContent>
     </Dialog>
   )
