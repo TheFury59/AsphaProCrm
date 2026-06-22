@@ -652,6 +652,10 @@ export function PlanningPage() {
       <div
         className={
           "rounded-2xl bg-card shadow-soft p-4 lg:p-5 transition-opacity w-full " +
+          // Hauteur responsive : prend tout l'espace dispo dans la fenêtre, en
+          // gardant un minimum pour ne pas écraser les slots, et en laissant
+          // de la place aux cards "Trajets" + "Contrat" en-dessous (~400px).
+          "h-[calc(100vh-300px)] min-h-[600px] max-h-[1100px] " +
           (calendarLocked ? "opacity-70 pointer-events-none" : "")
         }
         onContextMenu={handleContextMenu}
@@ -689,7 +693,7 @@ export function PlanningPage() {
           views={{
             dayGridMonth: { eventDisplay: "block" },
           }}
-          height={700}
+          height="100%"
           datesSet={handleDatesSet}
           eventDrop={handleEventDrop}
           eventResize={handleEventDrop}
