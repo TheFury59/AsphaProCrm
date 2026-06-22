@@ -95,10 +95,21 @@ export type CreateUserPayload = {
   email: string;
   password?: string;
   role: "super_admin" | "admin" | "intervenant" | "client";
+  // Champs métier — requis conditionnellement côté backend selon le rôle.
+  // Pour role=intervenant : entity_id + (classification optionnelle) + (phone optionnel).
+  // Pour role=client : entity_id + company_name + (siret/phone optionnels).
+  entity_id?: number;
+  phone?: string;
+  classification?: "non_cadre" | "cadre";
+  company_name?: string;
+  siret?: string;
 };
 
 export type CreateUserResult = {
   user: { id: number; name: string; email: string; role: string };
+  // Fiche métier créée en cascade (Employee ou Client). null pour
+  // super_admin/admin (pas de fiche associée).
+  linked_entity: { type: "employee" | "client"; id: number } | null;
   password: string;
   password_was_generated: boolean;
 };
@@ -110,7 +121,13 @@ export function useCreateUser() {
       const { data } = await api.post<{ data: CreateUserResult }>("/admin/users", payload);
       return data.data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      // La création peut avoir aussi créé un Employee ou un Client : on
+      // invalide les listes correspondantes pour qu'elles refresh.
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
   });
 }
 

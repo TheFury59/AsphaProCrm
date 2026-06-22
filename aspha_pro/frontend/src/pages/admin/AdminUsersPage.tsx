@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   Users, Search, ShieldCheck, ShieldOff, ShieldAlert,
@@ -30,6 +30,7 @@ import {
   useCreateUser,
   type AdminUser, type CreateUserResult,
 } from "@/hooks/use-users";
+import { useEntities } from "@/hooks/use-products";
 
 /**
  * Page admin de gestion des utilisateurs — réservée au super_admin.
@@ -473,32 +474,81 @@ function CreateUserDialog({
   onCreated: (result: CreateUserResult) => void;
 }) {
   const create = useCreateUser();
+  const { data: entities } = useEntities();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"super_admin" | "admin" | "intervenant" | "client">("admin");
+  // Champs métier (utilisés seulement si rôle = intervenant ou client).
+  const [entityId, setEntityId] = useState<string>("");
+  const [phone, setPhone] = useState("");
+  const [classification, setClassification] = useState<"non_cadre" | "cadre">("non_cadre");
+  const [companyName, setCompanyName] = useState("");
+  const [siret, setSiret] = useState("");
+
+  // Pré-sélection auto de l'entité si une seule existe (pattern repris du
+  // CreateClientDialog — voir LRN 2026-05-21 sur la clarté des formulaires).
+  useEffect(() => {
+    if (entities && entities.length === 1 && !entityId) {
+      setEntityId(String(entities[0].id));
+    }
+  }, [entities, entityId]);
+
+  const needsBusinessFields = role === "intervenant" || role === "client";
+  const needsCompanyFields = role === "client";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
+    // Validation au clic (jamais disable le submit — cf. LRN 2026-05-18).
+    if (!name.trim() || !email.trim()) {
+      toast.error("Nom et email obligatoires.");
+      return;
+    }
+    if (needsBusinessFields && !entityId) {
+      toast.error("L'entité de rattachement est obligatoire pour un intervenant ou un client.");
+      return;
+    }
+    if (needsCompanyFields && !companyName.trim()) {
+      toast.error("Le nom de la société est obligatoire pour un client.");
+      return;
+    }
     try {
-      const result = await create.mutateAsync({
+      const payload: Parameters<typeof create.mutateAsync>[0] = {
         name: name.trim(),
         email: email.trim(),
         password: password || undefined,
         role,
-      });
-      toast.success("Utilisateur créé");
+      };
+      if (needsBusinessFields) {
+        payload.entity_id = Number(entityId);
+        if (phone.trim()) payload.phone = phone.trim();
+      }
+      if (role === "intervenant") {
+        payload.classification = classification;
+      }
+      if (needsCompanyFields) {
+        payload.company_name = companyName.trim();
+        if (siret.trim()) payload.siret = siret.trim();
+      }
+      const result = await create.mutateAsync(payload);
+      toast.success(
+        result.linked_entity?.type === "employee"
+          ? "Intervenant créé : compte utilisateur + fiche intervenant"
+          : result.linked_entity?.type === "client"
+            ? "Client créé : compte utilisateur + fiche client"
+            : "Utilisateur créé",
+      );
       onCreated(result);
     } catch (err: any) {
       const data = err?.response?.data;
       const firstErr = data?.errors ? Object.values(data.errors).flat()[0] : null;
       toast.error((firstErr as string) ?? data?.message ?? "Création impossible");
+      console.error("[CreateUser] échec", { payload: data, err });
     }
   };
 
   return (
-    <DialogContent className="sm:!max-w-md">
+    <DialogContent className="sm:!max-w-lg max-h-[90vh] overflow-y-auto">
       <form onSubmit={submit}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -555,6 +605,86 @@ function CreateUserDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Bloc métier — affiché uniquement si intervenant ou client.
+              Une fiche correspondante (Employee ou Client) est créée dans la
+              même transaction côté backend. */}
+          {needsBusinessFields && (
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                {role === "intervenant"
+                  ? "Informations fiche intervenant"
+                  : "Informations fiche client"}
+              </p>
+
+              <div>
+                <Label className="text-xs">Entité de rattachement *</Label>
+                <Select value={entityId} onValueChange={setEntityId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir une entité…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {entities?.map((ent) => (
+                      <SelectItem key={ent.id} value={String(ent.id)}>
+                        {ent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Agence / société de rattachement.
+                </p>
+              </div>
+
+              {role === "intervenant" && (
+                <div>
+                  <Label className="text-xs">Classification *</Label>
+                  <Select
+                    value={classification}
+                    onValueChange={(v) => setClassification(v as "non_cadre" | "cadre")}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="non_cadre">Non-cadre</SelectItem>
+                      <SelectItem value="cadre">Cadre</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {needsCompanyFields && (
+                <>
+                  <div>
+                    <Label className="text-xs">Nom de la société *</Label>
+                    <Input
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="ACME SAS"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">SIRET (optionnel)</Label>
+                    <Input
+                      value={siret}
+                      onChange={(e) => setSiret(e.target.value)}
+                      placeholder="123 456 789 00012"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <Label className="text-xs">Téléphone (optionnel)</Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="06 12 34 56 78"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <Label className="text-xs">Mot de passe (optionnel)</Label>
             <Input
@@ -571,7 +701,7 @@ function CreateUserDialog({
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={!name.trim() || !email.trim() || create.isPending}>
+          <Button type="submit" disabled={create.isPending}>
             {create.isPending ? "Création…" : "Créer l'utilisateur"}
           </Button>
         </DialogFooter>

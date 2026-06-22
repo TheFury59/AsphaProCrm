@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
+use App\Models\ClientCompany;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -75,10 +79,16 @@ class UsersController extends Controller
     /**
      * POST /api/v1/admin/users
      *
-     * Crée un nouvel utilisateur avec un rôle. Typiquement utilisé pour
-     * créer des comptes admin/super_admin manuels. Pour les intervenants
-     * et clients, préférer les flow dédiés (fiche intervenant → futur
-     * "Créer accès", fiche client → "Accès extranet").
+     * Crée un nouvel utilisateur. Quand le rôle est `intervenant` ou
+     * `client`, on crée AUSSI la fiche métier correspondante dans la même
+     * transaction, sinon l'utilisateur orphelin n'a pas de fiche dans
+     * l'ERP (bug historique : User créé sans Employee/Client).
+     *
+     * Champs supplémentaires requis selon le rôle :
+     *  - intervenant : `entity_id` (obligatoire), `classification`
+     *    (défaut `non_cadre`), `phone` (optionnel)
+     *  - client : `entity_id` (obligatoire), `company_name` (obligatoire),
+     *    `phone` (optionnel), `siret` (optionnel)
      *
      * Mot de passe : si non fourni, généré random 12 chars sans ambiguïtés
      * et retourné UNE SEULE FOIS dans la réponse (pas re-fetchable).
@@ -92,30 +102,83 @@ class UsersController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['nullable', 'string', 'min:8'],
             'role' => ['required', Rule::in($this->availableRoles())],
+            // Champs métier optionnels (requis conditionnellement selon le rôle).
+            'entity_id' => ['nullable', 'exists:entities,id', 'required_if:role,intervenant', 'required_if:role,client'],
+            'phone' => ['nullable', 'string', 'max:32'],
+            // Intervenant
+            'classification' => ['nullable', 'in:non_cadre,cadre'],
+            // Client
+            'company_name' => ['nullable', 'string', 'max:255', 'required_if:role,client'],
+            'siret' => ['nullable', 'string', 'max:32'],
+        ], [
+            'entity_id.required_if' => "L'entité de rattachement est obligatoire pour créer un intervenant ou un client.",
+            'company_name.required_if' => "Le nom de la société est obligatoire pour créer un client.",
         ]);
 
         $passwordWasGenerated = empty($data['password']);
         $plainPassword = $data['password'] ?? $this->generatePassword();
 
-        $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($plainPassword),
-            'status' => User::STATUS_ACTIVE,
-            // Mot de passe temporaire généré → changement forcé à la 1re connexion.
-            'must_change_password' => $passwordWasGenerated,
-        ]);
+        $created = DB::transaction(function () use ($data, $plainPassword, $passwordWasGenerated, $request) {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($plainPassword),
+                'status' => User::STATUS_ACTIVE,
+                // Mot de passe temporaire généré → changement forcé à la 1re connexion.
+                'must_change_password' => $passwordWasGenerated,
+            ]);
 
-        $user->syncRoles([$data['role']]);
+            $user->syncRoles([$data['role']]);
+
+            $linkedEntity = null;
+
+            if ($data['role'] === 'intervenant') {
+                $employee = Employee::create([
+                    'user_id' => $user->id,
+                    'entity_id' => $data['entity_id'],
+                    'owner_user_id' => $request->user()->id,
+                    'name' => $data['name'],
+                    'phone' => $data['phone'] ?? null,
+                    'classification' => $data['classification'] ?? 'non_cadre',
+                ]);
+                $linkedEntity = ['type' => 'employee', 'id' => $employee->id];
+            } elseif ($data['role'] === 'client') {
+                // Code temporaire (la colonne `code` est UNIQUE — on ne peut pas
+                // l'insérer null en MySQL strict). On le remplace juste après par
+                // CLI-{id zero-pad 4}, même pattern que ClientController::store.
+                $tempCode = 'CLI-TMP-'.Str::random(10);
+                $client = Client::create([
+                    'code' => $tempCode,
+                    'status' => 'active',
+                    'entity_id' => $data['entity_id'],
+                    'owner_user_id' => $request->user()->id,
+                    'portal_user_id' => $user->id,
+                ]);
+                $client->update([
+                    'code' => 'CLI-'.str_pad((string) $client->id, 4, '0', STR_PAD_LEFT),
+                ]);
+                ClientCompany::create([
+                    'client_id' => $client->id,
+                    'company_name' => $data['company_name'],
+                    'siret' => $data['siret'] ?? null,
+                    'phone_landline' => $data['phone'] ?? null,
+                    'primary_email' => $data['email'],
+                ]);
+                $linkedEntity = ['type' => 'client', 'id' => $client->id];
+            }
+
+            return ['user' => $user, 'linked_entity' => $linkedEntity];
+        });
 
         return response()->json([
             'data' => [
                 'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
+                    'id' => $created['user']->id,
+                    'name' => $created['user']->name,
+                    'email' => $created['user']->email,
                     'role' => $data['role'],
                 ],
+                'linked_entity' => $created['linked_entity'],
                 // Affiché UNE seule fois côté UI — pas re-fetchable côté serveur
                 'password' => $plainPassword,
                 'password_was_generated' => $passwordWasGenerated,
