@@ -53,12 +53,5 @@
         "EXPO_PUBLIC_API_URL": "https://asphapro-erp.fr/api/v1"
       }
     }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": ""
-      }
-    }
   }
 }
