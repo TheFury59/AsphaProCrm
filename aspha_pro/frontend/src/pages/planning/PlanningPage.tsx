@@ -191,10 +191,20 @@ export function PlanningPage() {
       toast.error("Impossible de capturer le calendrier (DOM introuvable)");
       return;
     }
+    // Titre lisible pour le header du PDF (basé sur la vue active).
+    const viewLabel =
+      viewName === "dayGridMonth"
+        ? `Mois — ${anchor.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}`
+        : viewName === "timeGridWeek"
+          ? `Semaine du ${api.view.activeStart.toLocaleDateString("fr-FR")}`
+          : viewName === "timeGridDay"
+            ? `Jour — ${anchor.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`
+            : "Planning";
+    const pdfTitle = `Aspha Pro — Planning ${viewLabel}`;
     setIsExporting(true);
     const t = toast.loading("Génération du PDF…");
     try {
-      await exportPlanningToPdf(el, filename);
+      await exportPlanningToPdf(el, filename, pdfTitle);
       toast.success(`PDF généré : ${filename}`, { id: t });
     } catch (err: any) {
       console.error("Export PDF KO", err);
