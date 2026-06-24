@@ -1,4 +1,15 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+
+/**
+ * 2026-06-24 — formatage YYYY-MM-DD → DD/MM/YYYY pour les dates de devis.
+ * Robust : extrait la partie date via regex pour tolérer un ISO datetime
+ * accidentel (`T22:00:00Z`) renvoyé par l'API.
+ */
+function fmtDateFr(d: string | null | undefined): string {
+  if (!d) return "—";
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(d);
+}
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
@@ -280,8 +291,8 @@ export function QuotesListPage() {
                   <TableCell className="font-medium">
                     {q.client?.company?.company_name ?? `Client #${q.client_id}`}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{q.quote_date}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{q.validity_date ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{fmtDateFr(q.quote_date)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{fmtDateFr(q.validity_date)}</TableCell>
                   <TableCell className="text-right font-medium">{Number(q.total ?? 0).toFixed(2)} €</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[q.status]}>{STATUS_LABELS[q.status] ?? q.status}</Badge>
@@ -428,8 +439,8 @@ function QuoteDetailDialog({ id, onClose }: { id: number | null; onClose: () => 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Client" value={data.client?.company?.company_name ?? `Client #${data.client_id}`} />
               <Field label="Statut" value={STATUS_LABELS[data.status] ?? data.status} />
-              <Field label="Date du devis" value={data.quote_date} />
-              <Field label="Validité" value={data.validity_date ?? "—"} />
+              <Field label="Date du devis" value={fmtDateFr(data.quote_date)} />
+              <Field label="Validité" value={fmtDateFr(data.validity_date)} />
             </div>
 
             <div>

@@ -41,8 +41,12 @@ class Invoice extends Model
     protected function casts(): array
     {
         return [
-            'invoice_date' => 'date',
-            'due_date' => 'date',
+            // 2026-06-24 — format explicite YYYY-MM-DD pour éviter les ISO
+            // datetime parasites (T22:00:00.000000Z) dans la liste front et
+            // l'<input type=date>. Même fix que Quote/ClientPrestation —
+            // cf. LRN 2026-05-21.
+            'invoice_date' => 'date:Y-m-d',
+            'due_date' => 'date:Y-m-d',
             'total' => 'decimal:2',
             'needs_recalculation' => 'boolean',
             'e_invoice_sent_at' => 'datetime',

@@ -1,4 +1,16 @@
 import { useMemo, useState } from "react";
+
+/**
+ * 2026-06-24 — formatage YYYY-MM-DD → DD/MM/YYYY pour les dates de factures.
+ * Robust : si on reçoit accidentellement un ISO datetime (`T22:00:00Z`),
+ * on extrait la partie date via regex au lieu de `new Date()` qui re-décale
+ * le fuseau et peut donner J-1 près de minuit.
+ */
+function fmtDateFr(d: string | null | undefined): string {
+  if (!d) return "—";
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(d);
+}
 import {
   Plus, Trash2, FileDown, Cloud, CloudCheck, Eye, Search,
   Receipt, Wallet, Hourglass,
@@ -214,8 +226,8 @@ export function InvoicesListPage() {
                 >
                   <TableCell className="font-mono text-xs">{inv.reference}</TableCell>
                   <TableCell className="font-medium">{inv.client?.company?.company_name ?? `Client #${inv.client_id}`}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{inv.invoice_date}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{inv.due_date ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{fmtDateFr(inv.invoice_date)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{fmtDateFr(inv.due_date)}</TableCell>
                   <TableCell className="text-right font-medium">{Number(inv.total).toFixed(2)} €</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[inv.status]}>{STATUS_LABELS[inv.status] ?? inv.status}</Badge>
@@ -321,8 +333,8 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
             <div className="grid grid-cols-2 gap-3">
               <Field label="Client" value={data.client?.company?.company_name ?? `Client #${data.client_id}`} />
               <Field label="Statut" value={STATUS_LABELS[data.status] ?? data.status} />
-              <Field label="Date" value={data.invoice_date} />
-              <Field label="Échéance" value={data.due_date ?? "—"} />
+              <Field label="Date" value={fmtDateFr(data.invoice_date)} />
+              <Field label="Échéance" value={fmtDateFr(data.due_date)} />
               <Field label="Paiement" value={PAY_STATUS_LABEL[data.payment_status] ?? data.payment_status} />
               <Field label="Total HT" value={`${Number(data.total).toFixed(2)} €`} />
             </div>
