@@ -1,8 +1,10 @@
-import { useRef } from "react";
-import { Download, Printer } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, Printer, FileText, Loader2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { QrCode } from "@/hooks/use-operations";
+import { printQrCodesToPdf } from "@/lib/qr-print-pdf";
 
 type QrDisplayDialogProps = {
   qr: QrCode | null;
@@ -28,6 +31,9 @@ type QrDisplayDialogProps = {
  */
 export function QrDisplayDialog({ qr, open, onOpenChange }: QrDisplayDialogProps) {
   const svgWrapperRef = useRef<HTMLDivElement>(null);
+  // État pour le téléchargement planche A4 (35 vignettes par défaut).
+  const [copies, setCopies] = useState(35);
+  const [printingPdf, setPrintingPdf] = useState(false);
 
   if (!qr) return null;
 
@@ -125,6 +131,33 @@ export function QrDisplayDialog({ qr, open, onOpenChange }: QrDisplayDialogProps
     ? `${qr.address.address ?? ""}, ${qr.address.postal_code ?? ""} ${qr.address.city ?? ""}`.trim()
     : "—";
 
+  /**
+   * Génère la planche PDF A4 portrait avec N copies du QR (défaut 35).
+   * Chaque vignette = nom client en haut, QR au milieu, code de secours en bas.
+   * Pré-découpé en pointillés pour la cliente qui imprime sur autocollants.
+   */
+  const handleDownloadSheet = async () => {
+    setPrintingPdf(true);
+    try {
+      await printQrCodesToPdf({
+        qrCode: qr.code,
+        clientName: clientLabel,
+        addressLabel: qr.address
+          ? [qr.address.address, qr.address.postal_code, qr.address.city]
+              .filter(Boolean)
+              .join(" · ")
+          : undefined,
+        copies,
+      });
+      toast.success(`Planche PDF téléchargée (${copies} copies)`);
+    } catch (err) {
+      console.error("[QrDisplayDialog] PDF planche failed", err);
+      toast.error("Génération PDF impossible. Réessaie.");
+    } finally {
+      setPrintingPdf(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
@@ -149,14 +182,66 @@ export function QrDisplayDialog({ qr, open, onOpenChange }: QrDisplayDialogProps
           <code className="font-mono text-sm">{qr.code}</code>
         </div>
 
+        {/* Bloc planche A4 = scénario principal demandé par la cliente :
+            imprimer une planche d'autocollants à coller sur les sites. */}
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1">
+              <div className="text-sm font-medium">Planche A4 d'autocollants</div>
+              <div className="text-[11px] text-muted-foreground">
+                Nom client en haut, QR au milieu, code de secours en bas.
+                Bordures pointillées pour la découpe.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Label htmlFor="qr-copies" className="text-[11px]">
+                Nombre de vignettes par page
+              </Label>
+              <Input
+                id="qr-copies"
+                type="number"
+                min={1}
+                max={70}
+                value={copies}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 1 && n <= 70) setCopies(n);
+                }}
+                className="h-8"
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={handleDownloadSheet}
+              disabled={printingPdf}
+              className="bg-gradient-aspha text-white border-0 hover:opacity-90"
+            >
+              {printingPdf ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Génération…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Télécharger PDF
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={handlePrint}>
+          <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="mr-2 h-3.5 w-3.5" />
-            Imprimer
+            Imprimer 1 (navigateur)
           </Button>
-          <Button type="button" onClick={handleDownload}>
+          <Button type="button" variant="outline" size="sm" onClick={handleDownload}>
             <Download className="mr-2 h-3.5 w-3.5" />
-            Télécharger PNG
+            Télécharger 1 PNG
           </Button>
         </DialogFooter>
       </DialogContent>
