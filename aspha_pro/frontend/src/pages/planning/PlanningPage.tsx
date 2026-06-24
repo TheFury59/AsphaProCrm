@@ -97,11 +97,31 @@ const STATUS_COLORS = {
   neutral: "#94a3b8",        // slate-400 (draft / terminated / inconnu)
 } as const;
 
-function statusColor(iv: { status?: string | null; checkin?: { checkin_time?: string | null } | null }): {
+function statusColor(iv: {
+  status?: string | null;
+  checkin?: { checkin_time?: string | null } | null;
+  end_datetime?: string | null;
+}): {
   background: string;
   border: string;
 } {
-  switch (iv.status) {
+  // 2026-06-24 — Affichage couleur dynamique pour les RDV passés encore en
+  // `planifiee`. Cas typique : occurrences virtuelles d'un patron récurrent,
+  // que la commande `auto-close-overdue-interventions` ne peut PAS
+  // matérialiser (le patron `is_recurring=true` est exclu pour ne pas
+  // basculer toutes les occurrences d'un coup). Résultat sans ce fix :
+  // un RDV récurrent passé restait bleu "planifiée" éternellement même
+  // sans badgeage. Maintenant : on le considère `realisee` pour
+  // l'affichage → violet "badgeage manquant" si pas de checkin, vert si
+  // badgé. Les `a_pourvoir` passés restent orange (alerte admin légitime).
+  const isPastUnclosed =
+    iv.status === "planifiee" &&
+    iv.end_datetime &&
+    new Date(iv.end_datetime).getTime() < Date.now();
+
+  const effectiveStatus = isPastUnclosed ? "realisee" : iv.status;
+
+  switch (effectiveStatus) {
     case "annulee":
       return { background: STATUS_COLORS.annulee, border: "transparent" };
     case "a_pourvoir":
