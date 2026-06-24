@@ -27,7 +27,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles, Map as MapIcon, Download } from "lucide-react";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { Sparkles, Map as MapIcon, Download, Check, ChevronsUpDown, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { exportPlanningToPdf } from "@/lib/export-planning-pdf";
 import { MatchingSuggestionsDialog } from "@/components/MatchingSuggestionsDialog";
 import { EventTooltip } from "./EventTooltip";
@@ -216,8 +223,10 @@ export function PlanningPage() {
 
   const canExport = currentView === "timeGridWeek" || currentView === "dayGridMonth";
 
-  const { data: employeesData } = useEmployees({ per_page: 100 });
-  const { data: clientsData } = useClients({ per_page: 100 });
+  // per_page haut pour que la recherche client-side cmdk couvre la quasi-totalité
+  // des cas. Au-delà de ~500 employés, il faudra basculer sur recherche serveur.
+  const { data: employeesData } = useEmployees({ per_page: 500 });
+  const { data: clientsData } = useClients({ per_page: 500 });
   const employees = employeesData?.data ?? [];
   const clients = clientsData?.data ?? [];
 
@@ -576,24 +585,32 @@ export function PlanningPage() {
         }
       />
 
-      {/* Filtres en card 3D — au moins un filtre OBLIGATOIRE */}
+      {/* Filtres avec recherche cmdk (au lieu des selects natifs limités) */}
       <div className="mb-5 px-4 py-3 rounded-2xl bg-card shadow-soft">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
             <Label className="text-xs font-medium text-muted-foreground shrink-0">Intervenant</Label>
-            <select value={employeeFilter ?? ""} onChange={(e) => setEmployeeFilter(e.target.value ? Number(e.target.value) : null)}
-              className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
-              <option value="">— Aucun —</option>
-              {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-            </select>
+            <SearchableFilter
+              value={employeeFilter}
+              onChange={setEmployeeFilter}
+              items={employees.map((e: any) => ({ id: e.id, label: e.full_name ?? e.name ?? `Intervenant #${e.id}` }))}
+              placeholder="Tous les intervenants"
+              searchPlaceholder="Rechercher par nom…"
+            />
           </div>
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
             <Label className="text-xs font-medium text-muted-foreground shrink-0">Client</Label>
-            <select value={clientFilter ?? ""} onChange={(e) => setClientFilter(e.target.value ? Number(e.target.value) : null)}
-              className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm cursor-pointer hover:border-primary/40 transition-colors">
-              <option value="">— Aucun —</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.company?.company_name ?? c.code}</option>)}
-            </select>
+            <SearchableFilter
+              value={clientFilter}
+              onChange={setClientFilter}
+              items={clients.map((c: any) => ({
+                id: c.id,
+                label: c.company?.company_name ?? c.display_name ?? c.code ?? `Client #${c.id}`,
+                hint: c.code,
+              }))}
+              placeholder="Tous les clients"
+              searchPlaceholder="Rechercher par nom, code…"
+            />
           </div>
           {hasFilter && (
             <Button
@@ -709,6 +726,11 @@ export function PlanningPage() {
           eventResize={handleEventDrop}
           eventClick={handleEventClick}
           select={handleSelect}
+          // 2026-06-24 — Cacher tooltip pendant drag/resize. FullCalendar
+          // n'émet pas de mouseLeave durant un drag actif → sans ça la
+          // pop-up restait collée au curseur pendant tout le déplacement.
+          eventDragStart={() => setHover(null)}
+          eventResizeStart={() => setHover(null)}
           eventMouseEnter={(arg) => {
             const rect = (arg.el as HTMLElement).getBoundingClientRect();
             setHover({ ev: arg.event.extendedProps.intervention, x: rect.right + 8, y: rect.top });
@@ -830,11 +852,18 @@ export function PlanningPage() {
         n'est pas détecté".
       */}
       <CreateInterventionDialog
-        key={`create-${selectedDate?.getTime() ?? "manual"}-${createMode}`}
+        // 2026-06-24 — la key inclut les filtres pour que le dialog se
+        // remonte avec les bons defaults si l'admin filtre par 1 intervenant
+        // / 1 client puis ouvre la création.
+        key={`create-${selectedDate?.getTime() ?? "manual"}-${createMode}-${employeeFilter ?? "x"}-${clientFilter ?? "x"}`}
         open={createOpen}
         defaultDate={selectedDate}
         defaultEndDate={selectedEndDate}
         mode={createMode}
+        // Pré-remplissage depuis les filtres planning actifs : si l'admin
+        // regarde « les RDV de Jean », ouvrir Créer → Jean déjà sélectionné.
+        defaultClientId={clientFilter}
+        defaultEmployeeId={employeeFilter}
         onClose={() => {
           setCreateOpen(false);
           setSelectedDate(undefined);
@@ -913,7 +942,90 @@ function addHours(time: string, h: number): string {
   return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
 }
 
-function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onClose, clients, employees }: {
+/**
+ * Combobox cmdk générique pour les filtres planning. Remplace les <select>
+ * natifs (qui n'avaient pas de recherche) — pattern shadcn classique avec
+ * Popover + Command. Cliquer la croix x dans le bouton clear la sélection
+ * sans ouvrir le popover.
+ */
+function SearchableFilter({
+  value, onChange, items, placeholder, searchPlaceholder,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  items: Array<{ id: number; label: string; hint?: string }>;
+  placeholder: string;
+  searchPlaceholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find((it) => it.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="flex-1 justify-between text-left font-normal h-8 px-3 cursor-pointer hover:border-primary/40"
+        >
+          <span className={cn("truncate text-sm", !selected && "text-muted-foreground")}>
+            {selected ? selected.label : placeholder}
+          </span>
+          {selected ? (
+            <X
+              className="h-3.5 w-3.5 opacity-60 hover:opacity-100 shrink-0 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(null);
+              }}
+            />
+          ) : (
+            <ChevronsUpDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[320px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} className="h-9" />
+          <CommandList className="max-h-72">
+            <CommandEmpty>Aucun résultat.</CommandEmpty>
+            {items.map((it) => (
+              <CommandItem
+                key={it.id}
+                value={`${it.label} ${it.hint ?? ""}`}
+                onSelect={() => {
+                  onChange(it.id === value ? null : it.id);
+                  setOpen(false);
+                }}
+                className="cursor-pointer"
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-3.5 w-3.5",
+                    value === it.id ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{it.label}</div>
+                  {it.hint && (
+                    <div className="text-[10px] text-muted-foreground truncate">{it.hint}</div>
+                  )}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function CreateInterventionDialog({
+  open, defaultDate, defaultEndDate, mode, onClose, clients, employees,
+  defaultClientId, defaultEmployeeId,
+}: {
   open: boolean;
   defaultDate?: Date;
   /** Heure de fin pré-remplie (passée par FullCalendar `select` event). */
@@ -922,6 +1034,9 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   onClose: () => void;
   clients: any[];
   employees: any[];
+  /** Pré-sélection depuis les filtres du planning (cf. PlanningPage filtres). */
+  defaultClientId?: number | null;
+  defaultEmployeeId?: number | null;
 }) {
   const create = useCreateIntervention();
   // Flag qui passe à true dès la 1ère tentative de submit avec erreurs.
@@ -952,7 +1067,10 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
   const isAbsence = mode === "absence";
   const isIndispo = mode === "indispo";
   const [form, setForm] = useState<any>({
-    client_id: "",
+    // 2026-06-24 — pré-sélection depuis les filtres planning actifs.
+    // Si l'utilisateur regarde "les RDV de Jean" puis clique Créer, Jean
+    // est déjà sélectionné dans le form (gain UX évident).
+    client_id: defaultClientId ? String(defaultClientId) : "",
     // Rattachement : 'mission' = lié à une mission/prestation existante,
     // 'standalone' = intervention ponctuelle. Pour un RDV ponctuel standalone,
     // l'admin peut choisir des prestations du catalogue : la validation crée
@@ -968,7 +1086,7 @@ function CreateInterventionDialog({ open, defaultDate, defaultEndDate, mode, onC
       unit_price: number | null;
       billing_type: string;
     }>,
-    employee_id: "",
+    employee_id: defaultEmployeeId ? String(defaultEmployeeId) : "",
     status: "planifiee",
     // Adresse d'intervention (D1) — vide = adresse par défaut du client.
     address_id: "",

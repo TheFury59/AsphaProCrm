@@ -52,6 +52,7 @@ class Quote extends Model
         'has_calendar_surcharges',
         'has_night_surcharge',
         'comment',
+        'internal_notes', // 2026-06-24 — notes admin, jamais sur le PDF client
         'status',
         'invoice_id', // audit 2026-05-19 — anti double-conversion devis→facture
         'pennylane_id',
@@ -61,19 +62,22 @@ class Quote extends Model
     protected function casts(): array
     {
         return [
-            'quote_date' => 'date',
-            'validity_date' => 'date',
-            'consideration_date' => 'date',
+            // 2026-06-24 — format explicite YYYY-MM-DD pour éviter les ISO
+            // datetime parasites (T22:00:00Z) côté frontend. Même règle que
+            // ClientPrestation/Intervention — cf. LRN 2026-05-21.
+            'quote_date' => 'date:Y-m-d',
+            'validity_date' => 'date:Y-m-d',
+            'consideration_date' => 'date:Y-m-d',
             'deposit_percent' => 'decimal:2',
             'has_pec' => 'boolean',
-            'pec_validity_end' => 'date',
+            'pec_validity_end' => 'date:Y-m-d',
             'pec_base_rate' => 'decimal:2',
             'pec_coverage_percent' => 'decimal:2',
             'pec_client_base_rate' => 'decimal:2',
             'pec_detail_surcharges' => 'boolean',
             'pec_ceiling_hours' => 'decimal:2',
             'success_rate' => 'decimal:2',
-            'desired_start_date' => 'date',
+            'desired_start_date' => 'date:Y-m-d',
             'immediate_start' => 'boolean',
             'meeting_done' => 'boolean',
             'has_calendar_surcharges' => 'boolean',

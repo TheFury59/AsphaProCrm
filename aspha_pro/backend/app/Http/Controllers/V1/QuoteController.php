@@ -66,6 +66,9 @@ class QuoteController extends Controller
             'billing_mode' => ['nullable', 'string', 'max:64'],
             'status' => ['nullable', 'in:draft,sent,accepted,refused,expired'],
             'comment' => ['nullable', 'string'],
+            // 2026-06-24 — internal_notes : visibles UNIQUEMENT des admins (jamais
+            // exportées sur le PDF envoyé au client).
+            'internal_notes' => ['nullable', 'string'],
             'items' => ['nullable', 'array'],
             'items.*.label' => ['required_with:items', 'string', 'max:255'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
@@ -169,6 +172,7 @@ class QuoteController extends Controller
             'validity_date' => ['sometimes', 'nullable', 'date'],
             'status' => ['sometimes', 'in:draft,sent,accepted,refused,expired'],
             'comment' => ['sometimes', 'nullable', 'string'],
+            'internal_notes' => ['sometimes', 'nullable', 'string'], // 2026-06-24
             'success_rate' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100'],
             'items' => ['sometimes', 'array'],
             'items.*.label' => ['required_with:items', 'string', 'max:255'],

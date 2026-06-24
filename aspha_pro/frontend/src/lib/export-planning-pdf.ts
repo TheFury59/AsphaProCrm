@@ -2,24 +2,20 @@ import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 
 /**
- * Exporte le planning FullCalendar en PDF A4 paysage MULTI-PAGES.
+ * Exporte le planning FullCalendar en PDF A4 paysage **UNE seule page**.
  *
- * Objectif : voir l'INTÉGRALITÉ du planning (toutes les heures, tous les
- * jours), pas seulement la zone visible à l'écran.
+ * Stratégie : fit-to-page (le canvas entier — 24h × 7 jours, mois complet…)
+ * est mis à l'échelle pour tenir intégralement sur une page A4 paysage, en
+ * préservant le ratio. Plus jamais de découpage sauvage qui coupait un
+ * RDV entre 2 pages : la cliente imprime 1 feuille = vue complète.
  *
- * Pièges FullCalendar v6 qu'on doit défaire avant la capture :
- *  1. `.fc-view-harness` a une hauteur fixée inline en JS (style="height:..").
- *     On override avec !important.
- *  2. `.fc-view` est en `position: absolute; inset: 0` → si on retire la
- *     hauteur du parent SANS passer la vue en `position: relative`, le
- *     parent collapse à 0 (l'enfant absolute ne pousse plus la hauteur).
- *  3. `.fc-scroller` a `overflow: auto` et masque le contenu hors viewport.
- *     html2canvas ne capture QUE ce qui est dans le DOM rendu, donc on
- *     doit déplier avec `overflow: visible; height: auto`.
- *  4. `.fc-scroller-liquid-absolute` est aussi en position absolute, idem.
+ * Compromis assumé : la vue semaine 24h sera plus dense (police plus
+ * petite) qu'avant. C'est exactement ce qu'a demandé la cliente :
+ * « un emploi du temps sur une feuille, pas un livret de 4 pages ».
  *
- * Sans ces overrides, le canvas produit fait 0px de haut → erreur
- * `drawImage … width or height of 0`. C'est ce bug-là qu'on corrige.
+ * Pré-capture : on déplie les scrollers FullCalendar (overflow:auto)
+ * pour que le DOM contienne TOUTE la grille (sinon html2canvas ne
+ * capturerait que la portion visible). Style retiré dans `finally`.
  */
 export async function exportPlanningToPdf(
   element: HTMLElement,
@@ -77,14 +73,11 @@ export async function exportPlanningToPdf(
   `;
   document.head.appendChild(styleEl);
 
-  // Force reflow + un frame pour que le layout se recalcule avant capture.
+  // Force reflow + frame pour que le layout intègre les overrides.
   void element.offsetHeight;
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
   try {
-    // On capture le wrapper externe (et non `.fc-view-harness`) pour
-    // inclure ce qui pourrait avoir débordé. La hauteur réelle vient de
-    // scrollHeight, plus fiable que offsetHeight ici.
     const target = element;
     const captureWidth = target.scrollWidth || target.offsetWidth;
     const captureHeight = target.scrollHeight || target.offsetHeight;
@@ -96,7 +89,7 @@ export async function exportPlanningToPdf(
     }
 
     const canvas = await html2canvas(target, {
-      scale: 1.5,
+      scale: 2, // Bonne lisibilité même quand on shrink pour 1 page
       backgroundColor: "#ffffff",
       useCORS: true,
       logging: false,
@@ -115,44 +108,38 @@ export async function exportPlanningToPdf(
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pageW = pdf.internal.pageSize.getWidth(); // 297 mm
     const pageH = pdf.internal.pageSize.getHeight(); // 210 mm
-    const margin = 10;
-    const titleH = title ? 10 : 0;
+    const margin = 8;
+    const titleH = title ? 8 : 0;
     const availW = pageW - margin * 2;
     const availH = pageH - margin * 2 - titleH;
 
-    const pxPerMm = canvas.width / availW;
-    const pageContentPx = availH * pxPerMm;
-    const totalPages = Math.max(1, Math.ceil(canvas.height / pageContentPx));
-
-    for (let i = 0; i < totalPages; i++) {
-      if (i > 0) pdf.addPage();
-
-      if (title) {
-        pdf.setFontSize(12);
-        pdf.setTextColor(40, 40, 40);
-        const pageTitle =
-          totalPages > 1 ? `${title} (page ${i + 1}/${totalPages})` : title;
-        pdf.text(pageTitle, pageW / 2, margin + 5, { align: "center" });
-      }
-
-      const srcY = i * pageContentPx;
-      const srcHeight = Math.min(pageContentPx, canvas.height - srcY);
-      if (srcHeight <= 0) continue;
-
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = Math.ceil(srcHeight);
-      const ctx = sliceCanvas.getContext("2d");
-      if (!ctx) continue;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-      ctx.drawImage(canvas, 0, -srcY);
-
-      const sliceData = sliceCanvas.toDataURL("image/jpeg", 0.92);
-      const sliceHeightMm = srcHeight / pxPerMm;
-
-      pdf.addImage(sliceData, "JPEG", margin, margin + titleH, availW, sliceHeightMm);
+    // Fit-to-page en préservant le ratio : on choisit la dimension
+    // contraignante (largeur OU hauteur selon le ratio du canvas) et
+    // l'autre dimension est déduite. Le résultat est centré.
+    const canvasRatio = canvas.width / canvas.height;
+    const availRatio = availW / availH;
+    let imgWidthMm: number;
+    let imgHeightMm: number;
+    if (canvasRatio > availRatio) {
+      // Canvas plus large que la zone → largeur = contrainte
+      imgWidthMm = availW;
+      imgHeightMm = availW / canvasRatio;
+    } else {
+      // Canvas plus haut que la zone → hauteur = contrainte
+      imgHeightMm = availH;
+      imgWidthMm = availH * canvasRatio;
     }
+
+    if (title) {
+      pdf.setFontSize(11);
+      pdf.setTextColor(40, 40, 40);
+      pdf.text(title, pageW / 2, margin + 5, { align: "center" });
+    }
+
+    const x = margin + (availW - imgWidthMm) / 2;
+    const y = margin + titleH + (availH - imgHeightMm) / 2;
+    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    pdf.addImage(imgData, "JPEG", x, y, imgWidthMm, imgHeightMm);
 
     pdf.save(filename);
   } finally {

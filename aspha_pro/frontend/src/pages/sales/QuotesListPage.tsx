@@ -578,7 +578,10 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [validityDate, setValidityDate] = useState("");
+  // 2026-06-24 — 2 champs notes séparés : `comment` = visible sur PDF
+  // client, `internalNotes` = jamais sur le PDF, admin only.
   const [comment, setComment] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
 
   // Missions du client sélectionné (uniquement pertinent en nature régulière)
@@ -672,6 +675,7 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
         nature,
         status,
         comment: comment.trim() || null,
+        internal_notes: internalNotes.trim() || null,
         items: validItems.map((it) => ({
           label: it.label.trim(),
           quantity: parseFloat(it.quantity),
@@ -801,8 +805,26 @@ function CreateQuoteDialog({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Commentaire</Label>
-            <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Note interne ou client (optionnel)" />
+            <Label className="text-xs text-muted-foreground">
+              Description <span className="text-[10px] text-emerald-600">— visible sur le PDF envoyé au client</span>
+            </Label>
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={2}
+              placeholder="Ex : prestation prévue sur 3 semaines, intervention 2 fois/semaine…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Note interne <span className="text-[10px] text-amber-600">— JAMAIS visible côté client, admins uniquement</span>
+            </Label>
+            <Textarea
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.target.value)}
+              rows={2}
+              placeholder="Ex : à relancer dans 3 jours, négociation prix à confirmer…"
+            />
           </div>
 
           <div className="text-right text-lg font-semibold border-t pt-3">
@@ -983,7 +1005,11 @@ function QuoteLinesSection({
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="grid grid-cols-[1fr_90px_100px_110px_90px] gap-2 items-center">
+          {/* 2026-06-24 — Ajout sélecteur "Mode" (BILLING_TYPES). Le champ
+              "Durée (min)" n'apparaît QUE si le mode = horaire (sinon
+              c'est un forfait/frais/remise → aucun sens d'entrer des
+              minutes). Le champ n'est plus obligatoire mentalement. */}
+          <div className="grid grid-cols-[1fr_70px_110px_70px_100px_80px] gap-2 items-center">
             {/* Le label catalogue/stock reste éditable une fois l'item choisi */}
             {it.kind !== "free" && (
               <Input
@@ -992,19 +1018,46 @@ function QuoteLinesSection({
                 onChange={(e) => updateLine(it.uid, { label: e.target.value })}
               />
             )}
-            {it.kind === "free" && <span className="text-xs text-muted-foreground self-center">Qté / Durée / PU / TVA</span>}
+            {it.kind === "free" && (
+              <span className="text-[10px] text-muted-foreground self-center">
+                Qté · Mode · Dur · PU · TVA
+              </span>
+            )}
             <Input
               type="number" step="0.01" min="0" placeholder="Qté"
               value={it.quantity}
               onChange={(e) => updateLine(it.uid, { quantity: e.target.value })}
             />
-            {/* C4 2026-05-22 — durée standard saisie sur le devis (optionnelle) */}
-            <Input
-              type="number" step="1" min="0" placeholder="Durée (min)"
-              title="Durée standard de la prestation, en minutes (optionnel)"
-              value={it.duration_minutes}
-              onChange={(e) => updateLine(it.uid, { duration_minutes: e.target.value })}
-            />
+            <Select
+              value={it.item_type ?? "forfait"}
+              onValueChange={(v) => updateLine(it.uid, { item_type: v })}
+              disabled={it.kind === "stock"}
+            >
+              <SelectTrigger><SelectValue placeholder="Mode" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="forfait">Forfait (montant fixe)</SelectItem>
+                <SelectItem value="hourly">Horaire (avec durée)</SelectItem>
+                <SelectItem value="frais">Frais</SelectItem>
+                <SelectItem value="remise">Remise</SelectItem>
+                <SelectItem value="carte">Carte</SelectItem>
+                <SelectItem value="produit">Produit</SelectItem>
+                <SelectItem value="adjustment">Ajustement</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Durée affichée UNIQUEMENT pour le mode horaire (sinon zéro
+                sens d'entrer des minutes sur un forfait global / frais). */}
+            {it.item_type === "hourly" ? (
+              <Input
+                type="number" step="1" min="0" placeholder="Min"
+                title="Durée en minutes (uniquement pour facturation horaire)"
+                value={it.duration_minutes}
+                onChange={(e) => updateLine(it.uid, { duration_minutes: e.target.value })}
+              />
+            ) : (
+              <span className="text-[10px] text-muted-foreground text-center self-center">
+                —
+              </span>
+            )}
             <Input
               type="number" step="0.01" min="0" placeholder="PU €"
               value={it.unit_price}
@@ -1099,6 +1152,8 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
   const [validityDate, setValidityDate] = useState((quote.validity_date ?? "").slice(0, 10));
   const [status, setStatus] = useState<QuoteType["status"]>(quote.status);
   const [comment, setComment] = useState(quote.comment ?? "");
+  // 2026-06-24 — notes admin séparées (jamais sur le PDF client).
+  const [internalNotes, setInternalNotes] = useState((quote as any).internal_notes ?? "");
   const [items, setItems] = useState<DraftItem[]>(() => quoteItemsToDraft(quote.items ?? []));
 
   const total = items.reduce(
@@ -1131,6 +1186,7 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
           validity_date: validityDate || null,
           status,
           comment: comment.trim() || null,
+          internal_notes: internalNotes.trim() || null,
           items: validItems.map((it) => ({
             label: it.label.trim(),
             quantity: parseFloat(it.quantity),
@@ -1200,8 +1256,26 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Commentaire</Label>
-        <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Note interne ou client (optionnel)" />
+        <Label className="text-xs text-muted-foreground">
+          Description <span className="text-[10px] text-emerald-600">— visible sur le PDF envoyé au client</span>
+        </Label>
+        <Textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={2}
+          placeholder="Ex : prestation prévue sur 3 semaines, intervention 2 fois/semaine…"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">
+          Note interne <span className="text-[10px] text-amber-600">— JAMAIS visible côté client, admins uniquement</span>
+        </Label>
+        <Textarea
+          value={internalNotes}
+          onChange={(e) => setInternalNotes(e.target.value)}
+          rows={2}
+          placeholder="Ex : à relancer dans 3 jours, négociation prix à confirmer…"
+        />
       </div>
 
       <div className="text-right text-lg font-semibold border-t pt-3">

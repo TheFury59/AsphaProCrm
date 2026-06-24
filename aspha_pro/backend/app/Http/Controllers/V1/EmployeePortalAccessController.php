@@ -41,15 +41,46 @@ class EmployeePortalAccessController extends Controller
             ], 409);
         }
 
+        // 2026-06-24 — la validation `unique:users,email` plantait lors d'une
+        // RECRÉATION d'accès après révocation : revoke() désactive le User
+        // (status=inactive) + supprime tokens + null employees.user_id mais
+        // ne supprime PAS l'User. Recréer avec le même mail levait un 422.
+        //
+        // Fix : on détecte le User désactivé en amont. S'il existe :
+        //   - il est désactivé → on le réactive avec un nouveau password
+        //   - il est actif sur un autre intervenant → on refuse (conflit
+        //     fonctionnel : 1 mail = 1 user, déjà utilisé ailleurs)
         $data = $request->validate([
-            'email' => ['required', 'email', 'unique:users,email'],
+            'email' => ['required', 'email'],
             'send_email' => ['nullable', 'boolean'],
         ]);
+
+        $existing = User::where('email', $data['email'])->first();
+        if ($existing && $existing->status === User::STATUS_ACTIVE) {
+            return response()->json([
+                'message' => "Cet email est déjà utilisé par un compte actif. Choisis un autre email ou désactive le compte existant d'abord.",
+                'errors' => ['email' => ["Email déjà utilisé par un compte actif."]],
+            ], 422);
+        }
 
         $employeeName = $employee->name ?: "Intervenant #{$employee->id}";
         $plainPassword = $this->generatePassword();
 
-        $user = DB::transaction(function () use ($data, $employeeName, $plainPassword, $employee) {
+        $user = DB::transaction(function () use ($data, $employeeName, $plainPassword, $employee, $existing) {
+            if ($existing) {
+                // Réactivation : reset password + status active + must_change.
+                // On conserve l'historique d'actions liées à cet User.
+                $existing->update([
+                    'name' => $employeeName,
+                    'password' => Hash::make($plainPassword),
+                    'status' => User::STATUS_ACTIVE,
+                    'must_change_password' => true,
+                ]);
+                // Re-sync role (peut avoir été perdu si le User a changé de profil).
+                $existing->syncRoles(['intervenant']);
+                $employee->update(['user_id' => $existing->id]);
+                return $existing->fresh();
+            }
             $u = User::create([
                 'name' => $employeeName,
                 'email' => $data['email'],

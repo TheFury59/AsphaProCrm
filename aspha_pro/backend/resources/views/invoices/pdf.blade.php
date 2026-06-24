@@ -35,11 +35,14 @@
         .info-line { margin-bottom: 2px; }
         .info-line .lbl { font-weight: bold; }
 
-        table.items { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
-        table.items th, table.items td { border: 1px solid #333; padding: 5px 7px; }
+        table.items { width: 100%; border-collapse: collapse; margin: 6px 0 14px; table-layout: fixed; }
+        table.items th, table.items td { border: 1px solid #333; padding: 5px 7px;
+                                          word-wrap: break-word; overflow-wrap: anywhere; word-break: break-word; }
         table.items th { background: #1f6f8b; color: #fff; font-size: 9px; text-transform: uppercase; text-align: left; }
         table.items td.num { text-align: right; }
         table.items tbody tr:nth-child(even) td { background: #f4f7f8; }
+        /* Adresses client/intervention — éviter qu'une URL ou un nom très long ne déborde du cadre 52%. */
+        .client-box, .info-line { word-wrap: break-word; overflow-wrap: anywhere; }
 
         .totals { width: 46%; margin-left: auto; margin-bottom: 14px; }
         .totals table { width: 100%; border-collapse: collapse; }
