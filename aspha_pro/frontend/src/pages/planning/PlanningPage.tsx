@@ -1706,6 +1706,10 @@ function CreateInterventionDialog({
                   startDatetime={start_datetime}
                   endDatetime={end_datetime}
                   clientId={parseInt(form.client_id, 10)}
+                  // 2026-06-24 — propager la sélection courante du form vers
+                  // la map. Sans ça, un employee_id pré-rempli (via filtre
+                  // planning) ne s'affichait pas highlighted sur la carte.
+                  selectedEmployeeId={form.employee_id ? parseInt(form.employee_id, 10) : null}
                   onAssign={(empId) => {
                     setForm((f: any) => ({ ...f, employee_id: String(empId) }));
                   }}
