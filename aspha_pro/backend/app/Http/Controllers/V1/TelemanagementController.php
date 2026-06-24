@@ -103,7 +103,15 @@ class TelemanagementController extends Controller
 
     public function generateQrCode(Request $request)
     {
-        abort_unless($request->user()?->can('admin.users.manage'), 403);
+        // 2026-06-24 — permission corrigée : `admin.users.manage` était réservée
+        // à la gestion des comptes utilisateurs et bloquait les admins qui
+        // voulaient générer un QR client. Le bon scope = rôle admin ou
+        // super_admin (action de configuration métier, pas de gestion users).
+        abort_unless(
+            $request->user()?->hasAnyRole(['super_admin', 'admin']),
+            403,
+            "Génération de QR réservée aux admins.",
+        );
         $data = $request->validate([
             'address_id' => ['required', 'exists:addresses,id'],
             'type' => ['required', 'in:qrcode,nfc'],

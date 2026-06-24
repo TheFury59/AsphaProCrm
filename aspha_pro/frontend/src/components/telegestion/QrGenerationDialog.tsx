@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Download, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import { useClients } from "@/hooks/use-clients";
 import { useClientAddresses } from "@/hooks/use-sub-resources";
 import { useGenerateQrCode } from "@/hooks/use-operations";
 import { apiErrorMessage } from "@/lib/api";
+import { printQrCodesToPdf } from "@/lib/qr-print-pdf";
 
 type QrGenerationDialogProps = {
   open: boolean;
@@ -55,6 +56,10 @@ export function QrGenerationDialog({
   const [selectedClientId, setSelectedClientId] = useState<number | null>(lockedClientId);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState("");
+  // QR généré (affichage post-succès + bouton PDF). Reset à la réouverture.
+  const [generatedQr, setGeneratedQr] = useState<{ code: string; clientName: string; addressLabel: string } | null>(null);
+  const [copies, setCopies] = useState(35);
+  const [printing, setPrinting] = useState(false);
 
   // Recherche serveur : la liste est paginée et filtrée par `filter[search]`.
   const { data: clientsPage, isLoading: clientsLoading } = useClients({
@@ -79,6 +84,8 @@ export function QrGenerationDialog({
       setSelectedAddressId(null);
       setExpiresAt("");
       setSearch("");
+      setGeneratedQr(null);
+      setCopies(35);
     }
   }, [open, lockedClientId]);
 
@@ -88,6 +95,11 @@ export function QrGenerationDialog({
   }, [selectedClientId]);
 
   const generate = useGenerateQrCode();
+
+  const selectedAddress = useMemo(
+    () => addresses?.find((a) => a.id === selectedAddressId) ?? null,
+    [addresses, selectedAddressId],
+  );
 
   const submit = () => {
     if (!selectedClientId) {
@@ -107,7 +119,16 @@ export function QrGenerationDialog({
       generate.mutate(payload, {
         onSuccess: (qr) => {
           toast.success(`QR généré : ${qr.code}`);
-          onOpenChange(false);
+          // Au lieu de fermer, on passe en mode "post-succès" pour proposer
+          // le téléchargement PDF directement depuis le dialog.
+          const clientName =
+            selectedClient?.company?.company_name ?? selectedClient?.display_name ?? "Client";
+          const addressLabel = selectedAddress
+            ? [selectedAddress.address, selectedAddress.postal_code, selectedAddress.city]
+                .filter(Boolean)
+                .join(" · ")
+            : "";
+          setGeneratedQr({ code: qr.code, clientName, addressLabel });
         },
         onError: (err) => {
           toast.error(apiErrorMessage(err));
@@ -119,6 +140,107 @@ export function QrGenerationDialog({
       console.error("[QrGenerationDialog] unexpected error", err);
     }
   };
+
+  const handleDownloadPdf = async () => {
+    if (!generatedQr) return;
+    setPrinting(true);
+    try {
+      await printQrCodesToPdf({
+        qrCode: generatedQr.code,
+        clientName: generatedQr.clientName,
+        addressLabel: generatedQr.addressLabel || undefined,
+        copies,
+      });
+      toast.success(`PDF téléchargé (${copies} copies)`);
+    } catch (err) {
+      console.error("[QrGenerationDialog] PDF print failed", err);
+      toast.error("Génération PDF impossible. Réessaie.");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  // Si un QR a été généré, on bascule l'affichage en mode "succès + PDF".
+  // L'utilisateur peut télécharger la planche, ajuster le nombre de copies,
+  // puis fermer ou générer un autre QR.
+  if (generatedQr) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              QR code généré
+            </DialogTitle>
+            <DialogDescription>
+              Télécharge la planche A4 pour imprimer et coller les vignettes sur site.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-3">
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <div className="font-medium">{generatedQr.clientName}</div>
+              {generatedQr.addressLabel && (
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {generatedQr.addressLabel}
+                </div>
+              )}
+              <div className="text-xs font-mono mt-1.5 break-all">
+                Code : <span className="text-foreground">{generatedQr.code}</span>
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="copies">Copies par page A4</Label>
+              <Input
+                id="copies"
+                type="number"
+                min={1}
+                max={70}
+                value={copies}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 1 && n <= 70) setCopies(n);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Défaut 35 (grille 5×7). Chaque vignette = nom client en haut, QR au
+                milieu, code de secours en bas.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                // Reset pour permettre de générer un autre QR sans fermer.
+                setGeneratedQr(null);
+                setSelectedAddressId(null);
+                if (!lockedClientId) setSelectedClientId(null);
+              }}
+            >
+              Générer un autre
+            </Button>
+            <Button type="button" onClick={handleDownloadPdf} disabled={printing}>
+              {printing ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Génération…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Télécharger PDF
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
