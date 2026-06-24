@@ -341,12 +341,16 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
 
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Lignes</p>
+              {/* 2026-06-24 — table-fixed + break-words sur Désignation
+                  pour qu'une désignation très longue (ex: une adresse
+                  complète) ne pousse plus les colonnes Qté/PU/Total
+                  hors du dialog. */}
               <div className="rounded-lg border overflow-hidden">
-                <Table>
+                <Table className="table-fixed w-full">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Désignation</TableHead>
-                      <TableHead className="text-right w-20">Qté</TableHead>
+                      <TableHead className="text-right w-16">Qté</TableHead>
                       <TableHead className="text-right w-24">PU</TableHead>
                       <TableHead className="text-right w-28">Total</TableHead>
                     </TableRow>
@@ -361,7 +365,7 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
                     )}
                     {(data.invoice_items ?? []).map((it) => (
                       <TableRow key={it.id}>
-                        <TableCell>{it.label}</TableCell>
+                        <TableCell className="break-words whitespace-normal">{it.label}</TableCell>
                         <TableCell className="text-right">{Number(it.quantity).toFixed(2)}</TableCell>
                         <TableCell className="text-right">{Number(it.unit_price).toFixed(2)} €</TableCell>
                         <TableCell className="text-right font-medium">{Number(it.total).toFixed(2)} €</TableCell>
