@@ -1033,10 +1033,10 @@ function QuoteLinesSection({
               onValueChange={(v) => updateLine(it.uid, { item_type: v })}
               disabled={it.kind === "stock"}
             >
-              <SelectTrigger><SelectValue placeholder="Mode" /></SelectTrigger>
+              <SelectTrigger title="Mode de facturation"><SelectValue placeholder="Mode" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="forfait">Forfait (montant fixe)</SelectItem>
-                <SelectItem value="hourly">Horaire (avec durée)</SelectItem>
+                <SelectItem value="forfait">Forfait</SelectItem>
+                <SelectItem value="hourly">Horaire</SelectItem>
                 <SelectItem value="frais">Frais</SelectItem>
                 <SelectItem value="remise">Remise</SelectItem>
                 <SelectItem value="carte">Carte</SelectItem>
