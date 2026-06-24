@@ -2,16 +2,16 @@ import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 
 /**
- * Exporte le planning FullCalendar en PDF A4 paysage **UNE seule page**.
+ * Exporte le planning FullCalendar en PDF A4 portrait **UNE seule page**.
  *
  * Stratégie : fit-to-page (le canvas entier — 24h × 7 jours, mois complet…)
- * est mis à l'échelle pour tenir intégralement sur une page A4 paysage, en
+ * est mis à l'échelle pour tenir intégralement sur une page A4 portrait, en
  * préservant le ratio. Plus jamais de découpage sauvage qui coupait un
  * RDV entre 2 pages : la cliente imprime 1 feuille = vue complète.
  *
- * Compromis assumé : la vue semaine 24h sera plus dense (police plus
- * petite) qu'avant. C'est exactement ce qu'a demandé la cliente :
- * « un emploi du temps sur une feuille, pas un livret de 4 pages ».
+ * Portrait choisi sur demande cliente : la vue semaine 24h × 7j fait une
+ * grille très haute, le portrait colle mieux au ratio naturel du contenu
+ * que le paysage (où on perdait beaucoup de vide horizontal).
  *
  * Pré-capture : on déplie les scrollers FullCalendar (overflow:auto)
  * pour que le DOM contienne TOUTE la grille (sinon html2canvas ne
@@ -105,9 +105,9 @@ export async function exportPlanningToPdf(
       );
     }
 
-    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const pageW = pdf.internal.pageSize.getWidth(); // 297 mm
-    const pageH = pdf.internal.pageSize.getHeight(); // 210 mm
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth(); // 210 mm (portrait)
+    const pageH = pdf.internal.pageSize.getHeight(); // 297 mm (portrait)
     const margin = 8;
     const titleH = title ? 8 : 0;
     const availW = pageW - margin * 2;
