@@ -172,6 +172,19 @@ class MissionController extends Controller
             ], 422);
         }
 
+        // 2026-06-24 audit H4 — stock annulé non réintégré : si la mission
+        // a des stockItems, on refuse la suppression silencieuse (sinon
+        // le stock décompté reste perdu). L'admin doit retirer chaque
+        // produit via DELETE /missions/{id}/stock-items/{id} qui appelle
+        // MissionStockService::removeItem() → recordIn() → réintègre
+        // le stock proprement et trace le mouvement.
+        $stockItemsCount = $mission->stockItems()->count();
+        if ($stockItemsCount > 0) {
+            return response()->json([
+                'message' => "Impossible de supprimer : {$stockItemsCount} produit(s) de stock attaché(s) à cette mission. Retire-les d'abord (le stock sera réintégré).",
+            ], 422);
+        }
+
         $mission->delete();  // soft delete
         return response()->noContent();
     }
