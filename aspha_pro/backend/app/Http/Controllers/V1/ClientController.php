@@ -95,11 +95,17 @@ class ClientController extends Controller
                 $client->update(['code' => 'CLI-' . str_pad((string) $client->id, 4, '0', STR_PAD_LEFT)]);
             }
 
-            $companyData = $request->input('company');
+            // 2026-06-24 audit H6 — utiliser validated() au lieu de input()
+            // pour ne JAMAIS faire fuiter une clé non whitelisted vers la
+            // table client_companies. La validation est exhaustive dans
+            // StoreClientRequest::rules() — toutes les sous-clés autorisées
+            // y sont listées.
+            $validated = $request->validated();
+            $companyData = $validated['company'] ?? [];
             $client->company()->create($companyData);
 
-            if ($request->filled('billing_contact')) {
-                $client->billingContact()->create($request->input('billing_contact'));
+            if (! empty($validated['billing_contact'] ?? null)) {
+                $client->billingContact()->create($validated['billing_contact']);
             }
 
             return $client;
@@ -126,8 +132,11 @@ class ClientController extends Controller
             // audit 2026-05-19 — refuser la création d'une ClientCompany sans company_name.
             // Sans cette garde, un PATCH partiel `{company: {phone_landline: "01..."}}` créait
             // un enregistrement company orphelin sans raison sociale (HIGH).
-            if ($request->filled('company')) {
-                $companyData = $request->input('company');
+            // 2026-06-24 audit H6 — validated() au lieu de input() partout.
+            $validated = $request->validated();
+
+            if (array_key_exists('company', $validated) && is_array($validated['company'])) {
+                $companyData = $validated['company'];
                 $hasCompany = $client->company()->exists();
                 if (! $hasCompany && empty($companyData['company_name'] ?? null)) {
                     abort(422, "Impossible de créer une société sans raison sociale (company_name requis).");
@@ -141,18 +150,17 @@ class ClientController extends Controller
             // audit 2026-05-19 — ne plus DELETE le billing_contact dès qu'un champ est vidé.
             // Avant : EditableField envoyait `{billing_contact: {civility: null}}` pour vider 1 champ,
             // et `empty(['civility' => null])` = true en PHP → DELETE complet (CRIT).
-            // Maintenant : on ne supprime QUE si la requête est explicite (au moins 2 champs passés
-            // et TOUS vides/null = geste intentionnel de purge). Sinon → updateOrCreate normal.
-            if ($request->has('billing_contact')) {
-                $bc = $request->input('billing_contact');
-                $bc = is_array($bc) ? $bc : [];
-                $nonEmptyCount = count(array_filter($bc, fn ($v) => $v !== null && $v !== ''));
-                $passedCount = count($bc);
-                $isExplicitPurge = $passedCount >= 2 && $nonEmptyCount === 0;
+            // 2026-06-24 audit M4 — durcissement : exiger un FLAG explicite
+            // `_purge: true` pour la suppression (au lieu d'inférer depuis "2+
+            // champs tous vides"). Plus de risque qu'un PATCH partiel
+            // accidentel détruise le contact de facturation.
+            if (array_key_exists('billing_contact', $validated)) {
+                $bc = is_array($validated['billing_contact']) ? $validated['billing_contact'] : [];
+                $isExplicitPurge = ($validated['billing_contact_purge'] ?? false) === true;
 
                 if ($isExplicitPurge) {
                     $client->billingContact()->delete();
-                } elseif ($passedCount > 0) {
+                } elseif (count($bc) > 0) {
                     $client->billingContact()->updateOrCreate(
                         ['client_id' => $client->id],
                         $bc

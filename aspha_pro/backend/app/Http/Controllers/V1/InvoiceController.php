@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Quote;
 use App\Models\ReglementInvoiceLine;
+use App\Models\User;
 use App\Services\DocumentSequenceService;
 use App\Services\FacturXGenerator;
 use App\Services\PennylaneSyncService;
@@ -18,6 +19,24 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class InvoiceController extends Controller
 {
+    /**
+     * Defense in depth ownership IDOR (audit 2026-06-24 H2). Voir le
+     * jumeau QuoteController::assertOwnershipOrAdmin().
+     */
+    private function assertOwnershipOrAdmin(?User $user, ?int $clientId): void
+    {
+        abort_unless($user, 401);
+        if ($user->hasAnyRole(['super_admin', 'admin'])) {
+            return;
+        }
+        $ownedClientId = Client::where('portal_user_id', $user->id)->value('id');
+        abort_unless(
+            $ownedClientId && (int) $ownedClientId === (int) $clientId,
+            403,
+            "Vous n'avez pas accès à ce document.",
+        );
+    }
+
     public function index(Request $request)
     {
         abort_unless($request->user()?->can('sales.invoices.view'), 403);

@@ -43,6 +43,11 @@ class UpdateClientRequest extends FormRequest
             'billing_contact.last_name' => ['sometimes', 'nullable', 'string', 'max:64'],
             'billing_contact.email' => ['sometimes', 'nullable', 'email', 'max:255'],
             'billing_contact.phone' => ['sometimes', 'nullable', 'string', 'max:32'],
+
+            // 2026-06-24 audit M4 — flag explicite de purge du contact
+            // facturation. Avant : la purge était inférée d'un payload
+            // "tous champs vides" (fragile, PATCH partiel pouvait casser).
+            'billing_contact_purge' => ['sometimes', 'boolean'],
         ];
     }
 }

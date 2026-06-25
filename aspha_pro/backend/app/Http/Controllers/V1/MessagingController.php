@@ -100,6 +100,16 @@ class MessagingController extends Controller
      */
     public function store(Request $request)
     {
+        // 2026-06-24 audit M1 — gating role explicite (avant : commentaire
+        // disait "seuls les admins/intervenant peuvent" mais aucun code).
+        // Tout user authentifié avec un rôle métier peut créer un thread ;
+        // les inscriptions externes ou comptes orphelins sans rôle sont 403.
+        abort_unless(
+            $request->user()?->hasAnyRole(['super_admin', 'admin', 'intervenant', 'client']),
+            403,
+            "Accès messagerie réservé aux utilisateurs avec un rôle métier.",
+        );
+
         $data = $request->validate([
             'subject' => ['nullable', 'string', 'max:255'],
             'type' => ['required', 'in:direct,group,telemanagement'],

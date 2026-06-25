@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\ClientPrestation;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Mission;
 use App\Models\Quote;
 use App\Models\QuoteItem;
+use App\Models\User;
 use App\Services\DocumentSequenceService;
 use App\Services\PennylaneSyncService;
 use App\Services\QuotePdfGenerator; // 2026-05-20 PDF B2B
@@ -19,6 +21,28 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class QuoteController extends Controller
 {
+    /**
+     * Helper d'ownership : admin/super_admin → OK pour tout. Client extranet →
+     * OK uniquement pour son propre client_id (vérifié via portal_user_id).
+     * Intervenant → 403 (un intervenant n'accède jamais aux devis).
+     *
+     * À appeler sur les endpoints qui exposent un Quote/Invoice/PDF/etc.
+     * pour défense en profondeur contre l'IDOR (audit 2026-06-24 H1/H2).
+     */
+    private function assertOwnershipOrAdmin(?User $user, ?int $clientId): void
+    {
+        abort_unless($user, 401);
+        if ($user->hasAnyRole(['super_admin', 'admin'])) {
+            return; // admins voient tout
+        }
+        $ownedClientId = Client::where('portal_user_id', $user->id)->value('id');
+        abort_unless(
+            $ownedClientId && (int) $ownedClientId === (int) $clientId,
+            403,
+            "Vous n'avez pas accès à ce document.",
+        );
+    }
+
     public function index(Request $request)
     {
         abort_unless($request->user()?->can('sales.quotes.view'), 403);
@@ -420,7 +444,14 @@ class QuoteController extends Controller
      */
     public function pdf(Request $request, Quote $quote, QuotePdfGenerator $generator)
     {
-        abort_unless($request->user()?->can('sales.quotes.view'), 403);
+        // 2026-06-24 audit H1 — defense in depth :
+        // 1. permission Spatie générique
+        // 2. ET ownership : si l'user est un CLIENT extranet, il ne doit
+        //    voir QUE les devis de SON client (jamais ceux d'un autre).
+        //    Les admin/super_admin (qui ont la permission) sont OK.
+        $user = $request->user();
+        abort_unless($user?->can('sales.quotes.view'), 403);
+        $this->assertOwnershipOrAdmin($user, $quote->client_id);
 
         $pdf = $generator->generate($quote);
 
