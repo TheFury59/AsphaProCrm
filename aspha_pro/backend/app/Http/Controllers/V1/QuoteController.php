@@ -259,14 +259,18 @@ class QuoteController extends Controller
     {
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);
 
-        // audit 2026-05-19 — anti double-conversion : une fois converti, le devis
-        // est lié à sa facture (quotes.invoice_id). 409 explicite pour le front.
-        abort_if($quote->invoice_id !== null, 409, 'Devis déjà converti en facture.');
-
         $quote->load('items');
         $sequences = app(DocumentSequenceService::class);
 
+        // 2026-06-24 audit H5 — anti double-conversion via lockForUpdate
+        // DANS la transaction. Avant, le check `invoice_id !== null` se
+        // faisait HORS transaction → race condition possible (double clic
+        // ou tab dupliquée pouvait créer 2 factures avant le second update).
+        // Maintenant : lock row + recheck après lock = atomique.
         $invoice = DB::transaction(function () use ($quote, $sequences) {
+            $fresh = Quote::where('id', $quote->id)->lockForUpdate()->firstOrFail();
+            abort_if($fresh->invoice_id !== null, 409, 'Devis déjà converti en facture.');
+
             // Numérotation atomique (audit 2026-05-19 — fix race condition count()+1)
             $ref = $sequences->next('INV');
             $invoice = Invoice::create([
@@ -299,12 +303,12 @@ class QuoteController extends Controller
             }
             $invoice->update(['total' => $total]);
 
-            if (in_array($quote->status, ['draft', 'sent'], true)) {
-                $quote->update(['status' => 'accepted']);
+            if (in_array($fresh->status, ['draft', 'sent'], true)) {
+                $fresh->update(['status' => 'accepted']);
             }
 
             // audit 2026-05-19 — lock le devis à la facture émise
-            $quote->update(['invoice_id' => $invoice->id]);
+            $fresh->update(['invoice_id' => $invoice->id]);
 
             return $invoice;
         });
