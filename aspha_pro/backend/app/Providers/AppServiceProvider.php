@@ -78,11 +78,13 @@ class AppServiceProvider extends ServiceProvider
         Quote::observe(QuoteObserver::class);
         Message::observe(MessageObserver::class);
 
-        // Rate limiters — défis brute-force / DoS basique.
+        // Rate limiters — défense brute-force / DoS basique.
         // Les vars RATE_LIMIT_* étaient déclarées dans .env mais jamais
         // utilisées (cf. audit 2026-05-19 HIGH).
+        // Défaut 3 (audit 2026-06-24) — durcissement brute-force. Le var
+        // d'env reste configurable si un client a besoin de plus large.
         RateLimiter::for('login', function (Request $request) {
-            $max = (int) env('RATE_LIMIT_LOGIN', 5);
+            $max = (int) env('RATE_LIMIT_LOGIN', 3);
             return [
                 // Limite par IP ET par email (un attaquant change d'IP toutes
                 // les requêtes mais cible souvent le même user → double clé).

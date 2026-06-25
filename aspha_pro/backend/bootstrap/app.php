@@ -23,6 +23,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // SPA auth via cookie Sanctum sur toutes les routes API
         $middleware->statefulApi();
 
+        // 2026-06-24 — headers HTTP défensifs sur toutes les réponses
+        // (X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+        // Permissions-Policy, HSTS). Défense en profondeur contre
+        // clickjacking, MIME confusion, fuites referer.
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
         // Alias middleware Spatie Permission (utilisable via ->middleware('role:admin'))
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
