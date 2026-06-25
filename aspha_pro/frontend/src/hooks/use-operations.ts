@@ -94,6 +94,24 @@ export function useGenerateQrCode() {
 }
 
 /**
+ * 2026-06-24 — Suppression d'un QR code.
+ *
+ * Par défaut : révocation (status='obsolete') — l'historique des badgeages
+ * reste consultable. `force: true` tente le hard-delete (refusé 409 si
+ * des checkins liés existent).
+ */
+export function useDeleteQrCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, force }: { id: number; force?: boolean }) => {
+      const query = force ? "?force=1" : "";
+      await api.delete(`/telemanagement/qr-codes/${id}${query}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["telemanagement", "qr-codes"] }),
+  });
+}
+
+/**
  * audit 2026-05-19 — payload aligné sur le backend
  * (event_type arrival/departure + employee_id obligatoire).
  */
@@ -261,6 +279,28 @@ export function useUpdateStockProduct() {
     mutationFn: async ({ id, payload }: { id: number; payload: Partial<StockProduct> }) => {
       const { data } = await api.patch<{ data: StockProduct }>(`/stock/products/${id}`, payload);
       return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stock"] }),
+  });
+}
+
+/**
+ * 2026-06-24 — Suppression d'un produit du stock.
+ *
+ * Par défaut : désactivation (status='inactive') — le produit reste en BDD
+ * pour l'historique des mouvements / quote_items / invoice_items, mais
+ * disparaît des sélecteurs.
+ *
+ * `force: true` → tente une suppression définitive. Le backend refusera
+ * avec 409 si le produit est utilisé quelque part (= retour à désactivation
+ * recommandée).
+ */
+export function useDeleteStockProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, force }: { id: number; force?: boolean }) => {
+      const query = force ? "?force=1" : "";
+      await api.delete(`/stock/products/${id}${query}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stock"] }),
   });

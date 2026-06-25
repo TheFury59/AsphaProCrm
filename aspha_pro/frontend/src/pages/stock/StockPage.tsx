@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Boxes, Plus, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, Boxes, Plus, TrendingDown, TrendingUp, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
 import {
   useCreateStockMovement,
   useCreateStockProduct,
+  useDeleteStockProduct,
   useStockAlerts,
   useStockProducts,
   useSuppliers,
@@ -47,6 +48,9 @@ export function StockPage() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [openCreate, setOpenCreate] = useState(false);
   const [movementProduct, setMovementProduct] = useState<StockProduct | null>(null);
+  // 2026-06-24 — dialog confirmation suppression produit stock
+  const [deleteProduct, setDeleteProduct] = useState<StockProduct | null>(null);
+  const deleteMut = useDeleteStockProduct();
 
   const { data: products, isLoading } = useStockProducts({
     search: search || undefined,
@@ -155,9 +159,20 @@ export function StockPage() {
                         {p.alert_threshold}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setMovementProduct(p)}>
-                          Mouvement
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setMovementProduct(p)}>
+                            Mouvement
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setDeleteProduct(p)}
+                            className="text-rose-700 hover:text-rose-900 hover:bg-rose-50"
+                            title="Supprimer / désactiver"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -179,6 +194,76 @@ export function StockPage() {
         {movementProduct && (
           <MovementDialog product={movementProduct} onClose={() => setMovementProduct(null)} />
         )}
+      </Dialog>
+
+      {/* 2026-06-24 — Dialog confirmation suppression. 2 modes :
+          - Désactiver : produit reste en BDD pour l'historique mais
+            disparaît des sélecteurs (recommandé).
+          - Supprimer définitivement : si produit jamais utilisé, sinon
+            backend renvoie 409 et on bascule en désactivation. */}
+      <Dialog open={!!deleteProduct} onOpenChange={(o) => !o && setDeleteProduct(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Supprimer ce produit ?</DialogTitle>
+            <DialogDescription>
+              <strong>{deleteProduct?.name}</strong>
+              {deleteProduct?.reference && (
+                <span className="text-muted-foreground font-mono ml-1.5">({deleteProduct.reference})</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2 text-sm">
+            <p>2 options :</p>
+            <ul className="list-disc list-inside text-muted-foreground space-y-1">
+              <li><strong>Désactiver</strong> : disparaît des sélecteurs, l'historique des mouvements / devis / factures reste intact.</li>
+              <li><strong>Supprimer définitivement</strong> : possible uniquement si le produit n'a jamais été utilisé (mouvement, devis, facture, mission).</li>
+            </ul>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteProduct(null)} disabled={deleteMut.isPending}>
+              Annuler
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={deleteMut.isPending}
+              onClick={async () => {
+                if (!deleteProduct) return;
+                try {
+                  await deleteMut.mutateAsync({ id: deleteProduct.id, force: false });
+                  toast.success(`${deleteProduct.name} désactivé`);
+                  setDeleteProduct(null);
+                } catch (err) {
+                  toast.error(apiErrorMessage(err, "Désactivation impossible"));
+                }
+              }}
+            >
+              {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Désactiver
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMut.isPending}
+              onClick={async () => {
+                if (!deleteProduct) return;
+                try {
+                  await deleteMut.mutateAsync({ id: deleteProduct.id, force: true });
+                  toast.success(`${deleteProduct.name} supprimé définitivement`);
+                  setDeleteProduct(null);
+                } catch (err: any) {
+                  // 409 = produit utilisé → on suggère la désactivation
+                  if (err?.response?.status === 409) {
+                    toast.error(apiErrorMessage(err, "Produit utilisé — clique sur Désactiver à la place"));
+                  } else {
+                    toast.error(apiErrorMessage(err, "Suppression impossible"));
+                  }
+                }
+              }}
+            >
+              {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

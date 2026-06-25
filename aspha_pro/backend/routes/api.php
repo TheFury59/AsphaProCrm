@@ -232,6 +232,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('telemanagement')->controller(TelemanagementController::class)->group(function () {
         Route::get('qr-codes', 'listQrCodes');
         Route::post('qr-codes', 'generateQrCode');
+        // 2026-06-24 — suppression QR : par défaut désactivation (status=obsolete),
+        // ou hard-delete via ?force=1 si aucun checkin lié.
+        Route::delete('qr-codes/{qrCode}', 'deleteQrCode');
         Route::post('badge', 'badge');
         Route::post('manual-entry', 'manualEntry');
         Route::get('logs', 'logs');

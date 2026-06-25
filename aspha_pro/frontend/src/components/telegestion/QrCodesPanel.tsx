@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { Plus, QrCode as QrIcon, Search } from "lucide-react";
+import { Plus, QrCode as QrIcon, Search, Trash2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useQrCodes, type QrCode } from "@/hooks/use-operations";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useQrCodes, useDeleteQrCode, type QrCode } from "@/hooks/use-operations";
+import { apiErrorMessage } from "@/lib/api";
 import { QrGenerationDialog } from "./QrGenerationDialog";
 import { QrDisplayDialog } from "./QrDisplayDialog";
 
@@ -45,6 +55,9 @@ export function QrCodesPanel({ clientId = null, title = "QR codes actifs" }: QrC
   const [search, setSearch] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
   const [viewing, setViewing] = useState<QrCode | null>(null);
+  // 2026-06-24 — dialog confirmation suppression QR.
+  const [deleting, setDeleting] = useState<QrCode | null>(null);
+  const deleteMut = useDeleteQrCode();
 
   const { data, isLoading } = useQrCodes({
     client_id: clientId ?? undefined,
@@ -180,15 +193,27 @@ export function QrCodesPanel({ clientId = null, title = "QR codes actifs" }: QrC
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          onClick={() => setViewing(qr)}
-                        >
-                          <QrIcon className="mr-1 h-3 w-3" />
-                          Voir le QR
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            onClick={() => setViewing(qr)}
+                          >
+                            <QrIcon className="mr-1 h-3 w-3" />
+                            Voir le QR
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            onClick={() => setDeleting(qr)}
+                            className="text-rose-700 hover:text-rose-900 hover:bg-rose-50"
+                            title="Révoquer ou supprimer"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -219,6 +244,78 @@ export function QrCodesPanel({ clientId = null, title = "QR codes actifs" }: QrC
         open={!!viewing}
         onOpenChange={(o) => !o && setViewing(null)}
       />
+
+      {/* 2026-06-24 — Dialog confirmation suppression QR : révoquer
+          (préserve l'historique des badgeages) OU supprimer définitivement
+          (autorisé seulement si jamais badgé). */}
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Supprimer ce QR code ?</DialogTitle>
+            <DialogDescription>
+              <div className="font-mono text-xs mt-1">{deleting?.code}</div>
+              {deleting?.address && (
+                <div className="text-muted-foreground mt-1">
+                  {deleting.address.client?.company_name && (
+                    <strong>{deleting.address.client.company_name} — </strong>
+                  )}
+                  {deleting.address.address} {deleting.address.postal_code} {deleting.address.city}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2 text-sm">
+            <p>2 options :</p>
+            <ul className="list-disc list-inside text-muted-foreground space-y-1">
+              <li><strong>Révoquer</strong> : le QR devient inutilisable mais l'historique des badgeages reste consultable.</li>
+              <li><strong>Supprimer définitivement</strong> : possible uniquement si le QR n'a jamais été badgé.</li>
+            </ul>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleting(null)} disabled={deleteMut.isPending}>
+              Annuler
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={deleteMut.isPending}
+              onClick={async () => {
+                if (!deleting) return;
+                try {
+                  await deleteMut.mutateAsync({ id: deleting.id, force: false });
+                  toast.success("QR code révoqué");
+                  setDeleting(null);
+                } catch (err) {
+                  toast.error(apiErrorMessage(err, "Révocation impossible"));
+                }
+              }}
+            >
+              {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Révoquer
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMut.isPending}
+              onClick={async () => {
+                if (!deleting) return;
+                try {
+                  await deleteMut.mutateAsync({ id: deleting.id, force: true });
+                  toast.success("QR code supprimé définitivement");
+                  setDeleting(null);
+                } catch (err: any) {
+                  if (err?.response?.status === 409) {
+                    toast.error(apiErrorMessage(err, "QR déjà badgé — clique sur Révoquer à la place"));
+                  } else {
+                    toast.error(apiErrorMessage(err, "Suppression impossible"));
+                  }
+                }
+              }}
+            >
+              {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

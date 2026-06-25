@@ -84,9 +84,44 @@ class StockController extends Controller
         return ['data' => $stockProduct->fresh(['category:id,label', 'supplier:id,name'])];
     }
 
+    /**
+     * 2026-06-24 — comportement à 2 étages selon usage du produit :
+     *  - S'il est utilisé (mouvements / quote_items / invoice_items /
+     *    mission_stock_items) → on ne peut PAS le hard-delete (traçabilité
+     *    comptable + historique stock). On le passe `status = inactive` →
+     *    il disparaît des sélecteurs mais l'historique reste lisible.
+     *  - S'il n'est lié à rien → hard-delete autorisé via `?force=1`
+     *    (explicit) ou demande de confirmation côté UI.
+     *
+     * Sans le `?force=1`, par défaut on désactive (= comportement historique
+     * compatible avec les appels existants).
+     */
     public function destroy(Request $request, StockProduct $stockProduct)
     {
         abort_unless($request->user()?->can('stock.manage'), 403);
+
+        $force = $request->boolean('force');
+
+        // Compte les usages (par sécurité, on les énumère pour message clair).
+        $movementsCount = $stockProduct->stockMovements()->count();
+        $quoteItemsCount = \App\Models\QuoteItem::where('stock_product_id', $stockProduct->id)->count();
+        $invoiceItemsCount = \App\Models\InvoiceItem::where('stock_product_id', $stockProduct->id)->count();
+        $missionStockCount = \App\Models\MissionStockItem::where('stock_product_id', $stockProduct->id)->count();
+        $totalUsage = $movementsCount + $quoteItemsCount + $invoiceItemsCount + $missionStockCount;
+
+        if ($force && $totalUsage > 0) {
+            return response()->json([
+                'message' => "Suppression impossible : ce produit a été utilisé ({$movementsCount} mouvement(s), {$quoteItemsCount} ligne(s) devis, {$invoiceItemsCount} ligne(s) facture, {$missionStockCount} mission(s)). Désactive-le à la place pour le retirer des sélecteurs sans casser l'historique comptable.",
+            ], 409);
+        }
+
+        if ($force) {
+            // Aucun usage → hard-delete autorisé.
+            $stockProduct->delete();
+            return response()->noContent();
+        }
+
+        // Comportement par défaut historique : désactivation soft.
         $stockProduct->update(['status' => 'inactive']);
         return response()->noContent();
     }

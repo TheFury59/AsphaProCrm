@@ -101,6 +101,46 @@ class TelemanagementController extends Controller
         return ['data' => $rows];
     }
 
+    /**
+     * 2026-06-24 — Suppression d'un QR code.
+     *
+     * Comportement à 2 étages selon usage :
+     *  - QR jamais badgé (0 checkin lié) → hard-delete (`force=1`) ou
+     *    désactivation (statut `obsolete`) selon le param `force`.
+     *  - QR badgé au moins une fois → on ne peut PAS le hard-delete
+     *    (les checkins sont liés via `checkins.qr_code_id` — référence
+     *    de traçabilité de présence). On le passe en `obsolete` :
+     *    il devient inutilisable pour un nouveau badge mais l'historique
+     *    reste consultable.
+     *
+     * Par défaut (sans `force=1`) : désactivation systématique.
+     */
+    public function deleteQrCode(Request $request, QrCode $qrCode)
+    {
+        abort_unless(
+            $request->user()?->hasAnyRole(['super_admin', 'admin']),
+            403,
+            "Suppression QR réservée aux admins.",
+        );
+
+        $force = $request->boolean('force');
+        $checkinsCount = $qrCode->checkins()->count();
+
+        if ($force && $checkinsCount > 0) {
+            return response()->json([
+                'message' => "Suppression impossible : ce QR a été utilisé pour {$checkinsCount} badgeage(s). Révoque-le (statut obsolete) pour le retirer sans casser l'historique de présence.",
+            ], 409);
+        }
+
+        if ($force) {
+            $qrCode->delete();
+            return response()->noContent();
+        }
+
+        $qrCode->update(['status' => 'obsolete']);
+        return response()->noContent();
+    }
+
     public function generateQrCode(Request $request)
     {
         // 2026-06-24 — permission corrigée : `admin.users.manage` était réservée
