@@ -332,7 +332,7 @@ class TelemanagementController extends Controller
         abort_unless($request->user()?->can('telemanagement.badge'), 403);
         $request->validate([
             'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'], // 2026-06-24 audit M10
             'employee_id' => ['nullable', 'integer'],
             // 2026-06-08 — filtres ajoutés pour la refonte UI Journal.
             'event_type' => ['nullable', 'in:arrival,departure,unrecognized'],
@@ -348,10 +348,10 @@ class TelemanagementController extends Controller
         if ($e = $request->integer('employee_id')) $q->where('employee_id', $e);
         if ($et = $request->query('event_type')) $q->where('event_type', $et);
 
-        // Réponse en tableau plat (le hook useCheckinLogs front attend
-        // `CheckinLog[]`, pas un payload paginé). `per_page` joue le rôle
-        // de `limit`.
-        $perPage = $request->integer('per_page') ?: 50;
+        // 2026-06-24 audit C5 — clamp per_page strict (la validation accepte
+        // 1-500 mais on re-clamp avec min/max au cas où le check est
+        // contourné par un re-fetch ailleurs). Défense en profondeur DoS.
+        $perPage = max(1, min((int) ($request->integer('per_page') ?: 50), 500));
         return ['data' => $q->limit($perPage)->get()];
     }
 
