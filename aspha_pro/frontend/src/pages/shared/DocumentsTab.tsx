@@ -275,7 +275,7 @@ function DocumentList({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <a href={d.download_url} target="_blank" rel="noreferrer">
+              <a href={d.download_url} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="ghost"><Download className="h-3.5 w-3.5" /></Button>
               </a>
               <button

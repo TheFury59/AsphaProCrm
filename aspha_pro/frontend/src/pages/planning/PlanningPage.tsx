@@ -1958,7 +1958,7 @@ function MissionLinkStep({
                 <a
                   href={`/clients/${clientId}/missions/new`}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-block mt-1 text-[11px] text-amber-900 dark:text-amber-100 underline hover:no-underline"
                 >
                   → Créer une mission (nouvel onglet)

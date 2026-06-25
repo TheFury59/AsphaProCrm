@@ -256,7 +256,7 @@ export function PortalAccessCard({
                 onClick={() => {
                   navigator.clipboard.writeText(portalUser.email);
                   toast.success("Identifiant copié");
-                  window.open("/login", "_blank");
+                  window.open("/login", "_blank", "noopener,noreferrer");
                 }}
               >
                 <LogIn className="h-3.5 w-3.5 mr-1.5" />

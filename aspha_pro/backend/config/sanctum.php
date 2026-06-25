@@ -50,7 +50,11 @@ return [
     |
     */
 
-    'expiration' => null,
+    // 2026-06-24 audit H7 — expiration des tokens (app mobile principalement).
+    // Défaut 43200 min = 30 jours. Avant : null = jamais expirer → un
+    // token volé restait valide indéfiniment. Avec 30j, fenêtre d'exposition
+    // bornée même sans révocation explicite. Configurable via env.
+    'expiration' => (int) env('SANCTUM_EXPIRATION_MINUTES', 43200),
 
     /*
     |--------------------------------------------------------------------------

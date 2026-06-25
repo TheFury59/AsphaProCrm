@@ -71,6 +71,30 @@ class AuthController extends Controller
     }
 
     /**
+     * POST /api/v1/me/revoke-all-tokens
+     *
+     * 2026-06-24 audit L2 — révoque TOUS les Personal Access Tokens
+     * de l'utilisateur courant (déconnecte tous ses appareils mobiles
+     * + invalide la session web). Utile en cas de perte de téléphone.
+     *
+     * NB : ne touche PAS la session web courante du navigateur appelant
+     * (cookie de session géré séparément par Sanctum SPA).
+     */
+    public function revokeAllTokens(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+        $count = $user->tokens()->count();
+        $user->tokens()->delete();
+        return response()->json([
+            'data' => [
+                'revoked_count' => $count,
+                'message' => "{$count} session(s) mobile(s) déconnectée(s).",
+            ],
+        ]);
+    }
+
+    /**
      * PATCH /api/v1/me
      *
      * L'utilisateur connecté modifie son propre profil (name + email).

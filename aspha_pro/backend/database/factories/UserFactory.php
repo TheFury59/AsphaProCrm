@@ -27,7 +27,10 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'password' => static::$password ??= Hash::make('password'),
+            // 2026-06-24 audit L4 — password configurable via env pour
+            // ne pas hardcoder "password" (même si dev-only). Évite qu'un
+            // seeder produit déclenche par erreur des comptes triviaux.
+            'password' => static::$password ??= Hash::make(env('SEEDER_DEFAULT_PASSWORD', 'password')),
             'remember_token' => Str::random(10),
         ];
     }

@@ -66,6 +66,8 @@ Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middl
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [AuthController::class, 'updateMe']);
+    // 2026-06-24 audit L2 — déconnecter tous les appareils mobiles d'un coup.
+    Route::post('/me/revoke-all-tokens', [AuthController::class, 'revokeAllTokens']);
     Route::post('/me/avatar', [AuthController::class, 'uploadAvatar']);
     Route::delete('/me/avatar', [AuthController::class, 'deleteAvatar']);
     Route::post('/logout', [AuthController::class, 'logout']);

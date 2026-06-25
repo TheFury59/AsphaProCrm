@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import { Search, HelpCircle, ChevronRight, ChevronDown, BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+// 2026-06-24 audit C2 — sanitize HTML pour empêcher XSS stocké si un
+// article d'aide contient `<script>` ou `<img onerror>`. Les articles
+// sont admin-éditables donc compromission admin = XSS sur tous les
+// lecteurs sans cette défense.
+import rehypeSanitize from "rehype-sanitize";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
@@ -273,7 +278,10 @@ export function HelpPage() {
                       </span>
                     )}
                   </div>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{article.body}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeSanitize]}
+                  >{article.body}</ReactMarkdown>
                 </article>
               )}
               {!activeSlug && !loadingArticle && (

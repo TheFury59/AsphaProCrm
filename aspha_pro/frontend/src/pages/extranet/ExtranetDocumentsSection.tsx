@@ -101,7 +101,7 @@ export function ExtranetDocumentsSection({
                       </div>
                     </div>
                   </div>
-                  <a href={d.download_url} target="_blank" rel="noreferrer" className="shrink-0">
+                  <a href={d.download_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
                     <Button size="sm" variant="ghost"><Download className="h-3.5 w-3.5" /></Button>
                   </a>
                 </li>

@@ -97,7 +97,7 @@ export function QrDisplayDialog({ qr, open, onOpenChange }: QrDisplayDialogProps
       const addr = qr.address
         ? `${qr.address.address ?? ""} ${qr.address.postal_code ?? ""} ${qr.address.city ?? ""}`.trim()
         : "";
-      const win = window.open("", "_blank", "width=600,height=800");
+      const win = window.open("", "_blank", "width=600,height=800,noopener,noreferrer");
       if (!win) {
         toast.error("Impossible d'ouvrir la fenêtre d'impression (popup bloqué ?)");
         return;
