@@ -30,6 +30,7 @@ class Invoice extends Model
         'total',
         'needs_recalculation',
         'comment',
+        'internal_notes', // 2026-06-24 — notes admin, jamais sur le PDF client
         'status',
         'e_invoice_format',
         'e_invoice_sent_at',

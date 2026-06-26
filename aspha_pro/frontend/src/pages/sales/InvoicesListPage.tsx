@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -376,6 +377,32 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
               </div>
             </div>
 
+            {/* 2026-06-24 — Description (visible client) + note interne (admin) */}
+            {(data.comment || (data as any).internal_notes) && (
+              <div className="space-y-2">
+                {data.comment && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-emerald-600 mb-1">
+                      Description (visible sur le PDF client)
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2">
+                      {data.comment}
+                    </p>
+                  </div>
+                )}
+                {(data as any).internal_notes && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-amber-600 mb-1">
+                      Note interne (jamais visible client)
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2">
+                      {(data as any).internal_notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Règlements ventilés</p>
               {(data.reglement_invoice_lines ?? []).length === 0 ? (
@@ -441,6 +468,10 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
     client_id: "",
     invoice_date: new Date().toISOString().slice(0, 10),
     due_date: "",
+    // 2026-06-24 — 2 champs notes (comme les devis) : `comment` visible
+    // sur le PDF client, `internal_notes` jamais sur le PDF (admin only).
+    comment: "",
+    internal_notes: "",
   });
   const [items, setItems] = useState<Array<{ label: string; quantity: string; unit_price: string }>>([
     { label: "", quantity: "1", unit_price: "0" },
@@ -463,6 +494,8 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
         client_id: parseInt(form.client_id, 10),
         invoice_date: form.invoice_date,
         due_date: form.due_date || null,
+        comment: form.comment.trim() || null,
+        internal_notes: form.internal_notes.trim() || null,
         items: items
           .filter((it) => it.label.trim())
           .map((it) => ({
@@ -473,7 +506,7 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
           })),
       });
       toast.success("Facture créée");
-      setForm({ client_id: "", invoice_date: new Date().toISOString().slice(0, 10), due_date: "" });
+      setForm({ client_id: "", invoice_date: new Date().toISOString().slice(0, 10), due_date: "", comment: "", internal_notes: "" });
       setItems([{ label: "", quantity: "1", unit_price: "0" }]);
       onClose();
     } catch {
@@ -520,6 +553,29 @@ function CreateInvoiceDialog({ open, onClose }: { open: boolean; onClose: () => 
             <Button type="button" variant="outline" size="sm" onClick={addItem} className="cursor-pointer">
               <Plus className="h-3.5 w-3.5 mr-1" /> Ajouter une ligne
             </Button>
+          </div>
+
+          <div className="space-y-1.5 border-t pt-3">
+            <Label className="text-xs text-muted-foreground">
+              Description <span className="text-[10px] text-emerald-600">— visible sur le PDF envoyé au client</span>
+            </Label>
+            <Textarea
+              value={form.comment}
+              onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))}
+              rows={2}
+              placeholder="Ex : prestation réalisée du 1er au 15 du mois…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Note interne <span className="text-[10px] text-amber-600">— JAMAIS visible côté client, admins uniquement</span>
+            </Label>
+            <Textarea
+              value={form.internal_notes}
+              onChange={(e) => setForm((f) => ({ ...f, internal_notes: e.target.value }))}
+              rows={2}
+              placeholder="Ex : relancer si non payé sous 15j, litige en cours…"
+            />
           </div>
 
           <div className="text-right text-lg font-semibold border-t pt-3">

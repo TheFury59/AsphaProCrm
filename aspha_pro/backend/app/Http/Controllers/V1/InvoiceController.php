@@ -78,6 +78,8 @@ class InvoiceController extends Controller
             'type' => ['nullable', 'in:client,third_party,credit_note,manual'],
             'payment_mode' => ['nullable', 'string', 'max:32'],
             'comment' => ['nullable', 'string'],
+            // 2026-06-24 — notes internes, jamais exportées sur le PDF client.
+            'internal_notes' => ['nullable', 'string'],
             'items' => ['nullable', 'array'],
             'items.*.label' => ['required_with:items', 'string', 'max:255'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0'],
@@ -105,6 +107,7 @@ class InvoiceController extends Controller
                 'payment_status' => 'unpaid',
                 'status' => 'draft',
                 'comment' => $data['comment'] ?? null,
+                'internal_notes' => $data['internal_notes'] ?? null,
                 'total' => 0,
             ]);
 
@@ -139,6 +142,7 @@ class InvoiceController extends Controller
             'status' => ['sometimes', 'in:draft,sent,cancelled,loss'],
             'payment_status' => ['sometimes', 'in:unpaid,partial,paid,loss'],
             'comment' => ['sometimes', 'nullable', 'string'],
+            'internal_notes' => ['sometimes', 'nullable', 'string'], // 2026-06-24
         ]));
         return ['data' => $invoice->fresh()];
     }
