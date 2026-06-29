@@ -324,7 +324,8 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
 
   return (
     <Dialog open={!!id} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:!max-w-2xl">
+      {/* 2026-06-24 — max-h + scroll si descriptif long. */}
+      <DialogContent className="sm:!max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Facture {data?.reference ?? ""}</DialogTitle>
         </DialogHeader>
@@ -385,7 +386,7 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
                     <p className="text-xs uppercase tracking-wide text-emerald-600 mb-1">
                       Description (visible sur le PDF client)
                     </p>
-                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2">
+                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2 max-h-64 overflow-y-auto">
                       {data.comment}
                     </p>
                   </div>
@@ -395,7 +396,7 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
                     <p className="text-xs uppercase tracking-wide text-amber-600 mb-1">
                       Note interne (jamais visible client)
                     </p>
-                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2">
+                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2 max-h-64 overflow-y-auto">
                       {(data as any).internal_notes}
                     </p>
                   </div>
