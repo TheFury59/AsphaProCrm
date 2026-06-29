@@ -309,6 +309,44 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
   const { data, isLoading } = useInvoice(id);
   const update = useUpdateInvoice();
 
+  // 2026-06-24 — édition des notes + dates tant que la facture est en
+  // BROUILLON (status draft). Une fois émise (sent), plus aucune
+  // modification autorisée (obligation comptable : facture figée).
+  const [editing, setEditing] = useState(false);
+  const [editComment, setEditComment] = useState("");
+  const [editInternalNotes, setEditInternalNotes] = useState("");
+  const [editInvoiceDate, setEditInvoiceDate] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const isDraft = data?.status === "draft";
+
+  const startEdit = () => {
+    if (!data) return;
+    setEditComment(data.comment ?? "");
+    setEditInternalNotes((data as any).internal_notes ?? "");
+    setEditInvoiceDate((data.invoice_date ?? "").slice(0, 10));
+    setEditDueDate((data.due_date ?? "").slice(0, 10));
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!data) return;
+    try {
+      await update.mutateAsync({
+        id: data.id,
+        patch: {
+          invoice_date: editInvoiceDate || undefined,
+          due_date: editDueDate || null,
+          comment: editComment.trim() || null,
+          internal_notes: editInternalNotes.trim() || null,
+        },
+      });
+      toast.success("Facture mise à jour");
+      setEditing(false);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de la mise à jour"));
+    }
+  };
+
   // 2026-05-21 — envoyer la facture au client (draft → sent). Une fois
   // émise, elle devient visible sur l'extranet client + le client est
   // notifié (InvoiceObserver).
@@ -335,8 +373,23 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
             <div className="grid grid-cols-2 gap-3">
               <Field label="Client" value={data.client?.company?.company_name ?? `Client #${data.client_id}`} />
               <Field label="Statut" value={STATUS_LABELS[data.status] ?? data.status} />
-              <Field label="Date" value={fmtDateFr(data.invoice_date)} />
-              <Field label="Échéance" value={fmtDateFr(data.due_date)} />
+              {editing ? (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Date facture</Label>
+                    <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Échéance</Label>
+                    <Input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Field label="Date" value={fmtDateFr(data.invoice_date)} />
+                  <Field label="Échéance" value={fmtDateFr(data.due_date)} />
+                </>
+              )}
               <Field label="Paiement" value={PAY_STATUS_LABEL[data.payment_status] ?? data.payment_status} />
               <Field label="Total HT" value={`${Number(data.total).toFixed(2)} €`} />
             </div>
@@ -378,30 +431,58 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
               </div>
             </div>
 
-            {/* 2026-06-24 — Description (visible client) + note interne (admin) */}
-            {(data.comment || (data as any).internal_notes) && (
+            {/* 2026-06-24 — Description (visible client) + note interne (admin).
+                Éditables en mode `editing` (brouillon uniquement). */}
+            {editing ? (
               <div className="space-y-2">
-                {data.comment && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-emerald-600 mb-1">
-                      Description (visible sur le PDF client)
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2 max-h-64 overflow-y-auto">
-                      {data.comment}
-                    </p>
-                  </div>
-                )}
-                {(data as any).internal_notes && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-amber-600 mb-1">
-                      Note interne (jamais visible client)
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2 max-h-64 overflow-y-auto">
-                      {(data as any).internal_notes}
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <Label className="text-xs uppercase tracking-wide text-emerald-600 mb-1 block">
+                    Description (visible sur le PDF client)
+                  </Label>
+                  <Textarea
+                    value={editComment}
+                    onChange={(e) => setEditComment(e.target.value)}
+                    rows={4}
+                    placeholder="Ex : prestation réalisée du 1er au 15 du mois…"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs uppercase tracking-wide text-amber-600 mb-1 block">
+                    Note interne (jamais visible client)
+                  </Label>
+                  <Textarea
+                    value={editInternalNotes}
+                    onChange={(e) => setEditInternalNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Ex : relancer si non payé sous 15j, litige en cours…"
+                  />
+                </div>
               </div>
+            ) : (
+              (data.comment || (data as any).internal_notes) && (
+                <div className="space-y-2">
+                  {data.comment && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-emerald-600 mb-1">
+                        Description (visible sur le PDF client)
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2 max-h-64 overflow-y-auto">
+                        {data.comment}
+                      </p>
+                    </div>
+                  )}
+                  {(data as any).internal_notes && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-amber-600 mb-1">
+                        Note interne (jamais visible client)
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2 max-h-64 overflow-y-auto">
+                        {(data as any).internal_notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )
             )}
 
             <div>
@@ -436,15 +517,39 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
           </div>
         )}
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
-          {data?.status === "draft" && (
-            <Button
-              onClick={sendToClient}
-              disabled={update.isPending}
-              className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
-            >
-              {update.isPending ? "Envoi…" : "Envoyer au client"}
-            </Button>
+          {editing ? (
+            <>
+              <Button variant="outline" onClick={() => setEditing(false)} disabled={update.isPending} className="cursor-pointer">
+                Annuler
+              </Button>
+              <Button
+                onClick={saveEdit}
+                disabled={update.isPending}
+                className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
+              >
+                {update.isPending ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
+              {/* 2026-06-24 — édition autorisée UNIQUEMENT sur brouillon
+                  (facture émise = figée, obligation comptable). */}
+              {isDraft && (
+                <Button variant="outline" onClick={startEdit} className="cursor-pointer">
+                  Modifier
+                </Button>
+              )}
+              {isDraft && (
+                <Button
+                  onClick={sendToClient}
+                  disabled={update.isPending}
+                  className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
+                >
+                  {update.isPending ? "Envoi…" : "Envoyer au client"}
+                </Button>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>
