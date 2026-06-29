@@ -34,6 +34,18 @@
 
         .info-line { margin-bottom: 2px; }
         .info-line .lbl { font-weight: bold; }
+        /* 2026-06-24 — bloc commentaire : préserve les retours à la ligne
+           saisis par l'admin (white-space: pre-line) + wrap des mots longs.
+           dompdf coupe automatiquement sur plusieurs pages si le texte
+           déborde de la hauteur de page. */
+        .comment-block {
+            margin-top: 6px;
+            white-space: pre-line;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+            line-height: 1.5;
+        }
+        .comment-block .lbl { font-weight: bold; }
 
         table.items { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
         table.items th, table.items td { border: 1px solid #333; padding: 5px 7px; }
@@ -165,7 +177,8 @@
     <div class="clearfix"></div>
 
     @if ($quote->comment)
-        <div class="info-line"><span class="lbl">Commentaire :</span> {{ $quote->comment }}</div>
+        <div class="comment-block"><span class="lbl">Descriptif :</span>
+{{ $quote->comment }}</div>
     @endif
 
     {{-- ===== Mentions légales ===== --}}

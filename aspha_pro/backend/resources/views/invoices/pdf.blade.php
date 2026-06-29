@@ -34,6 +34,16 @@
 
         .info-line { margin-bottom: 2px; }
         .info-line .lbl { font-weight: bold; }
+        /* 2026-06-24 — bloc commentaire : préserve les retours à la ligne
+           + wrap des mots longs. dompdf gère le multi-page automatiquement. */
+        .comment-block {
+            margin-top: 6px;
+            white-space: pre-line;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+            line-height: 1.5;
+        }
+        .comment-block .lbl { font-weight: bold; }
 
         table.items { width: 100%; border-collapse: collapse; margin: 6px 0 14px; table-layout: fixed; }
         table.items th, table.items td { border: 1px solid #333; padding: 5px 7px;
@@ -201,7 +211,8 @@
     @endif
 
     @if ($invoice->comment)
-        <div class="info-line"><span class="lbl">Commentaire :</span> {{ $invoice->comment }}</div>
+        <div class="comment-block"><span class="lbl">Descriptif :</span>
+{{ $invoice->comment }}</div>
     @endif
 
     {{-- ===== Mentions légales ===== --}}
