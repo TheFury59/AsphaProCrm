@@ -479,10 +479,26 @@ function QuoteDetailDialog({ id, onClose }: { id: number | null; onClose: () => 
               </div>
             </div>
 
+            {/* 2026-06-24 — whitespace-pre-wrap : préserve les retours à la
+                ligne du descriptif dans l'aperçu (comme sur le PDF). */}
             {data.comment && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Commentaire</p>
-                <p className="text-sm">{data.comment}</p>
+                <p className="text-xs uppercase tracking-wide text-emerald-600 mb-1">
+                  Description (visible sur le PDF client)
+                </p>
+                <p className="text-sm whitespace-pre-wrap break-words rounded-md border bg-muted/20 p-2">
+                  {data.comment}
+                </p>
+              </div>
+            )}
+            {(data as any).internal_notes && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-amber-600 mb-1">
+                  Note interne (jamais visible client)
+                </p>
+                <p className="text-sm whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-2">
+                  {(data as any).internal_notes}
+                </p>
               </div>
             )}
           </div>
