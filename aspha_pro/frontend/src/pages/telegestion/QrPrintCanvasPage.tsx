@@ -128,8 +128,9 @@ export function QrPrintCanvasPage() {
   const PAGE_W = 210, PAGE_H = 297, MARGIN = 8;
   const cellW = (PAGE_W - MARGIN * 2) / cols;
   const cellH = (PAGE_H - MARGIN * 2) / rows;
-  // QR ~70% de la plus petite dim de case, converti px (96dpi → 1mm≈3.78px).
-  const qrPx = Math.max(56, Math.round(Math.min(cellW, cellH) * 0.7 * 3.78));
+  // QR ~82% de la plus petite dim de case, converti px (96dpi → 1mm≈3.78px).
+  // Plus gros = remplit mieux la case + meilleur scan.
+  const qrPx = Math.max(64, Math.round(Math.min(cellW, cellH) * 0.82 * 3.78));
   // Largeur d'aperçu écran de la planche.
   const SCREEN_W = 700;
   const px = (mm: number) => mm * (SCREEN_W / PAGE_W);
@@ -154,17 +155,22 @@ export function QrPrintCanvasPage() {
             border: 0.25mm dashed #c0c0c0; border-radius: 1mm;
             display: flex; flex-direction: column;
             align-items: center; justify-content: space-between;
-            padding: 1.5mm; overflow: hidden; box-sizing: border-box;
+            padding: 1mm 1mm 1.5mm; overflow: hidden; box-sizing: border-box;
+          }
+          /* Le QR remplit la largeur de la case (en gardant un ratio carré). */
+          .qr-print-cell canvas {
+            width: auto !important; height: auto !important;
+            max-width: 100% !important; max-height: 74% !important;
           }
           .qr-print-name {
-            font-size: 9pt; font-weight: 700; text-align: center;
-            line-height: 1.1; width: 100%;
+            font-size: 11pt; font-weight: 700; text-align: center;
+            line-height: 1.05; width: 100%;
             overflow: hidden; word-break: break-word;
           }
           .qr-print-code {
-            font-size: 7pt; font-family: monospace; font-weight: 600;
-            text-align: center; line-height: 1.1; width: 100%;
-            word-break: break-all;
+            font-size: 8.5pt; font-family: monospace; font-weight: 700;
+            text-align: center; line-height: 1.05; width: 100%;
+            word-break: break-all; letter-spacing: 0.2px;
           }
         }
       `}</style>
@@ -320,11 +326,11 @@ export function QrPrintCanvasPage() {
                       >
                         {qr ? (
                           <>
-                            <div className="text-[10px] font-bold leading-tight line-clamp-2 px-0.5 w-full">
+                            <div className="text-[12px] font-bold leading-tight line-clamp-2 px-0.5 w-full">
                               {nameOf(qr)}
                             </div>
                             <QRCodeCanvas value={qr.code} size={qrPx} marginSize={0} />
-                            <div className="text-[8px] font-mono font-semibold leading-tight break-all px-0.5 w-full">
+                            <div className="text-[10px] font-mono font-bold leading-tight break-all px-0.5 w-full">
                               {qr.code}
                             </div>
                             <button type="button"
