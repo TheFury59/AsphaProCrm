@@ -140,11 +140,22 @@ export function QrPrintCanvasPage() {
       <style>{`
         @media print {
           @page { size: A4 portrait; margin: 0; }
-          html, body { width: 210mm; height: 297mm; margin: 0 !important; padding: 0 !important; }
+          /* CAP la hauteur du body à 1 page + overflow:hidden → empêche
+             les pages supplémentaires générées par le reste de l'app
+             (en visibility:hidden mais qui occupe encore de la hauteur). */
+          html, body {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
           body * { visibility: hidden !important; }
           #print-sheet, #print-sheet * { visibility: visible !important; }
+          /* position:absolute (PAS fixed) : 'fixed' se répète sur chaque
+             page en impression Chrome → c'était la cause de la 2e page. */
           #print-sheet {
-            position: fixed !important;
+            position: absolute !important;
             top: 0 !important; left: 0 !important;
             width: 210mm !important;
             height: 297mm !important;
@@ -153,8 +164,6 @@ export function QrPrintCanvasPage() {
             box-shadow: none !important;
             border: none !important;
             overflow: hidden !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
           }
           .no-print { display: none !important; }
         }
