@@ -128,12 +128,16 @@ export function QrPrintCanvasPage() {
   const PAGE_W = 210, PAGE_H = 297, MARGIN = 8;
   const cellW = (PAGE_W - MARGIN * 2) / cols;
   const cellH = (PAGE_H - MARGIN * 2) / rows;
-  // QR ~82% de la plus petite dim de case, converti px (96dpi → 1mm≈3.78px).
-  // Plus gros = remplit mieux la case + meilleur scan.
+  // QR pour l'IMPRESSION : ~82% de la case (mm→px 96dpi). Le CSS print
+  // le recadre (canvas max-width/height) donc on peut voir large.
   const qrPx = Math.max(64, Math.round(Math.min(cellW, cellH) * 0.82 * 3.78));
   // Largeur d'aperçu écran de la planche.
   const SCREEN_W = 700;
   const px = (mm: number) => mm * (SCREEN_W / PAGE_W);
+  // QR pour l'APERÇU ÉCRAN : calculé sur la taille RÉELLE de la case à
+  // l'écran (en px), ~58% pour laisser la place au nom + code au-dessus
+  // et en dessous. Sans ça, qrPx (calibré print) écrasait le texte.
+  const screenQrPx = Math.max(40, Math.round(Math.min(px(cellW), px(cellH)) * 0.58));
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)]">
@@ -332,7 +336,7 @@ export function QrPrintCanvasPage() {
                             <div className="text-[8px] font-bold leading-tight line-clamp-2 px-0.5 w-full">
                               {nameOf(qr)}
                             </div>
-                            <QRCodeCanvas value={qr.code} size={qrPx} marginSize={0} />
+                            <QRCodeCanvas value={qr.code} size={screenQrPx} marginSize={0} />
                             <div className="text-[7px] font-mono font-semibold leading-tight break-all px-0.5 w-full">
                               {qr.code}
                             </div>
