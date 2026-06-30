@@ -143,7 +143,10 @@ export function QrPrintCanvasPage() {
         @media print {
           @page { size: A4 portrait; margin: 0; }
           html, body { margin: 0 !important; padding: 0 !important; }
-          #root { display: none !important; }
+          /* Masque TOUT enfant direct de body SAUF le portail d'impression.
+             Plus robuste que cibler #root par id (couvre aussi les portals
+             de toasts, dialogs, etc. qui sont aussi des enfants de body). */
+          body > *:not(.qr-print-portal) { display: none !important; }
           .qr-print-portal { display: block !important; }
           .qr-print-sheet {
             width: 210mm; height: 297mm;
