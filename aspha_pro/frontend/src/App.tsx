@@ -24,6 +24,7 @@ import { InvoicesListPage } from "@/pages/sales/InvoicesListPage";
 import { ReglementsListPage } from "@/pages/sales/ReglementsListPage";
 import { StockPage } from "@/pages/stock/StockPage";
 import { TelegestionPage } from "@/pages/telegestion/TelegestionPage";
+import { QrPrintCanvasPage } from "@/pages/telegestion/QrPrintCanvasPage";
 import { MessagingPage } from "@/pages/messaging/MessagingPage";
 import { FleetPage } from "@/pages/fleet/FleetPage";
 import { ExtranetLayout } from "@/components/ExtranetLayout";
@@ -155,6 +156,7 @@ export default function App() {
               <Route path="/planning" element={<PlanningPage />} />
               <Route path="/carte" element={<MapPage />} />
               <Route path="/telegestion" element={<TelegestionPage />} />
+              <Route path="/telegestion/impression" element={<QrPrintCanvasPage />} />
               <Route path="/stock" element={<StockPage />} />
               <Route path="/messagerie" element={<MessagingPage />} />
               <Route path="/flotte" element={<FleetPage />} />

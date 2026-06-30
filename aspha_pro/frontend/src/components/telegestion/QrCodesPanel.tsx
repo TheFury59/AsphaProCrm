@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Plus, QrCode as QrIcon, Search, Trash2, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, QrCode as QrIcon, Search, Trash2, Loader2, Printer } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
@@ -51,6 +52,7 @@ type QrCodesPanelProps = {
  * par l'onglet Télégestion de la fiche client.
  */
 export function QrCodesPanel({ clientId = null, title = "QR codes actifs" }: QrCodesPanelProps) {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
@@ -88,10 +90,17 @@ export function QrCodesPanel({ clientId = null, title = "QR codes actifs" }: QrC
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
           <CardTitle className="text-base">{title}</CardTitle>
-          <Button size="sm" type="button" onClick={() => setOpenCreate(true)}>
-            <Plus className="mr-2 h-3 w-3" />
-            Générer
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 2026-06-24 — éditeur de planche d'impression (drag & drop). */}
+            <Button size="sm" variant="outline" type="button" onClick={() => navigate("/telegestion/impression")}>
+              <Printer className="mr-2 h-3 w-3" />
+              Planche d'impression
+            </Button>
+            <Button size="sm" type="button" onClick={() => setOpenCreate(true)}>
+              <Plus className="mr-2 h-3 w-3" />
+              Générer
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-3">
