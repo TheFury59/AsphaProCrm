@@ -126,22 +126,35 @@ export function QrPrintCanvasPage() {
   const PAGE_W = 210, PAGE_H = 297, MARGIN = 8;
   const cellW = (PAGE_W - MARGIN * 2) / cols;
   const cellH = (PAGE_H - MARGIN * 2) / rows;
-  // Taille du QR : ~55% de la plus petite dimension de la case, en px (96dpi → 1mm≈3.78px).
-  const qrPx = Math.max(40, Math.round(Math.min(cellW, cellH) * 0.55 * 3.78));
+  // Taille du QR : ~72% de la plus petite dimension de la case, en px
+  // (96dpi → 1mm≈3.78px). Plus gros = mieux lisible au scan + à l'œil.
+  const qrPx = Math.max(56, Math.round(Math.min(cellW, cellH) * 0.72 * 3.78));
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)]">
-      {/* Style d'impression : on cache tout sauf la planche, page A4 sans marge */}
+      {/* Style d'impression : on cache tout sauf la planche. CRUCIAL :
+          on force les dimensions A4 RÉELLES en mm (la prévisualisation
+          écran est en px → sans cet override le contenu déborde sur une
+          2e page). overflow:hidden + page-break-after:avoid garantit
+          UNE seule page. */}
       <style>{`
         @media print {
           @page { size: A4 portrait; margin: 0; }
+          html, body { width: 210mm; height: 297mm; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden !important; }
           #print-sheet, #print-sheet * { visibility: visible !important; }
           #print-sheet {
             position: fixed !important;
             top: 0 !important; left: 0 !important;
-            margin: 0 !important; box-shadow: none !important;
+            width: 210mm !important;
+            height: 297mm !important;
+            padding: 8mm !important;
+            margin: 0 !important;
+            box-shadow: none !important;
             border: none !important;
+            overflow: hidden !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
           }
           .no-print { display: none !important; }
         }
@@ -330,11 +343,11 @@ export function QrPrintCanvasPage() {
                       >
                         {qr ? (
                           <>
-                            <div className="text-[7px] font-bold leading-tight line-clamp-2 px-0.5">
+                            <div className="text-[10px] font-bold leading-tight line-clamp-2 px-0.5">
                               {name}
                             </div>
                             <QRCodeCanvas value={qr.code} size={qrPx} marginSize={0} />
-                            <div className="text-[6px] font-mono leading-none break-all px-0.5">
+                            <div className="text-[8px] font-mono font-semibold leading-tight break-all px-0.5">
                               {qr.code}
                             </div>
                             <button
