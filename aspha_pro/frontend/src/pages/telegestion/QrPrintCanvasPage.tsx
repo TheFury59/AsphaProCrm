@@ -166,14 +166,14 @@ export function QrPrintCanvasPage() {
             max-width: 100% !important; max-height: 74% !important;
           }
           .qr-print-name {
-            font-size: 11pt; font-weight: 700; text-align: center;
+            font-size: 6.5pt; font-weight: 700; text-align: center;
             line-height: 1.05; width: 100%;
             overflow: hidden; word-break: break-word;
           }
           .qr-print-code {
-            font-size: 8.5pt; font-family: monospace; font-weight: 700;
+            font-size: 6pt; font-family: monospace; font-weight: 700;
             text-align: center; line-height: 1.05; width: 100%;
-            word-break: break-all; letter-spacing: 0.2px;
+            word-break: break-all; letter-spacing: 0.1px;
           }
         }
       `}</style>
@@ -329,11 +329,11 @@ export function QrPrintCanvasPage() {
                       >
                         {qr ? (
                           <>
-                            <div className="text-[12px] font-bold leading-tight line-clamp-2 px-0.5 w-full">
+                            <div className="text-[8px] font-bold leading-tight line-clamp-2 px-0.5 w-full">
                               {nameOf(qr)}
                             </div>
                             <QRCodeCanvas value={qr.code} size={qrPx} marginSize={0} />
-                            <div className="text-[10px] font-mono font-bold leading-tight break-all px-0.5 w-full">
+                            <div className="text-[7px] font-mono font-semibold leading-tight break-all px-0.5 w-full">
                               {qr.code}
                             </div>
                             <button type="button"
