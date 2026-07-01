@@ -15,7 +15,7 @@ import {
   Plus, Trash2, Eye, Cloud, CloudCheck, FileSignature,
   Search, FileSpreadsheet, TrendingUp, CheckCircle2, FileDown,
   Settings2, PackagePlus, PencilLine, Layers, Briefcase, Loader2,
-  Boxes, Send, Pencil,
+  Boxes, Send, Pencil, Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -170,6 +170,18 @@ export function QuotesListPage() {
     }
   };
 
+  // 2026-06-24 — annuler l'envoi : le devis « sent » repasse en brouillon.
+  // Il disparaît alors de l'extranet client et redevient modifiable.
+  const handleUnsend = async (id: number, ref: string) => {
+    if (!confirm(`Annuler l'envoi du devis ${ref} ? Il repassera en brouillon et ne sera plus visible côté client.`)) return;
+    try {
+      await updateQuote.mutateAsync({ id, patch: { status: "draft" } });
+      toast.success("Envoi annulé — devis repassé en brouillon");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Échec de l'annulation de l'envoi"));
+    }
+  };
+
   // 2026-05-21 — conversion devis → mission. Réservé aux devis validés par le
   // client (statut « accepté »). Le backend gère l'anti-doublon.
   const handleConvertMission = async (q: any) => {
@@ -318,6 +330,16 @@ export function QuotesListPage() {
                           disabled={updateQuote.isPending}
                           onClick={() => handleSend(q.id, q.reference ?? `#${q.id}`)}>
                           <Send className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {/* 2026-06-24 — annuler l'envoi : uniquement sur un devis envoyé */}
+                      {q.status === "sent" && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-amber-600 hover:bg-amber-500/10"
+                          title="Annuler l'envoi (repasse en brouillon)"
+                          disabled={updateQuote.isPending}
+                          onClick={() => handleUnsend(q.id, q.reference ?? `#${q.id}`)}>
+                          <Undo2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       {/* 2026-05-21 — transformer en mission : uniquement un devis validé */}

@@ -13,7 +13,7 @@ function fmtDateFr(d: string | null | undefined): string {
 }
 import {
   Plus, Trash2, FileDown, Cloud, CloudCheck, Eye, Search,
-  Receipt, Wallet, Hourglass,
+  Receipt, Wallet, Hourglass, Undo2,
 } from "lucide-react";
 import {
   useInvoices, useCreateInvoice, useDeleteInvoice, useInvoice, useUpdateInvoice,
@@ -70,6 +70,7 @@ export function InvoicesListPage() {
   });
   const syncPennylane = useSyncInvoicePennylane();
   const del = useDeleteInvoice();
+  const update = useUpdateInvoice(); // 2026-06-24 — pour annuler (sent → cancelled)
 
   const rows: InvoiceType[] = (data as any)?.data ?? [];
 
@@ -128,6 +129,20 @@ export function InvoicesListPage() {
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? "Échec de la suppression";
       toast.error(msg);
+    }
+  };
+
+  // 2026-06-24 — annuler une facture émise : status sent → cancelled.
+  // Une facture annulée n'est plus « active » (disparaît de l'extranet
+  // client), et devient supprimable (le backend n'autorise le delete que
+  // sur draft/cancelled).
+  const handleCancel = async (id: number, ref: string) => {
+    if (!confirm(`Annuler la facture ${ref} ? Elle ne sera plus visible côté client et pourra ensuite être supprimée.`)) return;
+    try {
+      await update.mutateAsync({ id, patch: { status: "cancelled" } });
+      toast.success("Facture annulée");
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e, "Échec de l'annulation"));
     }
   };
 
@@ -259,7 +274,18 @@ export function InvoicesListPage() {
                       >
                         {inv.pennylane_synced_at ? <CloudCheck className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer text-destructive hover:bg-destructive/10" title="Supprimer"
+                      {/* 2026-06-24 — annuler une facture émise (sent → cancelled) */}
+                      {inv.status === "sent" && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-amber-600 hover:bg-amber-500/10"
+                          title="Annuler la facture"
+                          disabled={update.isPending}
+                          onClick={() => handleCancel(inv.id, inv.reference)}>
+                          <Undo2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer text-destructive hover:bg-destructive/10"
+                        title={inv.status === "sent" ? "Annule la facture d'abord pour pouvoir la supprimer" : "Supprimer"}
                         disabled={del.isPending}
                         onClick={() => handleDelete(inv.id, inv.reference)}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -308,6 +334,30 @@ function StatCard({ label, value, icon: Icon, accent }: { label: string; value: 
 function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useInvoice(id);
   const update = useUpdateInvoice();
+  const del = useDeleteInvoice(); // 2026-06-24 — supprimer depuis le détail
+
+  const cancelInvoice = async () => {
+    if (!data) return;
+    if (!confirm(`Annuler la facture ${data.reference} ? Elle ne sera plus visible côté client et pourra ensuite être supprimée.`)) return;
+    try {
+      await update.mutateAsync({ id: data.id, patch: { status: "cancelled" } });
+      toast.success("Facture annulée");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de l'annulation"));
+    }
+  };
+
+  const deleteInvoice = async () => {
+    if (!data) return;
+    if (!confirm(`Supprimer définitivement la facture ${data.reference} ? Cette action est irréversible.`)) return;
+    try {
+      await del.mutateAsync(data.id);
+      toast.success("Facture supprimée");
+      onClose();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Échec de la suppression"));
+    }
+  };
 
   // 2026-06-24 — édition des notes + dates tant que la facture est en
   // BROUILLON (status draft). Une fois émise (sent), plus aucune
@@ -533,6 +583,30 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
           ) : (
             <>
               <Button variant="outline" onClick={onClose} className="cursor-pointer">Fermer</Button>
+              {/* 2026-06-24 — annuler une facture émise (sent → cancelled),
+                  la rend supprimable + la retire de l'extranet client. */}
+              {data?.status === "sent" && (
+                <Button
+                  variant="outline"
+                  onClick={cancelInvoice}
+                  disabled={update.isPending}
+                  className="cursor-pointer text-amber-700 hover:bg-amber-500/10"
+                >
+                  Annuler la facture
+                </Button>
+              )}
+              {/* Supprimer : uniquement brouillon ou annulée (garde-fou
+                  comptable côté backend aussi). */}
+              {(data?.status === "draft" || data?.status === "cancelled") && (
+                <Button
+                  variant="outline"
+                  onClick={deleteInvoice}
+                  disabled={del.isPending}
+                  className="cursor-pointer text-destructive hover:bg-destructive/10"
+                >
+                  Supprimer
+                </Button>
+              )}
               {/* 2026-06-24 — édition autorisée UNIQUEMENT sur brouillon
                   (facture émise = figée, obligation comptable). */}
               {isDraft && (
