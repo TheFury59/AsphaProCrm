@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
@@ -172,6 +173,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
         <Toaster />
+        <ConfirmDialog />
       </TooltipProvider>
     </QueryClientProvider>
   );

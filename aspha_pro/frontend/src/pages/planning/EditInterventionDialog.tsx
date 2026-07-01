@@ -13,6 +13,7 @@ import {
 import { useUpdateIntervention, useDeleteIntervention } from "@/hooks/use-phase3";
 import { useCreateInterventionException } from "@/hooks/use-payments";
 import { api, apiErrorMessage } from "@/lib/api";
+import { confirm } from "@/components/ui/confirm";
 
 const STATUS_LABELS: Record<string, string> = {
   a_pourvoir: "À pourvoir",
@@ -159,13 +160,13 @@ export function EditInterventionDialog({
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const msg = isOccurrence
       ? "Supprimer toute la série de récurrences ? Toutes les futures occurrences disparaîtront."
       : isException
         ? "Supprimer cette exception ? L'occurrence d'origine de la série réapparaîtra."
         : "Supprimer cette intervention ? Cette action est définitive.";
-    if (!confirm(msg)) return;
+    if (!(await confirm({ title: "Supprimer", description: msg, confirmLabel: "Supprimer", variant: "danger" }))) return;
     del.mutate(intervention.intervention_id, {
       onSuccess: () => { toast.success("Supprimé"); onDeleted(); },
     });

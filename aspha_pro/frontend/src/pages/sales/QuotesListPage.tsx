@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
+import { confirm } from "@/components/ui/confirm";
 import {
   useQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote, useConvertQuoteToInvoice,
   useConvertQuoteToMission, useQuote,
@@ -108,7 +109,7 @@ export function QuotesListPage() {
   }, [rows, data]);
 
   const handleConvert = async (id: number, ref: string) => {
-    if (!confirm(`Convertir le devis ${ref} en facture ?`)) return;
+    if (!(await confirm({ title: "Convertir en facture", description: `Convertir le devis ${ref} en facture ?`, confirmLabel: "Convertir" }))) return;
     try {
       const inv = await convert.mutateAsync(id);
       toast.success(`Facture créée : ${inv.reference}`);
@@ -118,7 +119,7 @@ export function QuotesListPage() {
   };
 
   const handleDelete = async (id: number, ref: string) => {
-    if (!confirm(`Supprimer le devis ${ref} ? Cette action est irréversible.`)) return;
+    if (!(await confirm({ title: "Supprimer le devis", description: `Supprimer le devis ${ref} ?\nCette action est irréversible.`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(id);
       toast.success("Devis supprimé");
@@ -161,7 +162,7 @@ export function QuotesListPage() {
   // voit alors dans son extranet « en attente de validation » (QuoteObserver
   // émet la notification sur le changement de statut).
   const handleSend = async (id: number, ref: string) => {
-    if (!confirm(`Envoyer le devis ${ref} au client ? Il pourra le valider depuis son extranet.`)) return;
+    if (!(await confirm({ title: "Envoyer au client", description: `Envoyer le devis ${ref} au client ?\nIl pourra le valider depuis son extranet.`, confirmLabel: "Envoyer" }))) return;
     try {
       await updateQuote.mutateAsync({ id, patch: { status: "sent" } });
       toast.success("Devis envoyé au client (en attente de validation)");
@@ -173,7 +174,7 @@ export function QuotesListPage() {
   // 2026-06-24 — annuler l'envoi : le devis « sent » repasse en brouillon.
   // Il disparaît alors de l'extranet client et redevient modifiable.
   const handleUnsend = async (id: number, ref: string) => {
-    if (!confirm(`Annuler l'envoi du devis ${ref} ? Il repassera en brouillon et ne sera plus visible côté client.`)) return;
+    if (!(await confirm({ title: "Annuler l'envoi", description: `Annuler l'envoi du devis ${ref} ?\nIl repassera en brouillon et ne sera plus visible côté client.`, confirmLabel: "Annuler l'envoi" }))) return;
     try {
       await updateQuote.mutateAsync({ id, patch: { status: "draft" } });
       toast.success("Envoi annulé — devis repassé en brouillon");
@@ -185,7 +186,7 @@ export function QuotesListPage() {
   // 2026-05-21 — conversion devis → mission. Réservé aux devis validés par le
   // client (statut « accepté »). Le backend gère l'anti-doublon.
   const handleConvertMission = async (q: any) => {
-    if (!confirm(`Créer la mission depuis le devis ${q.reference ?? `#${q.id}`} ?`)) return;
+    if (!(await confirm({ title: "Créer la mission", description: `Créer la mission depuis le devis ${q.reference ?? `#${q.id}`} ?`, confirmLabel: "Créer" }))) return;
     try {
       const { mission, alreadyExisted } = await convertMission.mutateAsync(q.id);
       toast.success(
@@ -1247,9 +1248,11 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
       if (impact.mission) linked.push(`• Mission « ${impact.mission.name} »`);
       if (impact.invoice) linked.push(`• Facture ${impact.invoice.reference} (les lignes seront resynchronisées)`);
       if (linked.length > 0) {
-        const ok = window.confirm(
-          `Cette modification va aussi mettre à jour les éléments liés suivants :\n\n${linked.join("\n")}\n\nConfirmer l'enregistrement ?`,
-        );
+        const ok = await confirm({
+          title: "Éléments liés impactés",
+          description: `Cette modification va aussi mettre à jour :\n\n${linked.join("\n")}\n\nConfirmer l'enregistrement ?`,
+          confirmLabel: "Enregistrer",
+        });
         if (!ok) return;
       }
     } catch (e) {
@@ -1485,7 +1488,7 @@ function QuoteTypesDialog({ onClose }: { onClose: () => void }) {
   };
 
   const handleDeactivate = async (qt: QuoteTypeModel) => {
-    if (!confirm(`Désactiver le type « ${qt.label} » ? Il ne sera plus proposé dans les nouveaux devis.`)) return;
+    if (!(await confirm({ title: "Désactiver le type", description: `Désactiver le type « ${qt.label} » ?\nIl ne sera plus proposé dans les nouveaux devis.`, confirmLabel: "Désactiver", variant: "danger" }))) return;
     try {
       await deleteMut.mutateAsync(qt.id);
       toast.success("Type de devis désactivé.");

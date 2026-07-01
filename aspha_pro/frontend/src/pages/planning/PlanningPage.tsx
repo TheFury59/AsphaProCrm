@@ -46,6 +46,7 @@ import { TripSummaryPanel } from "./TripSummaryPanel";
 import { AvailableEmployeesMap } from "./AvailableEmployeesMap";
 import { EditInterventionDialog } from "./EditInterventionDialog";
 import { EmptyFilterState } from "./EmptyFilterState";
+import { confirm } from "@/components/ui/confirm";
 
 function fmt(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -553,7 +554,7 @@ export function PlanningPage() {
   };
 
   // Actions du menu contextuel sur un event existant
-  const handleCtxEventAction = (action: "edit" | "match" | "delete" | "cancel") => {
+  const handleCtxEventAction = async (action: "edit" | "match" | "delete" | "cancel") => {
     if (!ctxMenu || ctxMenu.kind !== "event") return;
     const iv = ctxMenu.intervention;
     setCtxMenu(null);
@@ -563,9 +564,14 @@ export function PlanningPage() {
       setSelected(iv);
       setMatchingOpen(true);
     } else if (action === "delete") {
-      if (confirm(iv.is_occurrence
-        ? "Supprimer toute la série de récurrences ?"
-        : "Supprimer cette intervention ?")) {
+      if (await confirm({
+        title: "Supprimer",
+        description: iv.is_occurrence
+          ? "Supprimer toute la série de récurrences ?"
+          : "Supprimer cette intervention ?",
+        confirmLabel: "Supprimer",
+        variant: "danger",
+      })) {
         del.mutate(iv.intervention_id);
       }
     } else if (action === "cancel") {
@@ -1228,7 +1234,7 @@ function CreateInterventionDialog({
     if (hasConflictError) {
       const overlapMsg = conflicts.find((c) => c.severity === "error")?.message
         ?? "Ce RDV chevauche un autre RDV.";
-      if (!confirm(`⚠ ${overlapMsg}\n\nCréer quand même ?`)) {
+      if (!(await confirm(`⚠ ${overlapMsg}\n\nCréer quand même ?`))) {
         return;
       }
     }

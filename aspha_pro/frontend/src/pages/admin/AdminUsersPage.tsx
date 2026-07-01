@@ -31,6 +31,7 @@ import {
   type AdminUser, type CreateUserResult,
 } from "@/hooks/use-users";
 import { useEntities } from "@/hooks/use-products";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Page admin de gestion des utilisateurs — réservée au super_admin.
@@ -332,7 +333,7 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
   const handleToggleStatus = async () => {
     const newStatus = user.status === "active" ? "inactive" : "active";
     const verb = newStatus === "inactive" ? "Désactiver" : "Activer";
-    if (!confirm(`${verb} le compte de ${user.name} ?`)) return;
+    if (!(await confirm(`${verb} le compte de ${user.name} ?`))) return;
     try {
       await updateStatus.mutateAsync({ userId: user.id, status: newStatus });
       toast.success(`Compte ${newStatus === "active" ? "activé" : "désactivé"}`);
@@ -361,7 +362,7 @@ function UserRow({ user, isCurrentUser }: { user: AdminUser; isCurrentUser: bool
     } catch (err: any) {
       // Cas 409 : interventions futures → propose le force=1
       if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
-        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+        if (await confirm({ title: "Forcer la suppression", description: `${err.response.data.message}\n\nForcer la suppression quand même ?`, confirmLabel: "Supprimer", variant: "danger" })) {
           try {
             await deleteUser.mutateAsync({ userId: user.id, force: true });
             toast.success(`Compte "${user.name}" supprimé (forçage).`);

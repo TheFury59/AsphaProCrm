@@ -25,6 +25,7 @@ import { Plus, Ticket, Star } from "lucide-react";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { PortalAccessCard } from "@/pages/clients/PortalAccessCard";
+import { confirm } from "@/components/ui/confirm";
 
 export function EmployeeFichePage() {
   const { id } = useParams();
@@ -60,7 +61,7 @@ export function EmployeeFichePage() {
       navigate("/intervenants");
     } catch (err: any) {
       if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
-        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+        if (await confirm({ title: "Forcer la suppression", description: `${err.response.data.message}\n\nForcer la suppression quand même ?`, confirmLabel: "Supprimer", variant: "danger" })) {
           try {
             await deleteEmp.mutateAsync({ id: employeeId, force: true });
             toast.success(`Intervenant "${e.full_name}" supprimé (forçage).`);

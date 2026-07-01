@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { confirm } from "@/components/ui/confirm";
 
 // Normalise une date reçue de l'API en `YYYY-MM-DD` pour l'<input type=date>.
 // JAMAIS `new Date()` qui re-décale le fuseau (cf. lessons.md 2026-05-21).
@@ -78,7 +79,7 @@ export function ClientContractsTab({ clientId }: { clientId: number }) {
   const [editing, setEditing] = useState<ClientContract | "new" | null>(null);
 
   const handleDelete = async (c: ClientContract) => {
-    if (!confirm(`Supprimer le contrat ${c.reference ?? "#" + c.id} ?`)) return;
+    if (!(await confirm({ title: "Supprimer le contrat", description: `Supprimer le contrat ${c.reference ?? "#" + c.id} ?`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(c.id);
       toast.success("Contrat supprimé");

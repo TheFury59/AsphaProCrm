@@ -18,6 +18,7 @@ import {
   useCreatePortalAccess, useResetPortalAccess, useSendPortalEmail, useRevokePortalAccess,
   type PortalAccessResult, type EntityType,
 } from "@/hooks/use-portal-access";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Section "Accès extranet" générique — pour client OU intervenant.
@@ -237,7 +238,7 @@ export function PortalAccessCard({
                 variant="outline"
                 disabled={resetMut.isPending}
                 onClick={async () => {
-                  if (!confirm("Réinitialiser le mot de passe ? L'ancien sera invalidé.")) return;
+                  if (!(await confirm("Réinitialiser le mot de passe ? L'ancien sera invalidé."))) return;
                   try {
                     const r = await resetMut.mutateAsync({ send_email: false });
                     setCredentials(r);
@@ -269,7 +270,7 @@ export function PortalAccessCard({
                 className="text-rose-600 hover:text-rose-700"
                 disabled={revokeMut.isPending}
                 onClick={async () => {
-                  if (!confirm(labels.revokeConfirm)) return;
+                  if (!(await confirm({ title: "Révoquer l'accès", description: labels.revokeConfirm, confirmLabel: "Révoquer", variant: "danger" }))) return;
                   try {
                     await revokeMut.mutateAsync();
                     toast.success("Accès révoqué");

@@ -21,6 +21,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { Product } from "@/types/api";
+import { confirm } from "@/components/ui/confirm";
 
 const TYPE_LABELS: Record<string, string> = {
   hourly: "Horaire",
@@ -221,7 +222,7 @@ function ProductFormDialog({ product, onClose }: {
 
   const handleDeactivate = async () => {
     if (!product) return;
-    if (!confirm("Désactiver cette prestation ? Elle ne sera plus proposée dans les nouveaux devis.")) return;
+    if (!(await confirm("Désactiver cette prestation ? Elle ne sera plus proposée dans les nouveaux devis."))) return;
     try {
       await del.mutateAsync(product.id);
       toast.success("Prestation désactivée.");

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EntityAvatar } from "./EntityAvatar";
 import { api } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Composant d'upload réutilisable pour avatar intervenant et logo client.
@@ -103,7 +104,7 @@ export function AvatarUpload({ type, id, src, name, size = "xl", onUpdate }: Pro
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Supprimer ${label} ?`)) return;
+    if (!(await confirm({ title: "Supprimer", description: `Supprimer ${label} ?`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     setDeleting(true);
     try {
       await api.delete(endpoint);

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Adresse(s) de l'intervenant — surtout son domicile.
@@ -44,7 +45,7 @@ export function EmployeeAddressesTab({ employeeId }: { employeeId: number }) {
   };
 
   const remove = async (id: number) => {
-    if (!confirm("Supprimer cette adresse ?")) return;
+    if (!(await confirm({ title: "Supprimer l'adresse", description: "Supprimer cette adresse ?", confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(id);
       toast.success("Adresse supprimée.");

@@ -23,6 +23,7 @@ import { ClientMissionsTab } from "./tabs/ClientMissionsTab";
 import { ClientContractsTab } from "./tabs/ClientContractsTab";
 import { DocumentsTab } from "@/pages/shared/DocumentsTab";
 import { QrCodesPanel } from "@/components/telegestion/QrCodesPanel";
+import { confirm } from "@/components/ui/confirm";
 
 export function ClientFichePage() {
   const { id } = useParams();
@@ -53,7 +54,7 @@ export function ClientFichePage() {
       navigate("/clients");
     } catch (err: any) {
       if (err?.response?.status === 409 && err?.response?.data?.message?.includes("intervention")) {
-        if (confirm(`${err.response.data.message}\n\nForcer la suppression quand même ?`)) {
+        if (await confirm({ title: "Forcer la suppression", description: `${err.response.data.message}\n\nForcer la suppression quand même ?`, confirmLabel: "Supprimer", variant: "danger" })) {
           try {
             await deleteClient.mutateAsync({ id: clientId, force: true });
             toast.success(`Client "${displayName}" supprimé (forçage).`);

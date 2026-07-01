@@ -22,6 +22,7 @@ import {
 import { useSyncInvoicePennylane } from "@/hooks/use-payments";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api";
+import { confirm } from "@/components/ui/confirm";
 import { useClients } from "@/hooks/use-clients";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -122,7 +123,7 @@ export function InvoicesListPage() {
   };
 
   const handleDelete = async (id: number, ref: string) => {
-    if (!confirm(`Supprimer la facture ${ref} ? Cette action est irréversible.`)) return;
+    if (!(await confirm({ title: "Supprimer la facture", description: `Supprimer la facture ${ref} ?\nCette action est irréversible.`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(id);
       toast.success("Facture supprimée");
@@ -137,7 +138,7 @@ export function InvoicesListPage() {
   // client), et devient supprimable (le backend n'autorise le delete que
   // sur draft/cancelled).
   const handleCancel = async (id: number, ref: string) => {
-    if (!confirm(`Annuler la facture ${ref} ? Elle ne sera plus visible côté client et pourra ensuite être supprimée.`)) return;
+    if (!(await confirm({ title: "Annuler la facture", description: `Annuler la facture ${ref} ?\nElle ne sera plus visible côté client et pourra ensuite être supprimée.`, confirmLabel: "Annuler la facture" }))) return;
     try {
       await update.mutateAsync({ id, patch: { status: "cancelled" } });
       toast.success("Facture annulée");
@@ -150,7 +151,7 @@ export function InvoicesListPage() {
   // Après annulation + correction, on peut la ré-envoyer au client.
   const handleSend = async (id: number, ref: string, wasCancelled: boolean) => {
     const verb = wasCancelled ? "Ré-émettre" : "Émettre";
-    if (!confirm(`${verb} la facture ${ref} ? Elle sera visible côté client et le client sera notifié.`)) return;
+    if (!(await confirm({ title: `${verb} la facture`, description: `${verb} la facture ${ref} ?\nElle sera visible côté client et le client sera notifié.`, confirmLabel: verb }))) return;
     try {
       await update.mutateAsync({ id, patch: { status: "sent" } });
       toast.success(wasCancelled ? "Facture ré-émise au client" : "Facture émise au client");
@@ -361,7 +362,7 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
 
   const cancelInvoice = async () => {
     if (!data) return;
-    if (!confirm(`Annuler la facture ${data.reference} ? Elle ne sera plus visible côté client et pourra ensuite être supprimée.`)) return;
+    if (!(await confirm({ title: "Annuler la facture", description: `Annuler la facture ${data.reference} ?\nElle ne sera plus visible côté client et pourra ensuite être supprimée.`, confirmLabel: "Annuler la facture" }))) return;
     try {
       await update.mutateAsync({ id: data.id, patch: { status: "cancelled" } });
       toast.success("Facture annulée");
@@ -372,7 +373,7 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
 
   const deleteInvoice = async () => {
     if (!data) return;
-    if (!confirm(`Supprimer définitivement la facture ${data.reference} ? Cette action est irréversible.`)) return;
+    if (!(await confirm({ title: "Supprimer la facture", description: `Supprimer définitivement la facture ${data.reference} ?\nCette action est irréversible.`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(data.id);
       toast.success("Facture supprimée");

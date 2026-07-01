@@ -21,6 +21,7 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { confirm } from "@/components/ui/confirm";
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Espèces", check: "Chèque", card: "CB", transfer: "Virement", cesu: "CESU", sepa: "SEPA",
@@ -71,7 +72,7 @@ export function ReglementsListPage() {
   }, [rows]);
 
   const handleDelete = async (id: number, ref: string) => {
-    if (!confirm(`Supprimer le règlement ${ref} ?`)) return;
+    if (!(await confirm({ title: "Supprimer le règlement", description: `Supprimer le règlement ${ref} ?`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(id);
       toast.success("Règlement supprimé");

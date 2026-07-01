@@ -28,6 +28,7 @@ import {
   type Mission, type Prestation, type MissionStatus,
 } from "@/hooks/use-missions";
 import { useProducts } from "@/hooks/use-products";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Onglet "Missions & prestations" — hiérarchie métier :
@@ -102,7 +103,7 @@ function MissionCard({ mission, clientId }: { mission: Mission; clientId: number
   const activeCount = prestations.filter((p) => !p.end_date).length;
 
   const handleDelete = async () => {
-    if (!confirm(`Supprimer la mission "${mission.name}" ?`)) return;
+    if (!(await confirm({ title: "Supprimer la mission", description: `Supprimer la mission "${mission.name}" ?`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await deleteMission.mutateAsync(mission.id);
       toast.success("Mission supprimée");
@@ -236,7 +237,7 @@ function PrestationRow({
   const isActive = !prestation.end_date;
 
   const handleDelete = async () => {
-    if (!confirm(`Supprimer la prestation "${prestation.label}" ?`)) return;
+    if (!(await confirm({ title: "Supprimer la prestation", description: `Supprimer la prestation "${prestation.label}" ?`, confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await deletePresta.mutateAsync(prestation.id);
       toast.success("Prestation supprimée");

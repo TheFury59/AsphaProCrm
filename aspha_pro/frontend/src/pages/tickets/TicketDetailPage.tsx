@@ -29,6 +29,7 @@ import {
 } from "@/hooks/use-tickets";
 import { useEmployees } from "@/hooks/use-employees";
 import { useAuthStore } from "@/stores/auth";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Page détail d'un ticket — accessible via la cloche notif, la liste tickets,
@@ -118,7 +119,7 @@ export function TicketDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Supprimer ce ticket ? Cette action est irréversible.")) return;
+    if (!(await confirm({ title: "Supprimer le ticket", description: "Supprimer ce ticket ? Cette action est irréversible.", confirmLabel: "Supprimer", variant: "danger" }))) return;
     try {
       await del.mutateAsync(ticketId);
       toast.success("Ticket supprimé");

@@ -11,6 +11,7 @@ import { EntityAvatar } from "@/components/EntityAvatar";
 import { useAuthStore } from "@/stores/auth";
 import { useUpdateMe } from "@/hooks/use-users";
 import { api } from "@/lib/api";
+import { confirm } from "@/components/ui/confirm";
 
 /**
  * Page "Mon profil" — accessible depuis le dropdown topbar pour TOUS les
@@ -106,7 +107,7 @@ export function ProfilePage() {
   };
 
   const onRemoveAvatar = async () => {
-    if (!confirm("Supprimer ta photo de profil ?")) return;
+    if (!(await confirm({ title: "Supprimer la photo", description: "Supprimer ta photo de profil ?", confirmLabel: "Supprimer", variant: "danger" }))) return;
     setUploadingAvatar(true);
     try {
       await api.delete("/me/avatar");
