@@ -13,7 +13,7 @@ function fmtDateFr(d: string | null | undefined): string {
 }
 import {
   Plus, Trash2, FileDown, Cloud, CloudCheck, Eye, Search,
-  Receipt, Wallet, Hourglass, Undo2,
+  Receipt, Wallet, Hourglass, Undo2, Send,
 } from "lucide-react";
 import {
   useInvoices, useCreateInvoice, useDeleteInvoice, useInvoice, useUpdateInvoice,
@@ -146,6 +146,19 @@ export function InvoicesListPage() {
     }
   };
 
+  // 2026-06-24 — (ré)émettre une facture : draft OU cancelled → sent.
+  // Après annulation + correction, on peut la ré-envoyer au client.
+  const handleSend = async (id: number, ref: string, wasCancelled: boolean) => {
+    const verb = wasCancelled ? "Ré-émettre" : "Émettre";
+    if (!confirm(`${verb} la facture ${ref} ? Elle sera visible côté client et le client sera notifié.`)) return;
+    try {
+      await update.mutateAsync({ id, patch: { status: "sent" } });
+      toast.success(wasCancelled ? "Facture ré-émise au client" : "Facture émise au client");
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e, "Échec de l'envoi"));
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -274,6 +287,16 @@ export function InvoicesListPage() {
                       >
                         {inv.pennylane_synced_at ? <CloudCheck className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
                       </Button>
+                      {/* 2026-06-24 — (ré)émettre : brouillon ou facture annulée */}
+                      {(inv.status === "draft" || inv.status === "cancelled") && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 w-7 p-0 cursor-pointer text-indigo-600 hover:bg-indigo-500/10"
+                          title={inv.status === "cancelled" ? "Ré-émettre au client" : "Émettre au client"}
+                          disabled={update.isPending}
+                          onClick={() => handleSend(inv.id, inv.reference, inv.status === "cancelled")}>
+                          <Send className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {/* 2026-06-24 — annuler une facture émise (sent → cancelled) */}
                       {inv.status === "sent" && (
                         <Button size="sm" variant="outline"
@@ -618,13 +641,15 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
                   Modifier
                 </Button>
               )}
-              {isDraft && (
+              {(data?.status === "draft" || data?.status === "cancelled") && (
                 <Button
                   onClick={sendToClient}
                   disabled={update.isPending}
                   className="bg-gradient-aspha shadow-brand text-white border-0 hover:opacity-90 cursor-pointer"
                 >
-                  {update.isPending ? "Envoi…" : "Envoyer au client"}
+                  {update.isPending
+                    ? "Envoi…"
+                    : data?.status === "cancelled" ? "Ré-émettre au client" : "Envoyer au client"}
                 </Button>
               )}
             </>
