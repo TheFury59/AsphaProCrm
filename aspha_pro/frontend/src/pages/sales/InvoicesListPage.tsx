@@ -368,6 +368,10 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
   const [editInvoiceDate, setEditInvoiceDate] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
   const isDraft = data?.status === "draft";
+  // 2026-06-24 — une facture ANNULÉE redevient éditable comme un brouillon
+  // (choix métier : on peut la corriger puis la ré-émettre). Une facture
+  // « sent » reste figée (obligation comptable).
+  const isEditable = data?.status === "draft" || data?.status === "cancelled";
 
   const startEdit = () => {
     if (!data) return;
@@ -607,9 +611,9 @@ function InvoiceDetailDialog({ id, onClose }: { id: number | null; onClose: () =
                   Supprimer
                 </Button>
               )}
-              {/* 2026-06-24 — édition autorisée UNIQUEMENT sur brouillon
-                  (facture émise = figée, obligation comptable). */}
-              {isDraft && (
+              {/* 2026-06-24 — édition autorisée sur brouillon OU facture
+                  annulée (facture émise = figée, obligation comptable). */}
+              {isEditable && (
                 <Button variant="outline" onClick={startEdit} className="cursor-pointer">
                   Modifier
                 </Button>
