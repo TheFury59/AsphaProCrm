@@ -186,10 +186,15 @@ class QuoteController extends Controller
     {
         abort_unless($request->user()?->can('sales.quotes.edit'), 403);
 
-        // audit 2026-05-19 — un devis déjà converti en facture est verrouillé
-        // (sinon on pourrait modifier les lignes alors que la facture émise
-        // a déjà été générée → incohérence comptable).
-        abort_if($quote->invoice_id !== null, 409, 'Devis converti en facture — non modifiable.');
+        // 2026-06-24 — cascade devis→facture. Un devis lié à une facture
+        // reste modifiable TANT QUE la facture n'est pas émise. Si la
+        // facture est draft/cancelled, on propagera les lignes dessus
+        // (plus bas, dans la transaction). Si elle est émise (sent/loss),
+        // elle est figée légalement → édition refusée avec message clair.
+        $linkedInvoice = $quote->invoice_id ? Invoice::find($quote->invoice_id) : null;
+        if ($linkedInvoice && in_array($linkedInvoice->status, ['sent', 'loss'], true)) {
+            abort(409, "Ce devis est lié à la facture {$linkedInvoice->reference} déjà émise (figée). Annule la facture d'abord pour pouvoir modifier le devis.");
+        }
 
         $data = $request->validate([
             'quote_date' => ['sometimes', 'date'],
@@ -209,7 +214,7 @@ class QuoteController extends Controller
             'items.*.stock_product_id' => ['nullable', 'exists:stock_products,id'], // 2026-05-21
         ]);
 
-        DB::transaction(function () use ($data, $quote) {
+        DB::transaction(function () use ($data, $quote, $linkedInvoice) {
             $scalar = collect($data)->except('items')->all();
             if (! empty($scalar)) {
                 $quote->update($scalar);
@@ -236,10 +241,61 @@ class QuoteController extends Controller
                     $total += $lineTotal;
                 }
                 $quote->update(['total' => $total]);
+
+                // 2026-06-24 — CASCADE devis→facture : si le devis est lié à
+                // une facture draft/cancelled, on resync ses lignes (même
+                // structure quote_items ↔ invoice_items). Jamais sur une
+                // facture émise (bloqué en amont).
+                if ($linkedInvoice) {
+                    $linkedInvoice->invoiceItems()->delete();
+                    $invTotal = 0;
+                    foreach ($data['items'] as $item) {
+                        $lineTotal = (float) $item['quantity'] * (float) $item['unit_price'];
+                        InvoiceItem::create([
+                            'invoice_id' => $linkedInvoice->id,
+                            'product_id' => $item['product_id'] ?? null,
+                            'stock_product_id' => $item['stock_product_id'] ?? null,
+                            'label' => $item['label'],
+                            'item_type' => $item['item_type'] ?? 'forfait',
+                            'vat_rate_id' => $item['vat_rate_id'] ?? null,
+                            'quantity' => $item['quantity'],
+                            'unit_price' => $item['unit_price'],
+                            'total' => $lineTotal,
+                        ]);
+                        $invTotal += $lineTotal;
+                    }
+                    $linkedInvoice->update(['total' => $invTotal]);
+                }
             }
         });
 
         return ['data' => $quote->fresh(['items', 'client.company'])];
+    }
+
+    /**
+     * GET /api/v1/quotes/{quote}/impact
+     *
+     * 2026-06-24 — Renvoie les entités liées à un devis (mission d'origine,
+     * facture issue de conversion) pour l'avertissement d'impact avant
+     * enregistrement d'une modification côté frontend.
+     */
+    public function impact(Request $request, Quote $quote)
+    {
+        abort_unless($request->user()?->can('sales.quotes.view'), 403);
+
+        $mission = $quote->missions()->first();
+        $invoice = $quote->invoice_id ? Invoice::find($quote->invoice_id) : null;
+
+        return ['data' => [
+            'mission' => $mission ? ['id' => $mission->id, 'name' => $mission->name] : null,
+            'invoice' => $invoice ? [
+                'id' => $invoice->id,
+                'reference' => $invoice->reference,
+                'status' => $invoice->status,
+                // Facture figée = émise → non synchronisable, édition devis bloquée.
+                'frozen' => in_array($invoice->status, ['sent', 'loss'], true),
+            ] : null,
+        ]];
     }
 
     public function destroy(Request $request, Quote $quote)

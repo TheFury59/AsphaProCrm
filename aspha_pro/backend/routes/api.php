@@ -215,6 +215,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->parameters(['quote-types' => 'quoteType']);
     Route::apiResource('quotes', QuoteController::class);
     Route::get('quotes/{quote}/pdf', [QuoteController::class, 'pdf']); // 2026-05-20 PDF B2B
+    Route::get('quotes/{quote}/impact', [QuoteController::class, 'impact']); // 2026-06-24 cascade
     Route::post('quotes/{quote}/sync-pennylane', [QuoteController::class, 'syncPennylane']);
     Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice']);
     // Conversion devis validé → mission + prestations (workflow 2026-05-21)
@@ -222,6 +223,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('invoices', InvoiceController::class);
     Route::get('invoices/{invoice}/facturx', [InvoiceController::class, 'facturX']);
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf']); // 2026-05-20 PDF B2B
+    Route::get('invoices/{invoice}/impact', [InvoiceController::class, 'impact']); // 2026-06-24 cascade
     Route::post('invoices/{invoice}/sync-pennylane', [InvoiceController::class, 'syncPennylane']);
 
     // Règlements (paiements reçus + ventilations sur factures)

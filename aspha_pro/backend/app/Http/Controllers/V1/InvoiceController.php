@@ -147,6 +147,29 @@ class InvoiceController extends Controller
         return ['data' => $invoice->fresh()];
     }
 
+    /**
+     * GET /api/v1/invoices/{invoice}/impact
+     *
+     * 2026-06-24 — Renvoie les entités liées à une facture (devis source,
+     * mission d'origine) pour l'avertissement d'impact au frontend.
+     */
+    public function impact(Request $request, Invoice $invoice)
+    {
+        abort_unless($request->user()?->can('sales.invoices.view'), 403);
+
+        $quote = Quote::where('invoice_id', $invoice->id)->first();
+        $mission = $quote ? $quote->missions()->first() : null;
+
+        return ['data' => [
+            'quote' => $quote ? [
+                'id' => $quote->id,
+                'reference' => $quote->reference,
+                'status' => $quote->status,
+            ] : null,
+            'mission' => $mission ? ['id' => $mission->id, 'name' => $mission->name] : null,
+        ]];
+    }
+
     public function destroy(Request $request, Invoice $invoice)
     {
         abort_unless($request->user()?->can('sales.invoices.edit'), 403);

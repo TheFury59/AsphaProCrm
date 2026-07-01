@@ -315,10 +315,11 @@ export function QuotesListPage() {
                         onClick={() => setDetailId(q.id)}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      {/* 2026-05-21 — édition du devis (verrouillée si déjà converti en facture) */}
+                      {/* 2026-06-24 — édition toujours possible ; si le devis
+                          est lié à une facture, le backend propage les lignes
+                          (ou bloque si la facture est déjà émise). */}
                       <Button size="sm" variant="outline" className="h-7 w-7 p-0 cursor-pointer"
-                        title={q.invoice_id ? "Devis converti en facture — non modifiable" : "Modifier le devis"}
-                        disabled={!!q.invoice_id}
+                        title={q.invoice_id ? "Modifier (resync la facture liée si non émise)" : "Modifier le devis"}
                         onClick={() => setEditId(q.id)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -1227,6 +1228,34 @@ function EditQuoteForm({ quote, onClose }: { quote: QuoteType; onClose: () => vo
     if (errors.length > 0) {
       toast.error(errors.join(" "));
       return;
+    }
+
+    // 2026-06-24 — CASCADE : avant d'enregistrer, on récupère les entités
+    // liées (mission d'origine, facture issue de conversion) pour avertir
+    // l'utilisateur de l'impact. Si la facture liée est émise (frozen), on
+    // bloque tout de suite avec un message clair.
+    try {
+      const { data: impactRes } = await api.get(`/quotes/${quote.id}/impact`);
+      const impact = impactRes?.data ?? {};
+      if (impact.invoice?.frozen) {
+        toast.error(
+          `Impossible : ce devis est lié à la facture ${impact.invoice.reference} déjà émise. Annule-la d'abord pour modifier le devis.`,
+        );
+        return;
+      }
+      const linked: string[] = [];
+      if (impact.mission) linked.push(`• Mission « ${impact.mission.name} »`);
+      if (impact.invoice) linked.push(`• Facture ${impact.invoice.reference} (les lignes seront resynchronisées)`);
+      if (linked.length > 0) {
+        const ok = window.confirm(
+          `Cette modification va aussi mettre à jour les éléments liés suivants :\n\n${linked.join("\n")}\n\nConfirmer l'enregistrement ?`,
+        );
+        if (!ok) return;
+      }
+    } catch (e) {
+      // Si l'appel impact échoue (réseau), on continue quand même — le
+      // backend re-valide et bloquera une facture émise de toute façon.
+      console.warn("[EditQuote] impact fetch échoué, on continue", e);
     }
 
     try {
